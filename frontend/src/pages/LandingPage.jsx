@@ -213,9 +213,11 @@ const LandingPage = () => {
                 <div className="max-w-[1400px] mx-auto px-6 h-20 flex items-center justify-between">
                     <div className="flex items-center gap-12">
                         {/* Logo */}
-                        <div className="text-2xl font-black tracking-tighter text-slate-900 flex items-center gap-1">
-                            <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white text-xs">H</div>
-                            HUDI<span className="text-blue-600">SOFT</span>
+                        <div className="flex items-center gap-2">
+                             <img src="/images/logo.png" alt="HUDI SOFT" className="w-10 h-10 object-contain" />
+                             <div className="text-2xl font-black tracking-tighter text-slate-900">
+                                HUDI<span className="text-blue-600">SOFT</span>
+                             </div>
                         </div>
 
                         {/* Navigation links - Match Toast */}

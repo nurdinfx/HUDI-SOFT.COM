@@ -28,10 +28,8 @@ const Sidebar = () => {
     return (
         <div className="w-64 h-screen bg-slate-900 border-r border-slate-800 flex flex-col font-normal sticky top-0">
             <div className="p-8 flex items-center gap-3">
-                <div className="p-2 bg-blue-600 rounded-lg">
-                    <ShieldCheck className="text-white" size={24} />
-                </div>
-                <span className="text-xl font-black text-white tracking-tighter">ADMIN<span className="text-blue-500">PRO</span></span>
+                <img src="/images/logo.png" alt="HUDI SOFT" className="w-12 h-12 object-contain" />
+                <span className="text-xl font-black text-white tracking-tighter">HUDI<span className="text-blue-500">SOFT</span></span>
             </div>
 
             <nav className="flex-1 px-4 py-6 space-y-2">
