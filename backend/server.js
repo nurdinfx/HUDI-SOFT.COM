@@ -9,7 +9,12 @@ const PORT = process.env.PORT || 5000;
 // Middleware
 app.use(express.json());
 app.use(cors({
-    origin: true, // Reflect origin (allows any domain to connect, suitable for demo/testing)
+    origin: [
+        'https://hudi-soft-com.vercel.app',
+        'https://hudi-soft-com-admin.vercel.app',
+        'http://localhost:5173',
+        'http://localhost:5178'
+    ],
     credentials: true
 }));
 

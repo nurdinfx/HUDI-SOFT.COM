@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const VITE_API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+const VITE_API_URL = import.meta.env.VITE_API_URL || 'https://hudi-soft-com.onrender.com/api';
 export const ASSET_URL = VITE_API_URL.replace('/api', '');
 
 const API = axios.create({
