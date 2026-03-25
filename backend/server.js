@@ -21,15 +21,6 @@ app.use(cors({
     optionsSuccessStatus: 200 // Some legacy browsers (IE11, various SmartTVs) choke on 204
 }));
 
-// Explicitly handle preflight across all routes
-app.options('/(.*)', cors());
-
-// Debug middleware to log incoming request origins
-app.use((req, res, next) => {
-    console.log(`${req.method} ${req.url} - Origin: ${req.headers.origin || 'No Origin'}`);
-    next();
-});
-
 // Routes
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/licenses', require('./routes/licenses'));
