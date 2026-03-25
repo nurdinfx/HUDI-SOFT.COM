@@ -49,11 +49,20 @@ router.post('/', async (req, res) => {
             lead.trialExpiryDate = expiryDate;
             await lead.save();
 
+            const host = req.get('host');
+            const protocol = host.includes('localhost') ? req.protocol : 'https';
+            const downloadUrl = `${protocol}://${host}/api/downloads/demo/${productType}`;
+
             trialInfo = {
                 licenseKey,
                 expiryDate,
-                downloadUrl: `${req.protocol}://${req.get('host')}/api/downloads/demo/${productType}`
+                downloadUrl: downloadUrl
             };
+            
+            console.log(`Generated trial Info for ${companyName}:`, {
+                licenseKey,
+                downloadUrl
+            });
         }
 
         res.status(201).json({
