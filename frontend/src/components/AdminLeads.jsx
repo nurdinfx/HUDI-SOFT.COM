@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
+import API from '../api';
 import { Users, Phone, Mail, Building, Clock, CheckCircle, XCircle, MoreVertical } from 'lucide-react';
 
 const AdminLeads = () => {
@@ -13,10 +14,7 @@ const AdminLeads = () => {
 
     const fetchLeads = async () => {
         try {
-            const response = await fetch('/api/leads/admin', {
-                headers: { 'Authorization': `Bearer ${adminInfo.token}` }
-            });
-            const data = await response.json();
+            const { data } = await API.get('/leads/admin');
             setLeads(data);
         } catch (error) {
             console.error('Error fetching leads:', error);
@@ -27,17 +25,8 @@ const AdminLeads = () => {
 
     const updateStatus = async (id, newStatus) => {
         try {
-            const response = await fetch(`/api/leads/${id}`, {
-                method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${adminInfo.token}`
-                },
-                body: JSON.stringify({ status: newStatus })
-            });
-            if (response.ok) {
-                fetchLeads();
-            }
+            await API.put(`/leads/${id}`, { status: newStatus });
+            fetchLeads();
         } catch (error) {
             console.error('Error updating lead status:', error);
         }

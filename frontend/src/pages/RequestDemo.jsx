@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { ChevronDown, ShieldCheck, Zap, Globe, Building, ArrowLeft } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import API from '../api';
 
 const RequestDemo = () => {
     const [formData, setFormData] = useState({
@@ -31,23 +32,14 @@ const RequestDemo = () => {
         setLoading(true);
         setError(null);
         try {
-            const response = await fetch('/api/leads', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(formData)
-            });
-            const data = await response.json();
-            if (response.ok) {
-                if (data.trial) {
-                    setTrialInfo(data.trial);
-                }
-                setSubmitted(true);
-            } else {
-                setError(data.message || 'Something went wrong. Please try again.');
+            const { data } = await API.post('/leads', formData);
+            if (data.trial) {
+                setTrialInfo(data.trial);
             }
+            setSubmitted(true);
         } catch (error) {
             console.error('Error submitting demo request:', error);
-            setError('Could not connect to the server. Please ensure the backend is running.');
+            setError(error.response?.data?.message || 'Could not connect to the server. Please ensure the backend is running.');
         } finally {
             setLoading(false);
         }
