@@ -22,7 +22,7 @@ app.use(cors({
 }));
 
 // Explicitly handle preflight across all routes
-app.options('*', cors());
+app.options('/(.*)', cors());
 
 // Debug middleware to log incoming request origins
 app.use((req, res, next) => {
