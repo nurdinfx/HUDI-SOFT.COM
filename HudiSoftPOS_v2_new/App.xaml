@@ -1,0 +1,127 @@
+<Application x:Class="HudiSoftPOS.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:HudiSoftPOS.ViewModels"
+             xmlns:views="clr-namespace:HudiSoftPOS.Views"
+             xmlns:res="clr-namespace:HudiSoftPOS.Resources"
+             xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
+             StartupUri="Views/LoginView.xaml">
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="pack://application:,,,/MaterialDesignThemes.Wpf;component/Themes/MaterialDesignTheme.Light.xaml" />
+                <ResourceDictionary Source="pack://application:,,,/MaterialDesignThemes.Wpf;component/Themes/MaterialDesignTheme.Defaults.xaml" />
+                <ResourceDictionary Source="pack://application:,,,/MaterialDesignColors;component/Themes/Recommended/Primary/MaterialDesignColor.Blue.xaml" />
+                <ResourceDictionary Source="pack://application:,,,/MaterialDesignColors;component/Themes/Recommended/Accent/MaterialDesignColor.Lime.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+            
+            <!-- Premium Glassmorphism Colors -->
+            <SolidColorBrush x:Key="SidebarBrush" Color="#1E1E1E" Opacity="0.85"/>
+            <SolidColorBrush x:Key="HeaderBrush" Color="#121212" Opacity="0.8"/>
+            <SolidColorBrush x:Key="PositiveBrush" Color="#00C853"/> 
+            <SolidColorBrush x:Key="NegativeBrush" Color="#EF5350"/> 
+            <SolidColorBrush x:Key="BackgroundBrush" Color="#121212"/> 
+            <SolidColorBrush x:Key="CardBrush" Color="#25FFFFFF"/> <!-- Glass Card -->
+            
+            <SolidColorBrush x:Key="GlassBackgroundBrush" Color="#1A1A1A" Opacity="0.9"/>
+            <SolidColorBrush x:Key="GlassBorderBrush" Color="#40FFFFFF"/>
+            <SolidColorBrush x:Key="GlassHighlightBrush" Color="#15FFFFFF"/>
+            <SolidColorBrush x:Key="GlassOverlayBrush" Color="#4D000000"/>
+            
+            <!-- Dashboard Accent Colors -->
+            <SolidColorBrush x:Key="DashTeal" Color="#26A69A"/>
+            <SolidColorBrush x:Key="DashBlue" Color="#42A5F5"/>
+            <SolidColorBrush x:Key="DashGreen" Color="#66BB6A"/>
+            <SolidColorBrush x:Key="DashPurple" Color="#AB47BC"/>
+            <SolidColorBrush x:Key="DashOrange" Color="#FFA726"/>
+            <SolidColorBrush x:Key="DashRed" Color="#EF5350"/>
+            <SolidColorBrush x:Key="DashIndigo" Color="#5C6BC0"/>
+            <SolidColorBrush x:Key="DashCyan" Color="#26C6DA"/>
+            <SolidColorBrush x:Key="CartHeaderBrush" Color="#1A237E"/> <!-- Dark Navy Blue for POS Cart Header -->
+            
+            <FontFamily x:Key="BrandFont">Segoe UI, Roboto, sans-serif</FontFamily>
+            <FontFamily x:Key="MaterialDesignFont">pack://application:,,,/MaterialDesignThemes.Wpf;component/Resources/Roboto/#Roboto</FontFamily>
+            
+            <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
+            <res:BooleanToBrushConverter x:Key="BooleanToBrushConverter" TrueBrush="White" FalseBrush="#BBDEFB"/>
+            <res:MultiValueConverter x:Key="MultiValueConverter"/>
+            <res:StatusToBrushConverter x:Key="StatusToBrushConverter"/>
+            <res:InverseBooleanToVisibilityConverter x:Key="InverseBooleanToVisibilityConverter"/>
+            <res:EqualityConverter x:Key="EqualityConverter"/>
+            <res:NullToVisibilityConverter x:Key="NullToVisibilityConverter"/>
+            <res:StringToVisibilityConverter x:Key="StringToVisibilityConverter"/>
+            <res:InverseStringToVisibilityConverter x:Key="InverseStringToVisibilityConverter"/>
+            <res:StringToUpperCaseConverter x:Key="StringToUpperCaseConverter"/>
+
+            <!-- Global UI Rules (Touch Optimized) -->
+            <System:Double x:Key="PageTitleFontSize" xmlns:System="clr-namespace:System;assembly=mscorlib">36</System:Double>
+            <System:Double x:Key="SectionTitleFontSize" xmlns:System="clr-namespace:System;assembly=mscorlib">28</System:Double>
+            <System:Double x:Key="NormalFontSize" xmlns:System="clr-namespace:System;assembly=mscorlib">22</System:Double>
+            <System:Double x:Key="TableFontSize" xmlns:System="clr-namespace:System;assembly=mscorlib">20</System:Double>
+            <System:Double x:Key="InputFontSize" xmlns:System="clr-namespace:System;assembly=mscorlib">24</System:Double>
+            <System:Double x:Key="ButtonFontSize" xmlns:System="clr-namespace:System;assembly=mscorlib">24</System:Double>
+            <System:Double x:Key="TotalFontSize" xmlns:System="clr-namespace:System;assembly=mscorlib">44</System:Double>
+            
+            <System:Double x:Key="MainActionBtnHeight" xmlns:System="clr-namespace:System;assembly=mscorlib">120</System:Double>
+            <System:Double x:Key="SecondaryBtnHeight" xmlns:System="clr-namespace:System;assembly=mscorlib">90</System:Double>
+            <System:Double x:Key="SidebarBtnHeight" xmlns:System="clr-namespace:System;assembly=mscorlib">80</System:Double>
+
+            <!-- Global Button Style -->
+            <Style x:Key="BrandButtonStyle" TargetType="Button" BasedOn="{StaticResource MaterialDesignFlatButton}">
+                <Setter Property="FontWeight" Value="Bold"/>
+                <Setter Property="FontSize" Value="{StaticResource ButtonFontSize}"/>
+                <Setter Property="Height" Value="{StaticResource MainActionBtnHeight}"/>
+                <Setter Property="materialDesign:ButtonAssist.CornerRadius" Value="12"/>
+            </Style>
+
+            <DataTemplate DataType="{x:Type vm:DashboardViewModel}">
+                <views:DashboardView />
+            </DataTemplate>
+            <DataTemplate DataType="{x:Type vm:POSViewModel}">
+                <views:POSView />
+            </DataTemplate>
+            <DataTemplate DataType="{x:Type vm:KitchenViewModel}">
+                <views:KitchenView />
+            </DataTemplate>
+            <DataTemplate DataType="{x:Type vm:OrdersViewModel}">
+                <views:OrdersView />
+            </DataTemplate>
+            <DataTemplate DataType="{x:Type vm:TableManagementViewModel}">
+                <views:TableManagementView />
+            </DataTemplate>
+            <DataTemplate DataType="{x:Type vm:InventoryViewModel}">
+                <views:InventoryView />
+            </DataTemplate>
+            <DataTemplate DataType="{x:Type vm:CustomerLedgerViewModel}">
+                <views:CustomerLedgerView />
+            </DataTemplate>
+            <DataTemplate DataType="{x:Type vm:FinanceViewModel}">
+                <views:FinanceView />
+            </DataTemplate>
+            <DataTemplate DataType="{x:Type vm:PurchaseDashboardViewModel}">
+                <views:PurchaseDashboardView />
+            </DataTemplate>
+            <DataTemplate DataType="{x:Type vm:PurchaseViewModel}">
+                <views:PurchaseView />
+            </DataTemplate>
+            <DataTemplate DataType="{x:Type vm:AccessDeniedViewModel}">
+                <views:AccessDeniedView />
+            </DataTemplate>
+            <DataTemplate DataType="{x:Type vm:UsersViewModel}">
+                <views:UsersView />
+            </DataTemplate>
+            <DataTemplate DataType="{x:Type vm:ReportsViewModel}">
+                <views:ReportsView />
+            </DataTemplate>
+            <DataTemplate DataType="{x:Type vm:SettingsViewModel}">
+                <views:SettingsView />
+            </DataTemplate>
+            <DataTemplate DataType="{x:Type vm:ConnectPhoneViewModel}">
+                <views:ConnectPhoneView />
+            </DataTemplate>
+            <DataTemplate DataType="{x:Type vm:LicenseViewModel}">
+                <views:LicenseView />
+            </DataTemplate>
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>

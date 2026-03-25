@@ -1,0 +1,36 @@
+# .gitignore for Visual Studio / .NET
+
+# User-specific files
+*.rsuser
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Build results
+[Dd]ebug/
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Tt]estResults/
+
+# .vs
+.vs/
+
+# Installer build results
+installer_build/
+publish/
+release_folder/
+
+# Packages
+*.nupkg
+
+# NuGet
+packages/
+*.nuget.props
+*.nuget.targets
+
+# Backup and temporary files
+*.bak
+*.tmp
+*.log

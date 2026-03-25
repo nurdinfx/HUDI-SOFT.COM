@@ -1,0 +1,92 @@
+<UserControl x:Class="HudiSoftPOS.Views.LicenseView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
+             xmlns:vm="clr-namespace:HudiSoftPOS.ViewModels"
+             mc:Ignorable="d" 
+             d:DesignHeight="800" d:DesignWidth="1200">
+    <Grid Background="Transparent">
+        <Grid HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="900">
+            <Border Background="{StaticResource GlassBackgroundBrush}" CornerRadius="40" Padding="60" BorderBrush="{StaticResource GlassBorderBrush}" BorderThickness="1">
+                <StackPanel>
+                    
+                    <!-- Title & Status Badge -->
+                    <Grid Margin="0,0,0,40">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel>
+                            <TextBlock Text="LICENSE MANAGEMENT" FontSize="36" FontWeight="Black" Foreground="White"/>
+                            <TextBlock Text="Manage your software subscription and activation" FontSize="18" Foreground="Silver"/>
+                        </StackPanel>
+                        <Border Grid.Column="1" Background="#204CAF50" CornerRadius="20" Padding="25,10" VerticalAlignment="Center" BorderBrush="#4CAF50" BorderThickness="1">
+                            <StackPanel Orientation="Horizontal">
+                                <materialDesign:PackIcon Kind="ShieldCheck" Width="24" Height="24" Foreground="#4CAF50" VerticalAlignment="Center"/>
+                                <TextBlock Text="{Binding Status}" Foreground="#4CAF50" FontSize="18" FontWeight="Black" Margin="10,0,0,0" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+
+                    <!-- License Details Card -->
+                    <Border Background="{StaticResource CardBrush}" CornerRadius="24" Padding="35" Margin="0,0,0,40" BorderBrush="{StaticResource GlassBorderBrush}" BorderThickness="1">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel Margin="0,0,0,30">
+                                <TextBlock Text="REGISTERED TO" FontSize="12" FontWeight="Bold" Foreground="Silver"/>
+                                <TextBlock Text="{Binding RegisteredTo}" FontSize="24" FontWeight="Black" Foreground="White"/>
+                            </StackPanel>
+
+                            <StackPanel Grid.Column="1" Margin="30,0,0,30">
+                                <TextBlock Text="EXPIRY DATE" FontSize="12" FontWeight="Bold" Foreground="Silver"/>
+                                <TextBlock Text="{Binding ExpiryDate, StringFormat='dd MMM yyyy'}" FontSize="24" FontWeight="Black" Foreground="White"/>
+                            </StackPanel>
+
+                            <StackPanel Grid.Row="1" Grid.ColumnSpan="2" Margin="0,0,0,30">
+                                <TextBlock Text="LICENSE KEY" FontSize="12" FontWeight="Bold" Foreground="Silver"/>
+                                <TextBlock Text="{Binding LicenseKey}" FontSize="24" FontWeight="Black" Foreground="White"/>
+                            </StackPanel>
+
+                            <StackPanel Grid.Row="2" Grid.ColumnSpan="2">
+                                <TextBlock Text="MACHINE ID" FontSize="12" FontWeight="Bold" Foreground="Silver"/>
+                                <TextBlock Text="{Binding MachineId}" FontSize="16" FontWeight="Bold" Foreground="Silver"/>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+
+                     <!-- Activation Section -->
+                    <StackPanel>
+                        <TextBlock Text="ACTIVATE NEW LICENSE" FontSize="16" FontWeight="Bold" Foreground="Silver" Margin="0,0,0,15"/>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBox Text="{Binding NewLicenseKey}" materialDesign:HintAssist.Hint="ENTER YOUR 16-DIGIT KEY HERE..." 
+                                     Height="80" FontSize="26" FontWeight="Black" VerticalContentAlignment="Center" Padding="25,0"
+                                     Style="{StaticResource MaterialDesignOutlinedTextBox}" Foreground="White" BorderBrush="#30FFFFFF" materialDesign:HintAssist.Foreground="Silver"/>
+                            <Button Grid.Column="1" Command="{Binding ActivateLicenseCommand}" Content="ACTIVATE" 
+                                    Style="{StaticResource BrandButtonStyle}" Width="200" Height="80" FontSize="20" Background="{StaticResource DashBlue}" Foreground="White" Margin="20,0,0,0"/>
+                        </Grid>
+                    </StackPanel>
+
+                    <!-- Footer Actions -->
+                    <Button Command="{Binding DeactivateLicenseCommand}" Content="DEACTIVATE THIS DEVICE" Margin="0,50,0,0" 
+                            Style="{StaticResource MaterialDesignFlatButton}" Foreground="#EF5350" FontWeight="Bold" HorizontalAlignment="Center"/>
+                    
+                </StackPanel>
+            </Border>
+        </Grid>
+    </Grid>
+</UserControl>

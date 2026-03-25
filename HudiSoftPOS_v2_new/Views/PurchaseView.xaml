@@ -1,0 +1,170 @@
+<UserControl x:Class="HudiSoftPOS.Views.PurchaseView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
+             xmlns:vm="clr-namespace:HudiSoftPOS.ViewModels"
+             mc:Ignorable="d" 
+             d:DesignHeight="900" d:DesignWidth="1600">
+    <Grid Background="Transparent">
+        <Grid Margin="30">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/> <!-- Header & Supplier -->
+                <RowDefinition Height="*"/>    <!-- Main Content -->
+            </Grid.RowDefinitions>
+
+            <!-- 1. Header & Supplier Selector -->
+            <Border Grid.Row="0" Background="{StaticResource SidebarBrush}" CornerRadius="20" Padding="30" Margin="0,0,0,30" BorderBrush="{StaticResource GlassBorderBrush}" BorderThickness="1">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="350"/>
+                        <ColumnDefinition Width="300"/>
+                    </Grid.ColumnDefinitions>
+
+                    <TextBlock Text="STOCK PURCHASE" FontSize="36" FontWeight="Black" Foreground="White" VerticalAlignment="Center"/>
+
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="40,0,0,0">
+                        <materialDesign:PackIcon Kind="TruckDelivery" Width="28" Height="28" Foreground="White" VerticalAlignment="Center" Margin="0,0,15,0"/>
+                        <ComboBox ItemsSource="{Binding Suppliers}" SelectedItem="{Binding SelectedSupplier}" DisplayMemberPath="Name" 
+                                  Width="400" Height="70" FontSize="22" FontWeight="Bold" VerticalContentAlignment="Center"
+                                  Style="{StaticResource MaterialDesignFloatingHintComboBox}" Foreground="White"/>
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="20,0">
+                        <TextBlock Text="REFERENCE #" FontSize="12" FontWeight="Bold" Foreground="Silver"/>
+                        <TextBox Text="{Binding ReferenceNumber}" FontSize="24" FontWeight="Black" Foreground="White" BorderThickness="0" IsReadOnly="True" Background="Transparent"/>
+                    </StackPanel>
+
+                    <Button Grid.Column="3" Style="{StaticResource BrandButtonStyle}" Height="75" Background="#15FFFFFF" Foreground="White" BorderBrush="{StaticResource GlassBorderBrush}" BorderThickness="1">
+                        <StackPanel Orientation="Horizontal">
+                            <materialDesign:PackIcon Kind="History" Width="24" Height="24" Margin="0,0,10,0"/>
+                            <TextBlock Text="PURCHASE HISTORY" FontWeight="Bold"/>
+                        </StackPanel>
+                    </Button>
+                </Grid>
+            </Border>
+
+            <!-- 2. Main content: Left List, Right Cart -->
+            <Grid Grid.Row="1">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="550"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Left: Product Selection -->
+                <Grid Grid.Column="0" Margin="0,0,30,0">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <Border Grid.Row="0" Background="#15FFFFFF" CornerRadius="15" Padding="20" Margin="0,0,0,20" BorderBrush="#20FFFFFF" BorderThickness="1">
+                        <Grid>
+                            <materialDesign:PackIcon Kind="Search" Width="24" Height="24" Foreground="Silver" VerticalAlignment="Center" Margin="10,0,0,0"/>
+                            <TextBox materialDesign:HintAssist.Hint="SEARCH PRODUCTS TO RESTOCK..." FontSize="20" Padding="50,0,0,0" BorderThickness="0" Style="{StaticResource MaterialDesignOutlinedTextBox}" Foreground="White" materialDesign:HintAssist.Foreground="Silver"/>
+                        </Grid>
+                    </Border>
+
+                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Hidden">
+                        <ItemsControl ItemsSource="{Binding AvailableProducts}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <WrapPanel/>
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Button Command="{Binding DataContext.AddToCartCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding}"
+                                            Width="220" Height="140" Margin="0,0,20,20" Padding="15" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Stretch"
+                                            Style="{StaticResource BrandButtonStyle}" Background="{StaticResource CardBrush}" Foreground="White" BorderBrush="{StaticResource GlassBorderBrush}" BorderThickness="1">
+                                        <Grid>
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="*"/>
+                                                <RowDefinition Height="Auto"/>
+                                                <RowDefinition Height="Auto"/>
+                                            </Grid.RowDefinitions>
+                                            <TextBlock Text="{Binding Name}" FontSize="20" FontWeight="Black" TextWrapping="Wrap" TextAlignment="Center" VerticalAlignment="Center" Foreground="White" MaxHeight="60"/>
+                                            <TextBlock Grid.Row="1" Text="{Binding Category}" FontSize="12" Foreground="Silver" HorizontalAlignment="Center"/>
+                                            <Border Grid.Row="2" Background="#20FFFFFF" CornerRadius="10" Padding="8,4" HorizontalAlignment="Center" Margin="0,5,0,0">
+                                                <TextBlock Text="{Binding StockQuantity, StringFormat='{}QTY: {0}'}" FontSize="12" FontWeight="Bold" Foreground="Silver"/>
+                                            </Border>
+                                        </Grid>
+                                    </Button>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </Grid>
+
+                <!-- Right: Purchase Cart -->
+                <Border Grid.Column="1" Background="{StaticResource CardBrush}" CornerRadius="24" Padding="30" BorderBrush="{StaticResource GlassBorderBrush}" BorderThickness="1">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+
+                        <TextBlock Text="PURCHASE ITEMS" FontSize="26" FontWeight="Black" Foreground="White" Margin="0,0,0,25"/>
+
+                        <ListView Grid.Row="1" ItemsSource="{Binding CartItems}" BorderThickness="0">
+                            <ListView.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Margin="0,0,0,15" Padding="0,0,0,15" BorderBrush="#20FFFFFF" BorderThickness="0,0,0,2">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="100"/>
+                                                <ColumnDefinition Width="120"/>
+                                                <ColumnDefinition Width="40"/>
+                                            </Grid.ColumnDefinitions>
+                                            
+                                            <StackPanel>
+                                                <TextBlock Text="{Binding ProductName}" FontSize="20" FontWeight="Bold" Foreground="White"/>
+                                                <TextBlock Text="COST PER UNIT ($)" FontSize="11" Foreground="Silver" Margin="0,5,0,2"/>
+                                                <TextBox Text="{Binding UnitCost, StringFormat='{}{0:F2}'}" FontSize="18" FontWeight="SemiBold" BorderThickness="0" Padding="0" Foreground="White" Background="Transparent"/>
+                                            </StackPanel>
+
+                                            <StackPanel Grid.Column="1" VerticalAlignment="Center" HorizontalAlignment="Center">
+                                                <TextBlock Text="QTY" FontSize="11" Foreground="Silver" HorizontalAlignment="Center"/>
+                                                <TextBox Text="{Binding Quantity}" FontSize="22" FontWeight="Black" TextAlignment="Center" BorderThickness="0" Foreground="White" Background="Transparent"/>
+                                            </StackPanel>
+
+                                            <StackPanel Grid.Column="2" VerticalAlignment="Center" HorizontalAlignment="Right">
+                                                <TextBlock Text="SUBTOTAL" FontSize="11" Foreground="Silver" HorizontalAlignment="Right"/>
+                                                <TextBlock Text="{Binding SubTotal, StringFormat='${0:N2}'}" FontSize="20" FontWeight="Black" Foreground="White"/>
+                                            </StackPanel>
+
+                                            <Button Grid.Column="3" Command="{Binding DataContext.RemoveFromCartCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding}"
+                                                    Style="{StaticResource MaterialDesignFlatButton}" Foreground="#EF5350" Padding="0" VerticalAlignment="Center">
+                                                <materialDesign:PackIcon Kind="CloseCircle" Width="24" Height="24"/>
+                                            </Button>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ListView.ItemTemplate>
+                        </ListView>
+
+                        <Border Grid.Row="2" Background="#15FFFFFF" CornerRadius="16" Padding="25" Margin="0,20,0,20" BorderBrush="#20FFFFFF" BorderThickness="1">
+                            <Grid>
+                                <TextBlock Text="TOTAL PURCHASE" FontSize="16" FontWeight="Bold" Foreground="Silver"/>
+                                <TextBlock Text="{Binding TotalPurchaseAmount, StringFormat='${0:N2}'}" FontSize="44" FontWeight="Black" Foreground="White" HorizontalAlignment="Right"/>
+                            </Grid>
+                        </Border>
+
+                        <Button Grid.Row="3" Command="{Binding ConfirmPurchaseCommand}" Style="{StaticResource BrandButtonStyle}" Height="110" FontSize="28" FontWeight="Black" Background="{StaticResource PositiveBrush}" Foreground="White">
+                            <StackPanel Orientation="Horizontal">
+                                <materialDesign:PackIcon Kind="CheckCircle" Width="36" Height="36" Margin="0,0,20,0"/>
+                                <TextBlock Text="CONFIRM PURCHASE" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Button>
+                    </Grid>
+                </Border>
+            </Grid>
+        </Grid>
+    </Grid>
+</UserControl>

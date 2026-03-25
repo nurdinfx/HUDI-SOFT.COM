@@ -1,0 +1,75 @@
+<UserControl x:Class="HudiSoftPOS.Views.ConnectPhoneView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
+             xmlns:vm="clr-namespace:HudiSoftPOS.ViewModels"
+             mc:Ignorable="d" 
+             d:DesignHeight="900" d:DesignWidth="1600">
+    <Grid Background="Transparent">
+        <Grid HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="800">
+            <Border Background="{StaticResource GlassBackgroundBrush}" CornerRadius="40" Padding="60" BorderBrush="{StaticResource GlassBorderBrush}" BorderThickness="1">
+                <StackPanel HorizontalAlignment="Center">
+                    
+                    <!-- Title & Icon -->
+                    <materialDesign:PackIcon Kind="CellphoneLink" Width="80" Height="80" Foreground="White" HorizontalAlignment="Center"/>
+                    <TextBlock Text="CONNECT MOBILE TERMINAL" FontSize="36" FontWeight="Black" Foreground="White" HorizontalAlignment="Center" Margin="0,20,0,10"/>
+                    <TextBlock Text="Scan this QR code with the HudiSoft POS Mobile App to sync your local database with your handheld device." 
+                               FontSize="18" Foreground="Silver" TextWrapping="Wrap" TextAlignment="Center" Margin="0,0,0,40"/>
+
+                    <!-- QR Code Area (300x300 Placeholder) -->
+                    <Grid Width="350" Height="350" Margin="0,0,0,40">
+                        <Border BorderBrush="#30FFFFFF" BorderThickness="2" CornerRadius="30" Background="#15FFFFFF">
+                            <Grid>
+                                <StackPanel VerticalAlignment="Center" Visibility="{Binding IsGenerating, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                    <ProgressBar Style="{StaticResource MaterialDesignCircularProgressBar}" Value="0" IsIndeterminate="True" Width="60" Height="60" Margin="0,0,0,20" Foreground="White"/>
+                                    <TextBlock Text="GENERATING SECURE LINK..." FontSize="14" FontWeight="Bold" Foreground="Silver" HorizontalAlignment="Center"/>
+                                </StackPanel>
+                                
+                                <!-- QR Placeholder (Simulated) -->
+                                <StackPanel VerticalAlignment="Center" Visibility="{Binding IsGenerating, Converter={StaticResource InverseBooleanToVisibilityConverter}}">
+                                    <materialDesign:PackIcon Kind="QrCode" Width="200" Height="200" Foreground="White" HorizontalAlignment="Center"/>
+                                    <TextBlock Text="TAP TO REFRESH" FontSize="12" FontWeight="Bold" Foreground="Silver" HorizontalAlignment="Center" Margin="0,15,0,0"/>
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+                    </Grid>
+
+                    <!-- Connection Stats -->
+                    <Border Background="#15FFFFFF" CornerRadius="20" Padding="30" Margin="0,0,0,40" BorderBrush="#20FFFFFF" BorderThickness="1">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel>
+                                <TextBlock Text="NETWORK ADDRESS" FontSize="12" FontWeight="Bold" Foreground="Silver"/>
+                                <TextBlock Text="{Binding ServerIp, StringFormat='{}http://{0}:5000'}" FontSize="24" FontWeight="Black" Foreground="White"/>
+                            </StackPanel>
+                            <Border Grid.Column="1" Background="#20FFFFFF" CornerRadius="12" Padding="15,8" VerticalAlignment="Center" BorderBrush="#30FFFFFF" BorderThickness="1">
+                                <TextBlock Text="{Binding ConnectionStatus}" Foreground="White" FontSize="14" FontWeight="Bold"/>
+                            </Border>
+                        </Grid>
+                    </Border>
+
+                    <!-- Bottom Actions -->
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                        <Button Command="{Binding GenerateQrCodeCommand}" Style="{StaticResource BrandButtonStyle}" Width="250" Height="80" Background="#15FFFFFF" Foreground="White" BorderBrush="{StaticResource GlassBorderBrush}" BorderThickness="1" Margin="0,0,20,0">
+                            <StackPanel Orientation="Horizontal">
+                                <materialDesign:PackIcon Kind="Refresh" Width="24" Height="24" Margin="0,0,10,0"/>
+                                <TextBlock Text="START SERVER" FontWeight="Black"/>
+                            </StackPanel>
+                        </Button>
+                        <Button Command="{Binding DisconnectDeviceCommand}" Style="{StaticResource BrandButtonStyle}" Width="250" Height="80" Background="#20EF5350" Foreground="#EF5350" BorderBrush="#EF5350" BorderThickness="1">
+                            <StackPanel Orientation="Horizontal">
+                                <materialDesign:PackIcon Kind="LinkOff" Width="24" Height="24" Margin="0,0,10,0"/>
+                                <TextBlock Text="STOP SYNC" FontWeight="Black"/>
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+        </Grid>
+    </Grid>
+</UserControl>

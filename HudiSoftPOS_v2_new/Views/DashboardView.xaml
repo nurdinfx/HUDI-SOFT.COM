@@ -1,0 +1,446 @@
+<UserControl x:Class="HudiSoftPOS.Views.DashboardView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
+             xmlns:vm="clr-namespace:HudiSoftPOS.ViewModels"
+             mc:Ignorable="d"
+             d:DesignHeight="900" d:DesignWidth="1300"
+             Background="#F4F6F8">
+
+    <UserControl.Resources>
+        <!-- Stat card template style -->
+        <Style x:Key="PeriodButton" TargetType="Button" BasedOn="{StaticResource MaterialDesignOutlinedButton}">
+            <Setter Property="Height" Value="34"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="BorderBrush" Value="#BDBDBD"/>
+            <Setter Property="Foreground" Value="#616161"/>
+            <Setter Property="Padding" Value="16,0"/>
+            <Setter Property="materialDesign:ButtonAssist.CornerRadius" Value="6"/>
+        </Style>
+    </UserControl.Resources>
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel Margin="20,15,20,20">
+
+            <!-- ── Header Row ── -->
+            <Grid Margin="0,0,0,16">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Grid.Column="0">
+                    <TextBlock Text="Restaurant Dashboard" FontSize="24" FontWeight="Bold" Foreground="#212121"/>
+                    <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                        <materialDesign:PackIcon Kind="CalendarMonth" Foreground="#757575" Width="16" Height="16" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                        <TextBlock Text="{Binding LastUpdated}" Foreground="#757575" FontSize="13"/>
+                    </StackPanel>
+                </StackPanel>
+
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button Style="{StaticResource PeriodButton}" Content="Today" Margin="0,0,4,0"/>
+                    <Button Style="{StaticResource PeriodButton}" Content="Week" Margin="0,0,4,0"/>
+                    <Button Style="{StaticResource PeriodButton}" Content="Month" Margin="0,0,12,0"/>
+                    <Button Command="{Binding LoadDashboardDataCommand}"
+                            Background="#1565C0" Foreground="White" Height="34" Padding="16,0"
+                            FontSize="13" FontWeight="Bold" BorderThickness="0"
+                            materialDesign:ButtonAssist.CornerRadius="6"
+                            Style="{StaticResource MaterialDesignRaisedButton}">
+                        <StackPanel Orientation="Horizontal">
+                            <materialDesign:PackIcon Kind="Refresh" Width="16" Height="16" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                            <TextBlock Text="Refresh" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+                </StackPanel>
+            </Grid>
+
+            <!-- ── Row 1: 4 Primary Stat Cards ── -->
+            <UniformGrid Columns="4" Margin="0,0,0,10">
+
+                <!-- Today's Revenue -->
+                <Border CornerRadius="10" Margin="0,0,8,0" Padding="16">
+                    <Border.Background>
+                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                            <GradientStop Color="#2E7D32" Offset="0"/>
+                            <GradientStop Color="#43A047" Offset="1"/>
+                        </LinearGradientBrush>
+                    </Border.Background>
+                    <Grid>
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                                <Border Background="#33FFFFFF" CornerRadius="4" Padding="5,2">
+                                    <TextBlock Text="{Binding RevenueChange}" Foreground="White" FontSize="11" FontWeight="Bold"/>
+                                </Border>
+                            </StackPanel>
+                            <TextBlock Text="Today's Revenue" Foreground="#CCFFFFFF" FontSize="13"/>
+                            <TextBlock Text="{Binding TodaysRevenue, StringFormat='${0:N2}'}" FontSize="32" FontWeight="Black" Foreground="White" Margin="0,8,0,0"/>
+                            <Border Height="3" Background="#33FFFFFF" CornerRadius="1" Margin="0,12,0,0"/>
+                        </StackPanel>
+                        <materialDesign:PackIcon Kind="CurrencyUsd" Width="36" Height="36" Foreground="#33FFFFFF" HorizontalAlignment="Right" VerticalAlignment="Top"/>
+                    </Grid>
+                </Border>
+
+                <!-- Today's Orders -->
+                <Border CornerRadius="10" Margin="4,0,4,0" Padding="16">
+                    <Border.Background>
+                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                            <GradientStop Color="#1565C0" Offset="0"/>
+                            <GradientStop Color="#1E88E5" Offset="1"/>
+                        </LinearGradientBrush>
+                    </Border.Background>
+                    <Grid>
+                        <StackPanel>
+                            <Border Background="#33FFFFFF" CornerRadius="4" Padding="5,2" HorizontalAlignment="Left">
+                                <TextBlock Text="{Binding OrdersChange}" Foreground="White" FontSize="11" FontWeight="Bold"/>
+                            </Border>
+                            <TextBlock Text="Today's Orders" Foreground="#CCFFFFFF" FontSize="13" Margin="0,4,0,0"/>
+                            <TextBlock Text="{Binding TodaysOrders}" FontSize="32" FontWeight="Black" Foreground="White" Margin="0,8,0,0"/>
+                            <Border Height="3" Background="#33FFFFFF" CornerRadius="1" Margin="0,12,0,0"/>
+                        </StackPanel>
+                        <materialDesign:PackIcon Kind="ShoppingOutline" Width="36" Height="36" Foreground="#33FFFFFF" HorizontalAlignment="Right" VerticalAlignment="Top"/>
+                    </Grid>
+                </Border>
+
+                <!-- Completed Orders -->
+                <Border CornerRadius="10" Margin="4,0,4,0" Padding="16">
+                    <Border.Background>
+                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                            <GradientStop Color="#00695C" Offset="0"/>
+                            <GradientStop Color="#00897B" Offset="1"/>
+                        </LinearGradientBrush>
+                    </Border.Background>
+                    <Grid>
+                        <StackPanel>
+                            <Border Background="#33FFFFFF" CornerRadius="4" Padding="5,2" HorizontalAlignment="Left">
+                                <TextBlock Text="{Binding CompletedChange}" Foreground="White" FontSize="11" FontWeight="Bold"/>
+                            </Border>
+                            <TextBlock Text="Completed Orders" Foreground="#CCFFFFFF" FontSize="13" Margin="0,4,0,0"/>
+                            <TextBlock Text="{Binding CompletedOrders}" FontSize="32" FontWeight="Black" Foreground="White" Margin="0,8,0,0"/>
+                            <Border Height="3" Background="#33FFFFFF" CornerRadius="1" Margin="0,12,0,0"/>
+                        </StackPanel>
+                        <materialDesign:PackIcon Kind="CheckboxMarkedCircleOutline" Width="36" Height="36" Foreground="#33FFFFFF" HorizontalAlignment="Right" VerticalAlignment="Top"/>
+                    </Grid>
+                </Border>
+
+                <!-- Monthly Revenue -->
+                <Border CornerRadius="10" Margin="8,0,0,0" Padding="16">
+                    <Border.Background>
+                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                            <GradientStop Color="#6A1B9A" Offset="0"/>
+                            <GradientStop Color="#8E24AA" Offset="1"/>
+                        </LinearGradientBrush>
+                    </Border.Background>
+                    <Grid>
+                        <StackPanel>
+                            <Border Background="#33FFFFFF" CornerRadius="4" Padding="5,2" HorizontalAlignment="Left">
+                                <TextBlock Text="{Binding MonthlyChange}" Foreground="White" FontSize="11" FontWeight="Bold"/>
+                            </Border>
+                            <TextBlock Text="Monthly Revenue" Foreground="#CCFFFFFF" FontSize="13" Margin="0,4,0,0"/>
+                            <TextBlock Text="{Binding MonthlyRevenue, StringFormat='${0:N2}'}" FontSize="32" FontWeight="Black" Foreground="White" Margin="0,8,0,0"/>
+                            <Border Height="3" Background="#33FFFFFF" CornerRadius="1" Margin="0,12,0,0"/>
+                        </StackPanel>
+                        <materialDesign:PackIcon Kind="ChartAreaspline" Width="36" Height="36" Foreground="#33FFFFFF" HorizontalAlignment="Right" VerticalAlignment="Top"/>
+                    </Grid>
+                </Border>
+            </UniformGrid>
+
+            <!-- ── Row 2: 4 Secondary Stat Cards ── -->
+            <UniformGrid Columns="4" Margin="0,0,0,16">
+
+                <!-- Total Customers -->
+                <Border CornerRadius="10" Margin="0,0,8,0" Padding="16">
+                    <Border.Background>
+                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                            <GradientStop Color="#E65100" Offset="0"/>
+                            <GradientStop Color="#FB8C00" Offset="1"/>
+                        </LinearGradientBrush>
+                    </Border.Background>
+                    <Grid>
+                        <StackPanel>
+                            <Border Background="#33FFFFFF" CornerRadius="4" Padding="5,2" HorizontalAlignment="Left">
+                                <TextBlock Text="{Binding CustomersChange}" Foreground="White" FontSize="11" FontWeight="Bold"/>
+                            </Border>
+                            <TextBlock Text="Total Customers" Foreground="#CCFFFFFF" FontSize="13" Margin="0,4,0,0"/>
+                            <TextBlock Text="{Binding TotalCustomers}" FontSize="32" FontWeight="Black" Foreground="White" Margin="0,8,0,0"/>
+                            <Border Height="3" Background="#33FFFFFF" CornerRadius="1" Margin="0,12,0,0"/>
+                        </StackPanel>
+                        <materialDesign:PackIcon Kind="AccountGroup" Width="36" Height="36" Foreground="#33FFFFFF" HorizontalAlignment="Right" VerticalAlignment="Top"/>
+                    </Grid>
+                </Border>
+
+                <!-- Low Stock Items -->
+                <Border CornerRadius="10" Margin="4,0,4,0" Padding="16">
+                    <Border.Background>
+                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                            <GradientStop Color="#C62828" Offset="0"/>
+                            <GradientStop Color="#E53935" Offset="1"/>
+                        </LinearGradientBrush>
+                    </Border.Background>
+                    <Grid>
+                        <StackPanel>
+                            <Border Background="#33FFFFFF" CornerRadius="4" Padding="5,2" HorizontalAlignment="Left">
+                                <TextBlock Text="{Binding StockChange}" Foreground="White" FontSize="11" FontWeight="Bold"/>
+                            </Border>
+                            <TextBlock Text="Low Stock Items" Foreground="#CCFFFFFF" FontSize="13" Margin="0,4,0,0"/>
+                            <TextBlock Text="{Binding LowStockItems}" FontSize="32" FontWeight="Black" Foreground="White" Margin="0,8,0,0"/>
+                            <Border Height="3" Background="#33FFFFFF" CornerRadius="1" Margin="0,12,0,0"/>
+                        </StackPanel>
+                        <materialDesign:PackIcon Kind="AlertOutline" Width="36" Height="36" Foreground="#33FFFFFF" HorizontalAlignment="Right" VerticalAlignment="Top"/>
+                    </Grid>
+                </Border>
+
+                <!-- Available Tables -->
+                <Border CornerRadius="10" Margin="4,0,4,0" Padding="16">
+                    <Border.Background>
+                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                            <GradientStop Color="#283593" Offset="0"/>
+                            <GradientStop Color="#3949AB" Offset="1"/>
+                        </LinearGradientBrush>
+                    </Border.Background>
+                    <Grid>
+                        <StackPanel>
+                            <Border Background="#33FFFFFF" CornerRadius="4" Padding="5,2" HorizontalAlignment="Left">
+                                <TextBlock Text="{Binding TablesChange}" Foreground="White" FontSize="11" FontWeight="Bold"/>
+                            </Border>
+                            <TextBlock Text="Available Tables" Foreground="#CCFFFFFF" FontSize="13" Margin="0,4,0,0"/>
+                            <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                <TextBlock Text="{Binding AvailableTables}" FontSize="32" FontWeight="Black" Foreground="White"/>
+                                <TextBlock Text="/" FontSize="32" FontWeight="Black" Foreground="#99FFFFFF" Margin="4,0"/>
+                                <TextBlock Text="{Binding TotalTables}" FontSize="32" FontWeight="Black" Foreground="#99FFFFFF"/>
+                            </StackPanel>
+                            <Border Height="3" Background="#33FFFFFF" CornerRadius="1" Margin="0,12,0,0"/>
+                        </StackPanel>
+                        <materialDesign:PackIcon Kind="Silverware" Width="36" Height="36" Foreground="#33FFFFFF" HorizontalAlignment="Right" VerticalAlignment="Top"/>
+                    </Grid>
+                </Border>
+
+                <!-- Avg Order Value -->
+                <Border CornerRadius="10" Margin="8,0,0,0" Padding="16">
+                    <Border.Background>
+                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                            <GradientStop Color="#006064" Offset="0"/>
+                            <GradientStop Color="#00838F" Offset="1"/>
+                        </LinearGradientBrush>
+                    </Border.Background>
+                    <Grid>
+                        <StackPanel>
+                            <Border Background="#33FFFFFF" CornerRadius="4" Padding="5,2" HorizontalAlignment="Left">
+                                <TextBlock Text="{Binding ValueChange}" Foreground="White" FontSize="11" FontWeight="Bold"/>
+                            </Border>
+                            <TextBlock Text="Avg. Order Value" Foreground="#CCFFFFFF" FontSize="13" Margin="0,4,0,0"/>
+                            <TextBlock Text="{Binding AvgOrderValue, StringFormat='${0:N2}'}" FontSize="32" FontWeight="Black" Foreground="White" Margin="0,8,0,0"/>
+                            <Border Height="3" Background="#33FFFFFF" CornerRadius="1" Margin="0,12,0,0"/>
+                        </StackPanel>
+                        <materialDesign:PackIcon Kind="ChartBar" Width="36" Height="36" Foreground="#33FFFFFF" HorizontalAlignment="Right" VerticalAlignment="Top"/>
+                    </Grid>
+                </Border>
+            </UniformGrid>
+
+            <!-- ── Charts Row ── -->
+            <Grid Margin="0,0,0,16">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Revenue Overview Chart -->
+                <Border Grid.Column="0" Background="White" CornerRadius="10" Margin="0,0,8,0" Padding="20">
+                    <Border.Effect>
+                        <DropShadowEffect BlurRadius="8" ShadowDepth="1" Opacity="0.08" Color="Black"/>
+                    </Border.Effect>
+                    <StackPanel>
+                        <Grid Margin="0,0,0,16">
+                            <StackPanel>
+                                <TextBlock Text="Revenue Overview" FontSize="16" FontWeight="Bold" Foreground="#212121"/>
+                                <TextBlock Text="Daily revenue trends" Foreground="#9E9E9E" FontSize="12"/>
+                            </StackPanel>
+                            <materialDesign:PackIcon Kind="ChartBar" Width="24" Height="24" Foreground="#1565C0" HorizontalAlignment="Right" VerticalAlignment="Top"/>
+                        </Grid>
+                        <!-- Simplified Chart Area -->
+                        <Border Height="220" Background="#FAFAFA" CornerRadius="8" BorderBrush="#E0E0E0" BorderThickness="1">
+                            <Grid>
+                                <!-- Y-axis labels -->
+                                <StackPanel HorizontalAlignment="Left" VerticalAlignment="Stretch" Margin="10,10,0,30">
+                                    <TextBlock Text="$0.5" FontSize="11" Foreground="#9E9E9E"/>
+                                    <TextBlock Text="$0" FontSize="11" Foreground="#9E9E9E" Margin="0,60,0,0"/>
+                                    <TextBlock Text="-$0.5" FontSize="11" Foreground="#9E9E9E" Margin="0,60,0,0"/>
+                                </StackPanel>
+                                <!-- Chart line -->
+                                <Canvas Margin="40,15,15,30">
+                                    <Path Data="M 0,100 C 30,90 60,70 90,100 C 120,130 150,80 180,60 C 210,40 240,80 270,50 C 300,20 330,40 360,30"
+                                          Stroke="#1565C0" StrokeThickness="3" Fill="Transparent"/>
+                                    <Path Data="M 0,100 C 30,90 60,70 90,100 C 120,130 150,80 180,60 C 210,40 240,80 270,50 C 300,20 330,40 360,30 L 360,175 L 0,175 Z"
+                                          Fill="#1A1565C0" Stroke="Transparent"/>
+                                </Canvas>
+                                <TextBlock Text="No Data" FontSize="12" Foreground="#BDBDBD" HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,8"/>
+                            </Grid>
+                        </Border>
+                    </StackPanel>
+                </Border>
+
+                <!-- Sales by Category -->
+                <Border Grid.Column="1" Background="White" CornerRadius="10" Margin="8,0,0,0" Padding="20">
+                    <Border.Effect>
+                        <DropShadowEffect BlurRadius="8" ShadowDepth="1" Opacity="0.08" Color="Black"/>
+                    </Border.Effect>
+                    <StackPanel>
+                        <Grid Margin="0,0,0,16">
+                            <StackPanel>
+                                <TextBlock Text="Sales by Category" FontSize="16" FontWeight="Bold" Foreground="#212121"/>
+                                <TextBlock Text="Product category distribution" Foreground="#9E9E9E" FontSize="12"/>
+                            </StackPanel>
+                            <materialDesign:PackIcon Kind="ChartDonut" Width="24" Height="24" Foreground="#8E24AA" HorizontalAlignment="Right" VerticalAlignment="Top"/>
+                        </Grid>
+                        <!-- Simplified Donut Chart -->
+                        <Grid Height="220">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+
+                            <!-- Donut Circle Visual -->
+                            <Grid Grid.Column="0" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                <Ellipse Width="160" Height="160" Stroke="#E0E0E0" StrokeThickness="30"/>
+                                <Ellipse Width="160" Height="160" Stroke="#1565C0" StrokeThickness="30" StrokeDashArray="4.1 6.2" StrokeDashOffset="0"/>
+                                <Ellipse Width="160" Height="160" Stroke="#43A047" StrokeThickness="30" StrokeDashArray="2.5 7.8" StrokeDashOffset="-4.1"/>
+                                <Ellipse Width="160" Height="160" Stroke="#FB8C00" StrokeThickness="30" StrokeDashArray="0.6 9.7" StrokeDashOffset="-6.6"/>
+                                <TextBlock Text="No Data" FontSize="12" Foreground="#BDBDBD" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Grid>
+
+                            <!-- Legend -->
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="16,0,0,0">
+                                <StackPanel Orientation="Horizontal" Margin="0,6">
+                                    <Border Width="12" Height="12" CornerRadius="6" Background="#1565C0" Margin="0,0,8,0"/>
+                                    <TextBlock Text="Main Course" FontSize="12" Foreground="#616161"/>
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" Margin="0,6">
+                                    <Border Width="12" Height="12" CornerRadius="6" Background="#43A047" Margin="0,0,8,0"/>
+                                    <TextBlock Text="Beverages" FontSize="12" Foreground="#616161"/>
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" Margin="0,6">
+                                    <Border Width="12" Height="12" CornerRadius="6" Background="#FB8C00" Margin="0,0,8,0"/>
+                                    <TextBlock Text="Desserts" FontSize="12" Foreground="#616161"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+            </Grid>
+
+            <!-- ── Bottom Row: Recent Orders + Top Products ── -->
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="400"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Recent Orders -->
+                <Border Grid.Column="0" Background="White" CornerRadius="10" Margin="0,0,8,0" Padding="0">
+                    <Border.Effect>
+                        <DropShadowEffect BlurRadius="8" ShadowDepth="1" Opacity="0.08" Color="Black"/>
+                    </Border.Effect>
+                    <StackPanel>
+                        <!-- Header -->
+                        <Grid Margin="20,16" >
+                            <StackPanel>
+                                <TextBlock Text="Recent Orders" FontSize="16" FontWeight="Bold" Foreground="#212121"/>
+                                <TextBlock Text="Latest restaurant activities" Foreground="#9E9E9E" FontSize="12"/>
+                            </StackPanel>
+                            <materialDesign:PackIcon Kind="ClockOutline" Width="22" Height="22" Foreground="#FB8C00" HorizontalAlignment="Right" VerticalAlignment="Top"/>
+                        </Grid>
+
+                        <!-- Column Headers -->
+                        <Border Background="#F5F5F5" Padding="20,8">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="80"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="80"/>
+                                    <ColumnDefinition Width="100"/>
+                                    <ColumnDefinition Width="80"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="ORDER #" FontSize="11" FontWeight="Bold" Foreground="#9E9E9E"/>
+                                <TextBlock Grid.Column="1" Text="CUSTOMER" FontSize="11" FontWeight="Bold" Foreground="#9E9E9E"/>
+                                <TextBlock Grid.Column="2" Text="ITEMS" FontSize="11" FontWeight="Bold" Foreground="#9E9E9E"/>
+                                <TextBlock Grid.Column="3" Text="TOTAL" FontSize="11" FontWeight="Bold" Foreground="#9E9E9E"/>
+                                <TextBlock Grid.Column="4" Text="STATUS" FontSize="11" FontWeight="Bold" Foreground="#9E9E9E"/>
+                            </Grid>
+                        </Border>
+
+                        <!-- Orders List -->
+                        <ItemsControl ItemsSource="{Binding RecentOrders}" Margin="0,0,0,8">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Padding="20,12" BorderBrush="#F0F0F0" BorderThickness="0,0,0,1">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="80"/>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="80"/>
+                                                <ColumnDefinition Width="100"/>
+                                                <ColumnDefinition Width="80"/>
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Grid.Column="0" Text="{Binding Id, StringFormat='#{0:00000}'}" FontSize="13" FontWeight="Bold" Foreground="#1565C0"/>
+                                            <StackPanel Grid.Column="1">
+                                                <TextBlock Text="{Binding CustomerName}" FontSize="13" FontWeight="SemiBold" Foreground="#212121"/>
+                                                <TextBlock Text="{Binding OrderTime, StringFormat='MM/dd/yyyy HH:mm'}" FontSize="11" Foreground="#9E9E9E"/>
+                                            </StackPanel>
+                                            <TextBlock Grid.Column="2" Text="{Binding ItemCount}" FontSize="13" Foreground="#424242" VerticalAlignment="Center"/>
+                                            <TextBlock Grid.Column="3" Text="{Binding TotalAmount, StringFormat='${0:N2}'}" FontSize="13" FontWeight="Bold" Foreground="#43A047" VerticalAlignment="Center"/>
+                                            <Border Grid.Column="4" CornerRadius="12" Padding="8,3" VerticalAlignment="Center" HorizontalAlignment="Left"
+                                                    Background="{Binding Status, Converter={StaticResource StatusToBrushConverter}}">
+                                                <TextBlock Text="{Binding Status}" FontSize="11" FontWeight="Bold" Foreground="White"/>
+                                            </Border>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </Border>
+
+                <!-- Top Products -->
+                <Border Grid.Column="1" Background="White" CornerRadius="10" Margin="8,0,0,0" Padding="0">
+                    <Border.Effect>
+                        <DropShadowEffect BlurRadius="8" ShadowDepth="1" Opacity="0.08" Color="Black"/>
+                    </Border.Effect>
+                    <StackPanel>
+                        <Grid Margin="20,16">
+                            <StackPanel>
+                                <TextBlock Text="Top Products" FontSize="16" FontWeight="Bold" Foreground="#212121"/>
+                                <TextBlock Text="Best selling items" Foreground="#9E9E9E" FontSize="12"/>
+                            </StackPanel>
+                            <materialDesign:PackIcon Kind="Fire" Width="22" Height="22" Foreground="#43A047" HorizontalAlignment="Right" VerticalAlignment="Top"/>
+                        </Grid>
+
+                        <!-- Products list -->
+                        <ItemsControl ItemsSource="{Binding TopProducts}" Margin="0,0,0,8">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Padding="20,12" BorderBrush="#F0F0F0" BorderThickness="0,0,0,1">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel Grid.Column="0">
+                                                <TextBlock Text="{Binding Name}" FontSize="14" FontWeight="SemiBold" Foreground="#212121"/>
+                                                <TextBlock Text="{Binding Category}" FontSize="12" Foreground="#9E9E9E"/>
+                                            </StackPanel>
+                                            <StackPanel Grid.Column="1" HorizontalAlignment="Right">
+                                                <TextBlock Text="{Binding Price, StringFormat='${0:N2}'}" FontSize="14" FontWeight="Bold" Foreground="#1565C0" HorizontalAlignment="Right"/>
+                                                <TextBlock Text="{Binding StockQuantity, StringFormat='Stock: {0}'}" FontSize="11" Foreground="#9E9E9E" HorizontalAlignment="Right"/>
+                                            </StackPanel>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>
