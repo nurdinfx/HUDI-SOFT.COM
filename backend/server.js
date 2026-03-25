@@ -8,10 +8,27 @@ const PORT = process.env.PORT || 5000;
 
 // Middleware
 app.use(express.json());
+
+// Robust CORS for production
 app.use(cors({
-    origin: true, 
-    credentials: true
+    origin: function (origin, callback) {
+        // Reflect origin to handle any Vercel subdomains (preview/production)
+        callback(null, true);
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+    allowedHeaders: ['Origin', 'X-Requested-With', 'Content-Type', 'Accept', 'Authorization'],
+    optionsSuccessStatus: 200 // Some legacy browsers (IE11, various SmartTVs) choke on 204
 }));
+
+// Explicitly handle preflight across all routes
+app.options('*', cors());
+
+// Debug middleware to log incoming request origins
+app.use((req, res, next) => {
+    console.log(`${req.method} ${req.url} - Origin: ${req.headers.origin || 'No Origin'}`);
+    next();
+});
 
 // Routes
 app.use('/api/auth', require('./routes/auth'));
