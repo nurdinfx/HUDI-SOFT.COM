@@ -6,11 +6,22 @@ const generateToken = require('../utils/generateToken');
 // @access  Public
 const authUser = async (req, res) => {
     const { email, password } = req.body;
+    console.log(`Login attempt for: ${email}`);
 
     try {
         const user = await User.findOne({ email });
+        
+        if (!user) {
+            console.log(`User not found: ${email}`);
+            return res.status(401).json({ message: 'Invalid email or password' });
+        }
 
-        if (user && (await user.comparePassword(password))) {
+        console.log(`User found: ${user.email}, Role: ${user.role}`);
+        const isMatch = await user.comparePassword(password);
+        console.log(`Password match: ${isMatch}`);
+
+        if (isMatch) {
+            console.log('Login successful, generating token...');
             res.json({
                 _id: user._id,
                 companyName: user.companyName,
@@ -22,6 +33,7 @@ const authUser = async (req, res) => {
             res.status(401).json({ message: 'Invalid email or password' });
         }
     } catch (error) {
+        console.error('Login error:', error);
         res.status(500).json({ message: error.message });
     }
 };
