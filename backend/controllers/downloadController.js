@@ -65,9 +65,13 @@ const downloadDemo = async (req, res) => {
         return res.status(400).json({ message: 'Invalid product type' });
     }
 
+    console.log(`Download requested for product: ${productType}`);
+
     try {
         const fileName = productType === 'POS' ? 'hudi-pos-v1.zip' : 'hudi-hms-v1.zip';
         const filePath = path.join(__dirname, '../downloads', fileName);
+        
+        console.log(`Serving file from path: ${filePath}`);
 
         if (!fs.existsSync(filePath)) {
             // Ensure directory exists
@@ -80,7 +84,14 @@ const downloadDemo = async (req, res) => {
 
         res.download(filePath, fileName, (err) => {
             if (err) {
-                res.status(500).json({ message: 'Could not download the file.' });
+                console.error(`Download Error for ${productType}:`, err);
+                // Don't res.status(500) here if headers are already sent, 
+                // but for demo purposes, adding a log is helpful.
+                if (!res.headersSent) {
+                    res.status(500).json({ message: 'Could not download the file. ' + err.message });
+                }
+            } else {
+                console.log(`Successfully sent ${fileName} to client.`);
             }
         });
 

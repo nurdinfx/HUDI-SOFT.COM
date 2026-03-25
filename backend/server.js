@@ -4,6 +4,7 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 
 const app = express();
+app.set('trust proxy', 1); // Enable trusting proxy to get correct IP, protocol and host from Render/Vercel
 const PORT = process.env.PORT || 5000;
 
 // Middleware
