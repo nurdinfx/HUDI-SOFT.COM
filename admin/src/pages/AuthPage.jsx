@@ -31,6 +31,7 @@ const AuthPage = () => {
         setError('');
 
         try {
+            console.log('AuthPage: Targeting API at', API.defaults.baseURL);
             console.log('AuthPage: Attempting login for', formData.email);
             const { data } = await API.post(`/auth/login`, formData);
             console.log('AuthPage: Login successful, received data:', data);
