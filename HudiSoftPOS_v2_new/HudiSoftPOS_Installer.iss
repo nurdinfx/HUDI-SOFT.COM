@@ -14,8 +14,8 @@ DefaultGroupName=HudiSoftPOS
 AllowNoIcons=yes
 LicenseFile=
 OutputDir=installer_output
-OutputBaseFilename=HudiSoftPOS_Setup
-SetupIconFile=Assets\icom1.ico
+OutputBaseFilename=Hudi-Soft-POS-Setup
+SetupIconFile=publish\logo.ico
 Compression=lzma
 SolidCompression=yes
 WizardStyle=modern
@@ -38,10 +38,10 @@ Name: "quicklaunchicon"; Description: "{cm:CreateQuickLaunchIcon}"; GroupDescrip
 Source: "publish\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs
 
 [Icons]
-Name: "{group}\HudiSoftPOS"; Filename: "{app}\Hudi-Soft.exe"; IconFilename: "{app}\icom1.ico"
+Name: "{group}\HudiSoftPOS"; Filename: "{app}\Hudi-Soft.exe"; IconFilename: "{app}\logo.ico"
 Name: "{group}\{cm:UninstallProgram,HudiSoftPOS}"; Filename: "{uninstallexe}"
-Name: "{autodesktop}\HudiSoftPOS"; Filename: "{app}\Hudi-Soft.exe"; IconFilename: "{app}\icom1.ico"; Tasks: desktopicon
-Name: "{userappdata}\Microsoft\Internet Explorer\Quick Launch\HudiSoftPOS"; Filename: "{app}\Hudi-Soft.exe"; IconFilename: "{app}\icom1.ico"; Tasks: quicklaunchicon
+Name: "{autodesktop}\HudiSoftPOS"; Filename: "{app}\Hudi-Soft.exe"; IconFilename: "{app}\logo.ico"; Tasks: desktopicon
+Name: "{userappdata}\Microsoft\Internet Explorer\Quick Launch\HudiSoftPOS"; Filename: "{app}\Hudi-Soft.exe"; IconFilename: "{app}\logo.ico"; Tasks: quicklaunchicon
 
 [Run]
 Filename: "{app}\Hudi-Soft.exe"; Description: "{cm:LaunchProgram,HudiSoftPOS}"; Flags: nowait postinstall skipifsilent
@@ -52,4 +52,4 @@ Root: HKLM; Subkey: "Software\Microsoft\Windows\CurrentVersion\Uninstall\HudiSof
 Root: HKLM; Subkey: "Software\Microsoft\Windows\CurrentVersion\Uninstall\HudiSoftPOS"; ValueType: string; ValueName: "DisplayVersion"; ValueData: "1.0"
 Root: HKLM; Subkey: "Software\Microsoft\Windows\CurrentVersion\Uninstall\HudiSoftPOS"; ValueType: string; ValueName: "Publisher"; ValueData: "HUDI SOFT SYSTEMS"
 Root: HKLM; Subkey: "Software\Microsoft\Windows\CurrentVersion\Uninstall\HudiSoftPOS"; ValueType: string; ValueName: "UninstallString"; ValueData: """{uninstallexe}"""
-Root: HKLM; Subkey: "Software\Microsoft\Windows\CurrentVersion\Uninstall\HudiSoftPOS"; ValueType: string; ValueName: "DisplayIcon"; ValueData: "{app}\icom1.ico"
+Root: HKLM; Subkey: "Software\Microsoft\Windows\CurrentVersion\Uninstall\HudiSoftPOS"; ValueType: string; ValueName: "DisplayIcon"; ValueData: "{app}\logo.ico"

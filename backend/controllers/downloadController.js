@@ -13,6 +13,8 @@ const downloadSystem = async (req, res) => {
         return res.status(400).json({ message: 'Invalid product type' });
     }
 
+    console.log(`[Download] Private request for ${productType} from user ${userId}`);
+
     try {
         // Check if user has an active license for this product
         const license = await License.findOne({
@@ -23,34 +25,38 @@ const downloadSystem = async (req, res) => {
         });
 
         if (!license) {
+            console.warn(`[Download] Access Denied: No active license for ${productType}`);
             return res.status(403).json({
                 message: `No active license found for ${productType}. Please ensure your payment is verified.`
             });
         }
 
-        // Define file paths (using placeholders for now)
-        // In a real scenario, these would be the paths to the actual PWA/Desktop installers
-        const fileName = productType === 'POS' ? 'hudi-pos-v1.zip' : 'hudi-hms-v1.zip';
+        // Use the actual .exe installer name from the build process
+        const fileName = productType === 'POS' ? 'Hudi-Soft-POS-Setup.exe' : 'Hudi-Soft-HMS-Setup.exe';
         const filePath = path.join(__dirname, '../downloads', fileName);
 
         // Ensure the downloads directory exists
         const downloadsDir = path.join(__dirname, '../downloads');
         if (!fs.existsSync(downloadsDir)) {
-            fs.mkdirSync(downloadsDir);
+            fs.mkdirSync(downloadsDir, { recursive: true });
         }
 
-        // Check if file exists, if not create a placeholder for demo purposes
         if (!fs.existsSync(filePath)) {
-            fs.writeFileSync(filePath, `This is a placeholder for the ${productType} system download.`);
+            console.warn(`[Download] File not found: ${filePath}. Serving placeholder.`);
+            // In production, we should probably return a 404 if the real file is missing
+            return res.status(404).json({ message: 'The installer file is currently being updated. Please try again in 5 minutes.' });
         }
 
+        console.log(`[Download] Serving: ${fileName}`);
         res.download(filePath, fileName, (err) => {
-            if (err) {
-                res.status(500).json({ message: 'Could not download the file. ' + err.message });
+            if (err && !res.headersSent) {
+                console.error(`[Download] Error sending ${fileName}:`, err);
+                res.status(500).json({ message: 'Could not download the file.' });
             }
         });
 
     } catch (error) {
+        console.error('[Download] Error:', error);
         res.status(500).json({ message: error.message });
     }
 };
@@ -65,37 +71,27 @@ const downloadDemo = async (req, res) => {
         return res.status(400).json({ message: 'Invalid product type' });
     }
 
-    console.log(`Download requested for product: ${productType}`);
+    console.log(`[Download Demo] Public request for ${productType}`);
 
     try {
-        const fileName = productType === 'POS' ? 'hudi-pos-v1.zip' : 'hudi-hms-v1.zip';
+        const fileName = productType === 'POS' ? 'Hudi-Soft-POS-Setup.exe' : 'Hudi-Soft-HMS-Setup.exe';
         const filePath = path.join(__dirname, '../downloads', fileName);
         
-        console.log(`Serving file from path: ${filePath}`);
-
         if (!fs.existsSync(filePath)) {
-            // Ensure directory exists
-            const downloadsDir = path.join(__dirname, '../downloads');
-            if (!fs.existsSync(downloadsDir)) fs.mkdirSync(downloadsDir);
-            
-            // Create placeholder
-            fs.writeFileSync(filePath, `This is a trial/demo placeholder for the ${productType} system download.`);
+            console.warn(`[Download Demo] File not found: ${filePath}.`);
+            return res.status(404).json({ message: 'The demo installer is currently unavailable.' });
         }
 
+        console.log(`[Download Demo] Serving: ${fileName}`);
         res.download(filePath, fileName, (err) => {
-            if (err) {
-                console.error(`Download Error for ${productType}:`, err);
-                // Don't res.status(500) here if headers are already sent, 
-                // but for demo purposes, adding a log is helpful.
-                if (!res.headersSent) {
-                    res.status(500).json({ message: 'Could not download the file. ' + err.message });
-                }
-            } else {
-                console.log(`Successfully sent ${fileName} to client.`);
+            if (err && !res.headersSent) {
+                console.error(`[Download Demo] Error sending ${fileName}:`, err);
+                res.status(500).json({ message: 'Could not download the file.' });
             }
         });
 
     } catch (error) {
+        console.error('[Download Demo] Error:', error);
         res.status(500).json({ message: error.message });
     }
 };
