@@ -8,6 +8,7 @@
     <UseWPF>true</UseWPF>
     <!-- Use logo.ico for the .exe icon (File Explorer/Taskbar when pinned) -->
     <ApplicationIcon>Assets\logo.ico</ApplicationIcon>
+    <AssemblyName>Hudi-Soft</AssemblyName>
   </PropertyGroup>
 
   <ItemGroup>
