@@ -10,8 +10,16 @@
         Title="Login - HUDI SOFT POS"
         Icon="pack://application:,,,/Assets/logo.png"
         Height="450" Width="800"
-        WindowStyle="None" ResizeMode="NoResize" WindowState="Maximized"
+        WindowStyle="None" ResizeMode="CanResizeWithGrip" WindowState="Maximized"
         Background="{DynamicResource MaterialDesignPaper}">
+
+    <WindowChrome.WindowChrome>
+        <WindowChrome CaptionHeight="0" 
+                      CornerRadius="0" 
+                      GlassFrameThickness="0" 
+                      NonClientFrameEdges="None" 
+                      ResizeBorderThickness="8" />
+    </WindowChrome.WindowChrome>
     
     <Window.DataContext>
         <vm:LoginViewModel/>
@@ -248,8 +256,9 @@
                     VerticalAlignment="Bottom" HorizontalAlignment="Right" Margin="0,0,50,40"/>
 
         <Button Command="{Binding ExitCommand}" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="30"
-                Style="{StaticResource MaterialDesignFloatingActionMiniButton}" Background="#15FFFFFF" BorderThickness="0" Height="40" Width="40">
-            <materialDesign:PackIcon Kind="Close" Foreground="White" Width="20" Height="20"/>
+                Style="{StaticResource MaterialDesignFloatingActionMiniButton}" Background="#15FFFFFF" BorderThickness="0" Height="40" Width="40"
+                WindowChrome.IsHitTestVisibleInChrome="True">
+            <materialDesign:PackIcon Kind="WindowClose" Foreground="White" Width="20" Height="20"/>
         </Button>
     </Grid>
 </Window>

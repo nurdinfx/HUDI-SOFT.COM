@@ -11,9 +11,17 @@
         Icon="pack://application:,,,/Assets/logo.png"
         Height="720" Width="1280"
         MinWidth="1024" MinHeight="600"
-        WindowState="Maximized" WindowStyle="None" ResizeMode="CanResize"
+        WindowState="Maximized" WindowStyle="None" ResizeMode="CanResizeWithGrip"
         Background="#F4F6F8"
         TextElement.FontFamily="{DynamicResource MaterialDesignFont}">
+
+    <WindowChrome.WindowChrome>
+        <WindowChrome CaptionHeight="90" 
+                      CornerRadius="0" 
+                      GlassFrameThickness="0" 
+                      NonClientFrameEdges="None" 
+                      ResizeBorderThickness="8" />
+    </WindowChrome.WindowChrome>
 
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
@@ -137,12 +145,12 @@
                 </Button>
 
                 <!-- Window controls: Minimize, Maximize, Close -->
-                <StackPanel Grid.Column="5" Orientation="Horizontal" VerticalAlignment="Center" Margin="8,0,0,0">
+                <StackPanel Grid.Column="5" Orientation="Horizontal" VerticalAlignment="Top" HorizontalAlignment="Right" WindowChrome.IsHitTestVisibleInChrome="True">
                     <Button x:Name="BtnMinimize" Click="BtnMinimize_Click" Width="46" Height="32" Background="Transparent" BorderThickness="0" Cursor="Hand" ToolTip="Minimize">
                         <Button.Template>
                             <ControlTemplate TargetType="Button">
                                 <Border Background="{TemplateBinding Background}" CornerRadius="0">
-                                    <TextBlock Text="─" FontSize="14" Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,-2,0,0"/>
+                                    <materialDesign:PackIcon Kind="WindowMinimize" Width="18" Height="18" Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,0,0,8"/>
                                 </Border>
                                 <ControlTemplate.Triggers>
                                     <Trigger Property="IsMouseOver" Value="True">
@@ -156,12 +164,15 @@
                         <Button.Template>
                             <ControlTemplate TargetType="Button">
                                 <Border Background="{TemplateBinding Background}" CornerRadius="0">
-                                    <TextBlock Text="□" FontSize="12" Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    <materialDesign:PackIcon x:Name="MaxIcon" Kind="WindowMaximize" Width="16" Height="16" Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                 </Border>
                                 <ControlTemplate.Triggers>
                                     <Trigger Property="IsMouseOver" Value="True">
                                         <Setter Property="Background" Value="#20FFFFFF"/>
                                     </Trigger>
+                                    <DataTrigger Binding="{Binding WindowState, RelativeSource={RelativeSource AncestorType=Window}}" Value="Maximized">
+                                        <Setter TargetName="MaxIcon" Property="Kind" Value="WindowRestore"/>
+                                    </DataTrigger>
                                 </ControlTemplate.Triggers>
                             </ControlTemplate>
                         </Button.Template>
@@ -170,7 +181,7 @@
                         <Button.Template>
                             <ControlTemplate TargetType="Button">
                                 <Border Background="{TemplateBinding Background}" CornerRadius="0">
-                                    <TextBlock Text="✕" FontSize="12" Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    <materialDesign:PackIcon Kind="WindowClose" Width="18" Height="18" Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                 </Border>
                                 <ControlTemplate.Triggers>
                                     <Trigger Property="IsMouseOver" Value="True">
