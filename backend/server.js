@@ -44,23 +44,28 @@ app.get('/', (req, res) => {
 // Database Connection
 mongoose.set('bufferCommands', false); // Disable buffering to avoid long timeouts when not connected
 
-mongoose
-    .connect(process.env.MONGO_URI, {
-        serverSelectionTimeoutMS: 5000, // Reduced timeout for faster feedback
-        family: 4 // Force IPv4 to avoid common Atlas connection issues
-    })
-    .then(() => {
+const startServer = async () => {
+    try {
+        await mongoose.connect(process.env.MONGO_URI, {
+            serverSelectionTimeoutMS: 5000, // Reduced timeout for faster feedback
+            family: 4 // Force IPv4 to avoid common Atlas connection issues
+        });
         console.log('Successfully connected to MongoDB Atlas');
-    })
-    .catch((error) => {
+
+        app.listen(PORT, () => {
+            console.log(`Server running on port ${PORT}`);
+        });
+    } catch (error) {
         console.error('MongoDB connection error details:');
         console.error('- Name:', error.name);
         console.error('- Message:', error.message);
         if (error.reason) {
             console.error('- Reason:', JSON.stringify(error.reason, null, 2));
         }
-    });
+        // In some environments (like serverless), you might not want to exit. 
+        // But for a persistent server, failing to connect to the DB on startup is usually a fatal error.
+        process.exit(1);
+    }
+};
 
-app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-});
+startServer();
