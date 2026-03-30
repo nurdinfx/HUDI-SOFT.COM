@@ -1,0 +1,21 @@
+{
+    "name": "HUDI-SOFT POS",
+    "short_name": "HUDI-SOFT",
+    "description": "HUDI-SOFT Professional Restaurant Management System",
+    "start_url": "/",
+    "display": "standalone",
+    "background_color": "#ffffff",
+    "theme_color": "#ffffff",
+    "icons": [
+        {
+            "src": "/logo.png",
+            "sizes": "192x192",
+            "type": "image/png"
+        },
+        {
+            "src": "/logo.png",
+            "sizes": "512x512",
+            "type": "image/png"
+        }
+    ]
+}
