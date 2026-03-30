@@ -60,7 +60,8 @@ const leadSchema = new mongoose.Schema({
         default: Date.now
     }
 }, {
-    timestamps: true
+    timestamps: true,
+    bufferCommands: true // Redundant fix for persistent connection errors
 });
 
 module.exports = mongoose.model('Lead', leadSchema);

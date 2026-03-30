@@ -48,9 +48,11 @@ const startServer = async () => {
     try {
         await mongoose.connect(process.env.MONGO_URI, {
             serverSelectionTimeoutMS: 5000, // Reduced timeout for faster feedback
-            family: 4 // Force IPv4 to avoid common Atlas connection issues
+            family: 4, // Force IPv4 to avoid common Atlas connection issues
+            bufferCommands: true // Redundant fix for persistence
         });
         console.log('Successfully connected to MongoDB Atlas');
+        console.log('--- MONGOOSE BUFFERING SYSTEM V2 ACTIVE ---');
 
         app.listen(PORT, () => {
             console.log(`Server running on port ${PORT}`);
