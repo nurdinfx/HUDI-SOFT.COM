@@ -42,7 +42,7 @@ app.get('/', (req, res) => {
 });
 
 // Database Connection
-mongoose.set('bufferCommands', false); // Disable buffering to avoid long timeouts when not connected
+mongoose.set('bufferCommands', true); // Enable buffering to allow commands to queue until connected
 
 const startServer = async () => {
     try {
