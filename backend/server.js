@@ -3,6 +3,10 @@ const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 
+// Global Mongoose Configuration (Set these BEFORE requiring any models)
+mongoose.set('bufferCommands', true); 
+mongoose.set('strictQuery', false);
+
 const app = express();
 app.set('trust proxy', 1); // Enable trusting proxy to get correct IP, protocol and host from Render/Vercel
 const PORT = process.env.PORT || 5000;
@@ -42,14 +46,13 @@ app.get('/', (req, res) => {
 });
 
 // Database Connection
-mongoose.set('bufferCommands', true); // Enable buffering to allow commands to queue until connected
-
 const startServer = async () => {
     try {
+        console.log('Connecting to MongoDB...');
         await mongoose.connect(process.env.MONGO_URI, {
-            serverSelectionTimeoutMS: 5000, // Reduced timeout for faster feedback
-            family: 4, // Force IPv4 to avoid common Atlas connection issues
-            bufferCommands: true // Redundant fix for persistence
+            serverSelectionTimeoutMS: 5000, 
+            family: 4,
+            bufferCommands: true 
         });
         console.log('Successfully connected to MongoDB Atlas');
         console.log('--- MONGOOSE BUFFERING SYSTEM V2 ACTIVE ---');
