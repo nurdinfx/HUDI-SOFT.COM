@@ -24,17 +24,6 @@ const leadSchema = new mongoose.Schema({
     },
     systemType: {
         type: String,
-        enum: [
-            'POS', 
-            'HMS', 
-            'Retail Consultation', 
-            'I\'d like a POS consultation', 
-            'I\'d like a POS Online consultation (Cloud App)',
-            'I\'d like a POS Offline consultation (Desktop App)',
-            'I\'d like a Hospital System consultation',
-            'I\'m an existing customer',
-            'Other'
-        ],
         default: 'Other'
     },
     status: {
