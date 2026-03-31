@@ -387,6 +387,7 @@ if (fs.existsSync(distPath)) {
   
   // Handle React Routing
   app.get('*', (req, res, next) => {
+    // Only handle non-API routes
     if (req.url.startsWith('/api/')) return next();
     res.sendFile(path.join(distPath, 'index.html'));
   });
@@ -687,6 +688,9 @@ const startServer = async () => {
       console.log(`🔗 API URL: http://localhost:${PORT}/api/v1`);
       console.log(`🌐 Frontend: ${process.env.FRONTEND_URL || 'http://localhost:3000'}`);
       console.log(`📁 Uploads directory: ${uploadsDir}`);
+      if (process.env.PERSISTENT_STORAGE_PATH) {
+        console.log(`💾 Persistent Path: ${process.env.PERSISTENT_STORAGE_PATH}`);
+      }
       console.log(`🕒 Server start time: ${new Date().toISOString()}`);
       console.log('👥 Customer ledger system: ✅ ACTIVE');
       console.log('💰 Real-time balance tracking: ✅ ACTIVE');

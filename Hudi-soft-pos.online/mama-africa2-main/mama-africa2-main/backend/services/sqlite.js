@@ -7,7 +7,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Define DB path - using the same persistent storage path as uploads if available
-const homeDir = process.env.HOME || process.env.USERPROFILE;
+const homeDir = process.env.HOME || process.env.USERPROFILE || '/tmp';
 const baseStart = process.env.PERSISTENT_STORAGE_PATH || homeDir;
 const storageBaseDir = process.env.PERSISTENT_STORAGE_PATH ? baseStart : path.join(baseStart, 'mama-africa-storage');
 const dbPath = path.join(storageBaseDir, 'pos.db');
@@ -17,7 +17,10 @@ if (!fs.existsSync(storageBaseDir)) {
   fs.mkdirSync(storageBaseDir, { recursive: true });
 }
 
+console.log('-------------------------------------------');
 console.log('📂 SQLite Database path:', dbPath);
+console.log('ℹ️  Persisted on Render:', !!process.env.PERSISTENT_STORAGE_PATH ? '✅ YES' : '❌ NO (using ephemeral storage)');
+console.log('-------------------------------------------');
 
 const db = new Database(dbPath);
 
