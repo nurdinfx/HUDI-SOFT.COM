@@ -3,16 +3,16 @@
  * Automatically detects environment and uses appropriate URLs
  */
 
-// OFFLINE-ONLY: force local
-const isLocal = true;
-const isProduction = import.meta.env.MODE === 'production' && !isLocal;
+// FORCE PRODUCTION
+const isLocal = false;
+const isProduction = true;
 
 // Get the appropriate API URL based on environment
-const getApiUrl = () => 'http://localhost:5000/api/v1';
+const getApiUrl = () => 'https://hudi-soft-com.onrender.com/api/v1';
 
-const getBackendUrl = () => 'http://localhost:5000';
+const getBackendUrl = () => 'https://hudi-soft-com.onrender.com';
 
-const getSocketUrl = () => 'http://localhost:5000';
+const getSocketUrl = () => 'https://hudi-soft-com.onrender.com';
 
 export const API_CONFIG = {
   get API_URL() { return getApiUrl(); },

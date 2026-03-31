@@ -9,6 +9,7 @@ const { protect, admin } = require('../middleware/authMiddleware');
 router.post('/', async (req, res) => {
     try {
         const { name, email, phone, companyName, systemType, zipCode } = req.body;
+        console.log(`📝 Processing New Lead: ${name} (${email}) for system: ${systemType}`);
 
         const lead = await Lead.create({
             name,
