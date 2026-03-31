@@ -1,6 +1,6 @@
 // MongoDB settings controller
 import Branch from '../models/Branch.js';
-import Setting from '../models/Setting.js';
+import Setting from '../models/Settings.js';
 import { v2 as cloudinary } from 'cloudinary';
 import mongoose from 'mongoose';
 
