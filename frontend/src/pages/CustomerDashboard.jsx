@@ -43,7 +43,14 @@ const CustomerDashboard = () => {
             const url = window.URL.createObjectURL(new Blob([response.data]));
             const link = document.createElement('a');
             link.href = url;
-            link.setAttribute('download', `hudi-${productType.toLowerCase()}-v1.zip`);
+            
+            // Map the correct installer filenames based on backend downloads directory
+            let fileName = `Hudi-Soft-${productType}-Setup.exe`;
+            if (productType === 'POS_ONLINE') fileName = 'Hudi-Soft-POS-Online-Setup.exe';
+            if (productType === 'POS' || productType === 'POS_OFFLINE') fileName = 'Hudi-Soft-POS-Setup.exe';
+            if (productType === 'HMS') fileName = 'Hudi-Soft-HMS-Setup.exe';
+
+            link.setAttribute('download', fileName);
             document.body.appendChild(link);
             link.click();
             link.remove();
@@ -93,11 +100,20 @@ const CustomerDashboard = () => {
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
                     {/* POS System Card */}
                     <ProductCard 
-                        title="POS System" 
-                        description="Point of Sale solution for retail and service businesses."
+                        title="POS System (Offline Mode)" 
+                        description="Point of Sale solution designed for reliable offline retail and service business operations."
                         productType="POS"
-                        licenses={licenses.filter(l => l.productType === 'POS')}
+                        licenses={licenses.filter(l => l.productType === 'POS' || l.productType === 'POS_OFFLINE')}
                         onDownload={() => handleDownload('POS')}
+                    />
+
+                    {/* POS Online Card */}
+                    <ProductCard 
+                        title="Cloud POS (Online)" 
+                        description="Next-generation, cloud-based Point of Sale providing real-time sync across multiple branches."
+                        productType="POS_ONLINE"
+                        licenses={licenses.filter(l => l.productType === 'POS_ONLINE')}
+                        onDownload={() => handleDownload('POS_ONLINE')}
                     />
 
                     {/* HMS System Card */}
