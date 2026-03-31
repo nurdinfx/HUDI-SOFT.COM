@@ -379,29 +379,27 @@ const healthHandler = (req, res) => {
 app.get('/api/health', healthHandler);
 app.get('/api/v1/health', healthHandler);
 
-// Root endpoint
-app.get('/', (req, res) => {
-  res.json({
-    message: 'HUDI-SOFT Management API',
-    version: '1.0.0',
-    timestamp: new Date().toISOString(),
-    endpoints: {
-      auth: '/api/v1/auth',
-      orders: '/api/v1/orders',
-      products: '/api/v1/products',
-      customers: '/api/v1/customers',
-      tables: '/api/v1/tables',
-      dashboard: '/api/v1/dashboard',
-      expenses: '/api/v1/expenses',
-      users: '/api/v1/users',
-      purchases: '/api/v1/purchases',
-      purchaseOrders: '/api/v1/purchase-orders',
-      suppliers: '/api/v1/suppliers',
-      upload: '/api/v1/upload',
-      health: '/api/health'
-    }
+// Serve Static Files in Production
+const distPath = path.join(__dirname, '../dist');
+if (fs.existsSync(distPath)) {
+  app.use(express.static(distPath));
+  console.log('✅ Serving frontend from:', distPath);
+  
+  // Handle React Routing
+  app.get('*', (req, res, next) => {
+    if (req.url.startsWith('/api/')) return next();
+    res.sendFile(path.join(distPath, 'index.html'));
   });
-});
+} else {
+  // Fallback root endpoint for development
+  app.get('/', (req, res) => {
+    res.json({
+      message: 'HUDI-SOFT Management API (Frontend not built)',
+      version: '1.0.0',
+      timestamp: new Date().toISOString()
+    });
+  });
+}
 
 // Serve product images with caching
 app.get('/uploads/products/:filename', (req, res) => {
