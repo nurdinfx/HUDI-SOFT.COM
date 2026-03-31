@@ -159,7 +159,8 @@ const RequestDemo = () => {
                             <label className="text-xs font-black uppercase tracking-widest text-slate-400">Tell us about yourself.</label>
                             <div className="space-y-3">
                                 {[
-                                    'I\'d like a POS consultation',
+                                    'I\'d like a POS Online consultation (Cloud App)',
+                                    'I\'d like a POS Offline consultation (Desktop App)',
                                     'I\'d like a Hospital System consultation',
                                     'I\'m an existing customer',
                                     'Other'

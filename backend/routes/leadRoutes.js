@@ -21,7 +21,8 @@ router.post('/', async (req, res) => {
 
         let trialInfo = null;
         let productType = '';
-        if (systemType.includes('POS')) productType = 'POS';
+        if (systemType.includes('POS Online')) productType = 'POS_ONLINE';
+        else if (systemType.includes('POS')) productType = 'POS_OFFLINE';
         else if (systemType.includes('Hospital')) productType = 'HMS';
 
         // Automatically generate a 3-day trial license for POS or HMS

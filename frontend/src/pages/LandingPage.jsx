@@ -394,8 +394,8 @@ const LandingPage = () => {
                             <ul className="space-y-4">
                                 {[
                                     'Multi-store inventory synchronization',
-                                    'Offline-first architecture for unstable networks',
-                                    'Comprehensive sales & thermal print reports',
+                                    'Choose between Online Cloud or Local Offline architecture',
+                                    'Multi-device syncing with 3-day installable trials',
                                     'Automated shift & staff management'
                                 ].map((feature, i) => (
                                     <li key={i} className="flex gap-3 items-start">

@@ -9,7 +9,7 @@ const downloadSystem = async (req, res) => {
     const { productType } = req.params;
     const userId = req.user._id;
 
-    if (!['POS', 'HMS'].includes(productType)) {
+    if (!['POS', 'POS_OFFLINE', 'POS_ONLINE', 'HMS'].includes(productType)) {
         return res.status(400).json({ message: 'Invalid product type' });
     }
 
@@ -32,7 +32,7 @@ const downloadSystem = async (req, res) => {
         }
 
         // Use the actual .exe installer name from the build process
-        const fileName = productType === 'POS' ? 'Hudi-Soft-POS-Setup.exe' : 'Hudi-Soft-HMS-Setup.exe';
+        const fileName = productType === 'POS_ONLINE' ? 'Hudi-Soft-POS-Online-Setup.exe' : (productType === 'POS_OFFLINE' || productType === 'POS') ? 'Hudi-Soft-POS-Setup.exe' : 'Hudi-Soft-HMS-Setup.exe';
         const filePath = path.join(__dirname, '../downloads', fileName);
 
         // Ensure the downloads directory exists
@@ -67,14 +67,14 @@ const downloadSystem = async (req, res) => {
 const downloadDemo = async (req, res) => {
     const { productType } = req.params;
 
-    if (!['POS', 'HMS'].includes(productType)) {
+    if (!['POS', 'POS_OFFLINE', 'POS_ONLINE', 'HMS'].includes(productType)) {
         return res.status(400).json({ message: 'Invalid product type' });
     }
 
     console.log(`[Download Demo] Public request for ${productType}`);
 
     try {
-        const fileName = productType === 'POS' ? 'Hudi-Soft-POS-Setup.exe' : 'Hudi-Soft-HMS-Setup.exe';
+        const fileName = productType === 'POS_ONLINE' ? 'Hudi-Soft-POS-Online-Setup.exe' : (productType === 'POS_OFFLINE' || productType === 'POS') ? 'Hudi-Soft-POS-Setup.exe' : 'Hudi-Soft-HMS-Setup.exe';
         const filePath = path.join(__dirname, '../downloads', fileName);
         
         if (!fs.existsSync(filePath)) {

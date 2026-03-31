@@ -10,17 +10,13 @@ const ActivationPage = () => {
     const [message, setMessage] = useState('');
 
     useEffect(() => {
-        const checkStatus = async () => {
-            try {
-                const response = await axios.get('/api/v1/license/status');
-                if (response.data.success) {
-                    setStatus('activated');
-                } else {
-                    setStatus('unactivated');
-                    setDeviceId(response.data.deviceId);
-                }
-            } catch (err) {
+        const checkStatus = () => {
+            const storedKey = localStorage.getItem('pos_license_key');
+            if (storedKey) {
+                setStatus('activated');
+            } else {
                 setStatus('unactivated');
+                setDeviceId(Math.random().toString(36).substring(2, 10).toUpperCase());
             }
         };
         checkStatus();
@@ -32,10 +28,16 @@ const ActivationPage = () => {
         setMessage('');
 
         try {
-            const response = await axios.post('/api/v1/license/activate', { licenseKey });
-            if (response.data.success) {
+            // Using the actual cloud licensing endpoint
+            const response = await axios.post('https://hudi-soft-com.onrender.com/api/licenses/validate', { 
+                licenseKey, 
+                machineId: deviceId 
+            });
+
+            if (response.data.success || response.status === 200) {
+                localStorage.setItem('pos_license_key', licenseKey);
                 setStatus('activated');
-                setMessage(response.data.message);
+                setMessage('License activated successfully.');
             } else {
                 setMessage(response.data.message || 'Activation failed');
             }

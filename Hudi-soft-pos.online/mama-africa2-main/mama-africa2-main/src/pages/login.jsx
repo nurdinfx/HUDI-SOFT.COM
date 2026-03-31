@@ -64,6 +64,14 @@ const Login = () => {
     );
   }
 
+  // Check if system has been activated locally (ONLY for POS Online electron installer)
+  const isElectron = navigator.userAgent.toLowerCase().indexOf(' electron/') > -1;
+  if (isElectron && !localStorage.getItem('pos_license_key')) {
+    console.log('🔒 Desktop App not activated, redirecting from login to activation page');
+    window.location.href = '/#/activate'; // Force redirect to HashRouter activation route
+    return null;
+  }
+
   if (isAuthenticated) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-black/40 backdrop-blur-sm">

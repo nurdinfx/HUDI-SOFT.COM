@@ -6,6 +6,13 @@ import { useAuth } from '../contexts/AuthContext';
 const ProtectedRoute = ({ children, requiredRoles = [] }) => {
   const { user, loading, isAuthenticated } = useAuth();
 
+  // Check if system has been activated locally (ONLY for POS Online electron installer)
+  const isElectron = navigator.userAgent.toLowerCase().indexOf(' electron/') > -1;
+  if (isElectron && !localStorage.getItem('pos_license_key')) {
+    console.log('🔒 Desktop App not activated, redirecting to activation page');
+    return <Navigate to="/activate" replace />;
+  }
+
   // Show loading state while auth is initializing
   if (loading) {
     return (

@@ -32,37 +32,7 @@ function createWindow() {
     });
 }
 
-const startServer = () => {
-    const serverPath = path.join(__dirname, 'backend', 'server.js');
-
-    if (!fs.existsSync(serverPath)) {
-        console.error('Backend server file not found at:', serverPath);
-        return;
-    }
-
-    // Use the same node executable running Electron (if possible) or system node
-    // In production, you might bundle node or rely on system node. 
-    // For simplicity here, we assume 'node' is in path or we fork.
-
-    serverProcess = fork(serverPath, [], {
-        stdio: 'inherit',
-        env: {
-            ...process.env,
-            // Force backend ports or settings if needed
-            PORT: 5000,
-            NODE_ENV: isDev ? 'development' : 'production',
-            // Fix for SQLite persistence in built app
-            PERSISTENT_STORAGE_PATH: app.getPath('userData')
-        }
-    });
-
-    serverProcess.on('error', (err) => {
-        console.error('Failed to start server process:', err);
-    });
-};
-
 app.whenReady().then(() => {
-    startServer();
     createWindow();
 
     app.on('activate', () => {
@@ -75,11 +45,5 @@ app.whenReady().then(() => {
 app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') {
         app.quit();
-    }
-});
-
-app.on('before-quit', () => {
-    if (serverProcess) {
-        serverProcess.kill();
     }
 });

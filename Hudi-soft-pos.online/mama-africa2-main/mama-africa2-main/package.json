@@ -54,8 +54,9 @@
     "wait-on": "^7.0.1"
   },
   "build": {
-    "appId": "com.hudisoft.mamaafrica",
-    "productName": "MAMA AFRICA RESTAURANT",
+    "appId": "com.hudisoft.posonline",
+    "productName": "Hudi Soft POS Online",
+    "artifactName": "Hudi-Soft-POS-Online-Setup.exe",
     "win": {
       "target": "nsis"
     },
