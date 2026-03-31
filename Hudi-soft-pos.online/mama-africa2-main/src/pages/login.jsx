@@ -261,7 +261,7 @@ const Login = () => {
           </div>
           <div className="flex items-center space-x-2 bg-black/20 backdrop-blur-md px-3 py-1.5 rounded-lg border border-white/5">
             <MapPin size={14} className="text-rose-400" />
-            <span>LAASCAANOOD</span>
+            <span>ANYWHERE</span>
           </div>
         </div>
 

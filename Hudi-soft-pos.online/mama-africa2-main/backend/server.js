@@ -54,7 +54,8 @@ const io = new Server(server, {
       process.env.FRONTEND_URL || "http://localhost:3000",
       "http://localhost:3001",
       "http://localhost:5173",
-      "https://mama-africa1.vercel.app"
+      "https://hudi-pos-online.onrender.com",
+      "https://hudi-soft-com-m48c.vercel.app"
     ],
     methods: ["GET", "POST", "PUT", "DELETE"]
   }
@@ -67,7 +68,8 @@ const allowedOrigins = [
   'http://localhost:3000',
   'http://localhost:3001',
   'http://localhost:5173',
-  'https://mama-africa1.vercel.app',
+  'https://hudi-pos-online.onrender.com',
+  'https://hudi-soft-com-m48c.vercel.app',
   process.env.PRODUCTION_FRONTEND_URL
 ].filter(Boolean).map(url => url.trim());
 
