@@ -10,7 +10,7 @@ mongoose.set('strictQuery', false);
 const app = express();
 app.set('trust proxy', 1); // Enable trusting proxy to get correct IP, protocol and host from Render/Vercel
 const PORT = process.env.PORT || 5000;
-console.log('🚀 HUDI SOFT Backend v1.2.0 (Refreshed Deployment)');
+console.log('🚀 HUDI SOFT Backend v1.3.0 (Refreshed Deployment)');
 
 // Middleware
 app.use(express.json());
