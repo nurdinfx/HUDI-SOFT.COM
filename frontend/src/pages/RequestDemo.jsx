@@ -10,7 +10,7 @@ const RequestDemo = () => {
         email: '',
         phone: '',
         companyName: '',
-        systemType: 'I\'d like a POS consultation',
+        systemType: 'POS Online',
         zipCode: '',
         agreeToTerms: false
     });
@@ -159,19 +159,19 @@ const RequestDemo = () => {
                             <label className="text-xs font-black uppercase tracking-widest text-slate-400">Tell us about yourself.</label>
                             <div className="space-y-3">
                                 {[
-                                    'I\'d like a POS Online consultation (Cloud App)',
-                                    'I\'d like a POS Offline consultation (Desktop App)',
-                                    'I\'d like a Hospital System consultation',
-                                    'I\'m an existing customer',
-                                    'Other'
-                                ].map((type) => (
-                                    <label key={type} className="flex items-center gap-4 p-4 bg-slate-50 rounded-2xl border border-slate-100 cursor-pointer hover:bg-slate-100 transition-colors">
+                                    { value: 'POS Online', label: 'I\'d like a POS Online consultation (Cloud App)' },
+                                    { value: 'POS Desktop', label: 'I\'d like a POS Offline consultation (Desktop App)' },
+                                    { value: 'Hospital System', label: 'I\'d like a Hospital System consultation' },
+                                    { value: 'Existing Customer', label: 'I\'m an existing customer' },
+                                    { value: 'Other', label: 'Other' }
+                                ].map((option) => (
+                                    <label key={option.value} className="flex items-center gap-4 p-4 bg-slate-50 rounded-2xl border border-slate-100 cursor-pointer hover:bg-slate-100 transition-colors">
                                         <input
-                                            type="radio" name="systemType" value={type}
-                                            checked={formData.systemType === type} onChange={handleChange}
+                                            type="radio" name="systemType" value={option.value}
+                                            checked={formData.systemType === option.value} onChange={handleChange}
                                             className="w-5 h-5 text-blue-600 focus:ring-blue-500 cursor-pointer"
                                         />
-                                        <span className="font-bold text-slate-700">{type}</span>
+                                        <span className="font-bold text-slate-700">{option.label}</span>
                                     </label>
                                 ))}
                             </div>
