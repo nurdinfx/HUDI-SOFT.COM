@@ -21,7 +21,7 @@ const licenseSchema = new mongoose.Schema({
     },
     productType: {
         type: String,
-        enum: ['POS', 'HMS'],
+        enum: ['POS', 'HMS', 'POS_ONLINE', 'POS_OFFLINE'],
         required: true
     },
     subscriptionType: {
