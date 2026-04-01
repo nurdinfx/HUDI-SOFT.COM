@@ -50,6 +50,11 @@ app.get('/', (req, res) => {
 const startServer = async () => {
     try {
         console.log('Connecting to MongoDB...');
+        // Log obfuscated URI to verify if the env var was updated correctly
+        if (process.env.MONGO_URI) {
+            const obfuscatedUri = process.env.MONGO_URI.replace(/:([^@]+)@/, ':****@');
+            console.log(`🔗 Target URI: ${obfuscatedUri}`);
+        }
         await mongoose.connect(process.env.MONGO_URI, {
             serverSelectionTimeoutMS: 5000, 
             family: 4,
@@ -66,11 +71,13 @@ const startServer = async () => {
         console.error('- Name:', error.name);
         console.error('- Message:', error.message);
         
-        if (error.name === 'MongooseServerSelectionError') {
-            console.log('\n🚨 RENDER DEPLOYMENT TIP: If you see this error, you must whitelist all IPs on MongoDB Atlas.');
-            console.log('1. Go to MongoDB Atlas > Network Access.');
-            console.log('2. Add "0.0.0.0/0" to the IP whitelist.');
-            console.log('3. Restart the Render service.\n');
+        if (error.name === 'MongooseServerSelectionError' || error.message.includes('querySrv ENOTFOUND')) {
+            console.log('\n🚨 RENDER DEPLOYMENT TIP: Render has DNS issues with mongodb+srv://.');
+            console.log('💡 SOLUTION: Use a "Standard Connection String" (mongodb:// format) in your Render dashboard.');
+            console.log('1. Go to MongoDB Atlas > Connect > Drivers.');
+            console.log('2. Copy the "Standard Connection String" (the older format).');
+            console.log('3. Update MONGO_URI in Render dashboard.');
+            console.log('4. Ensure "0.0.0.0/0" is whitelisted in Atlas Network Access.\n');
         }
 
         process.exit(1);
