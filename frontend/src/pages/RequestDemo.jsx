@@ -161,7 +161,7 @@ const RequestDemo = () => {
                                 {[
                                     { value: 'POS Online', label: 'I\'d like a POS Online consultation (Cloud App)' },
                                     { value: 'POS Desktop', label: 'I\'d like a POS Offline consultation (Desktop App)' },
-                                    { value: 'Hospital System', label: 'I\'d like a Hospital System consultation' },
+                                    { value: 'Inventory System', label: 'I\'d like a Hospital System consultation' },
                                     { value: 'Existing Customer', label: 'I\'m an existing customer' },
                                     { value: 'Other', label: 'Other' }
                                 ].map((option) => (

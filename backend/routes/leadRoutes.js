@@ -9,7 +9,8 @@ const { protect, admin } = require('../middleware/authMiddleware');
 router.post('/', async (req, res) => {
     try {
         const { name, email, phone, companyName, systemType, zipCode } = req.body;
-        console.log(`📝 Processing New Lead: ${name} (${email}) for system: ${systemType}`);
+        console.log(`📝 Processing New Lead: ${name} (${email})`);
+        console.log('Incoming systemType:', systemType);
 
         const lead = await Lead.create({
             name,
@@ -24,7 +25,7 @@ router.post('/', async (req, res) => {
         let productType = '';
         if (systemType === 'POS Online') productType = 'POS_ONLINE';
         else if (systemType === 'POS Desktop') productType = 'POS_OFFLINE';
-        else if (systemType === 'Hospital System') productType = 'HMS';
+        else if (systemType === 'Inventory System') productType = 'HMS';
 
         // Automatically generate a 3-day trial license for POS or HMS
         if (productType) {

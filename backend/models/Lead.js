@@ -24,7 +24,8 @@ const leadSchema = new mongoose.Schema({
     },
     systemType: {
         type: String,
-        enum: ['POS Online', 'POS Desktop', 'Hospital System', 'Existing Customer', 'Other'],
+        enum: ['POS Online', 'POS Desktop', 'Inventory System', 'Existing Customer', 'Other'],
+        required: true,
         default: 'Other'
     },
     status: {
