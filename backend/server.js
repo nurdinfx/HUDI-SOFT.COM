@@ -62,14 +62,17 @@ const startServer = async () => {
             console.log(`Server running on port ${PORT}`);
         });
     } catch (error) {
-        console.error('MongoDB connection error details:');
+        console.error('❌ MongoDB connection error details:');
         console.error('- Name:', error.name);
         console.error('- Message:', error.message);
-        if (error.reason) {
-            console.error('- Reason:', JSON.stringify(error.reason, null, 2));
+        
+        if (error.name === 'MongooseServerSelectionError') {
+            console.log('\n🚨 RENDER DEPLOYMENT TIP: If you see this error, you must whitelist all IPs on MongoDB Atlas.');
+            console.log('1. Go to MongoDB Atlas > Network Access.');
+            console.log('2. Add "0.0.0.0/0" to the IP whitelist.');
+            console.log('3. Restart the Render service.\n');
         }
-        // In some environments (like serverless), you might not want to exit. 
-        // But for a persistent server, failing to connect to the DB on startup is usually a fatal error.
+
         process.exit(1);
     }
 };
