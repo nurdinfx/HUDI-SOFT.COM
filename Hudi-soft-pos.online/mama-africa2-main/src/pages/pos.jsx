@@ -383,7 +383,7 @@ const POS = () => {
         </div>
 
         {/* Right SIDE - CART & CONTROLS */}
-        <div className="w-[600px] bg-white border-l border-gray-200 flex flex-col shadow-xl z-10">
+        <div className="w-[400px] min-w-[320px] max-w-[480px] bg-white border-l border-gray-200 flex flex-col shadow-xl z-10 h-full overflow-hidden">
           <OrderCart
             cart={cart}
             onUpdateQuantity={updateQuantity}

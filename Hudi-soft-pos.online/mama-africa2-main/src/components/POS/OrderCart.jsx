@@ -96,42 +96,47 @@ const OrderCart = ({
                     <div className="w-1/12"></div>
                 </div>
 
-                <div className="divide-y divide-gray-100 overflow-y-auto flex-1 min-h-0">
+                <div className="divide-y divide-gray-100 overflow-y-auto flex-1 h-0 scroll-smooth">
                     {cart.length === 0 ? (
                         <div className="p-12 text-center text-gray-400 italic text-sm">
                             No items in cart
                         </div>
                     ) : (
-                        cart.map((item) => {
+                        cart.map((item, index) => {
                             const productId = item._id || item.product?._id || item.product?.id || item.id;
                             const productName = item.name || item.product?.name || 'Unknown Product';
                             const productCategory = item.category || item.product?.category || 'General';
 
                             return (
-                                <div key={productId} className="flex text-xs hover:bg-blue-50 transition-colors items-center h-10 border-b border-gray-50">
-                                    <div className="p-2 w-5/12 pl-3 font-medium text-gray-700 truncate">
+                                <div 
+                                    key={productId} 
+                                    className={`flex items-center text-[13px] md:text-sm hover:bg-blue-50 transition-colors min-h-[50px] ${index % 2 === 1 ? 'bg-gray-100/30' : 'bg-white'}`}
+                                >
+                                    <div className="p-3 w-5/12 font-bold text-gray-800 leading-tight">
                                         {productName}
-                                        <div className="text-[10px] text-gray-400">{productCategory}</div>
+                                        {/* <div className="text-[10px] text-gray-400 font-normal uppercase tracking-wider">{productCategory}</div> */}
                                     </div>
-                                    <div className="p-2 w-2/12 text-gray-600">${item.price}</div>
-                                    <div className="p-2 w-2/12">
-                                        <input
-                                            type="number"
-                                            min="1"
-                                            className="w-10 border border-gray-300 rounded px-1 py-0.5 text-center focus:ring-1 focus:ring-blue-500 outline-none"
-                                            value={item.quantity}
-                                            onChange={(e) => onUpdateQuantity(productId, parseInt(e.target.value) || 0)}
-                                        />
+                                    <div className="p-3 w-2/12 text-gray-600 font-mono">${item.price.toFixed(2)}</div>
+                                    <div className="p-3 w-2/12 flex items-center justify-center">
+                                        <div className="flex items-center border border-gray-300 rounded overflow-hidden h-8">
+                                            <input
+                                                type="number"
+                                                min="1"
+                                                className="w-12 bg-white text-center text-sm font-bold outline-none border-none p-0"
+                                                value={item.quantity}
+                                                onChange={(e) => onUpdateQuantity(productId, parseInt(e.target.value) || 1)}
+                                            />
+                                        </div>
                                     </div>
-                                    <div className="p-2 w-2/12 pr-3 text-right font-medium text-gray-800">
+                                    <div className="p-3 w-2/12 text-right font-black text-blue-600">
                                         ${(item.price * item.quantity).toFixed(2)}
                                     </div>
-                                    <div className="p-2 w-1/12 text-center">
+                                    <div className="p-3 w-1/12 text-center">
                                         <button
                                             onClick={() => onRemoveItem(productId)}
-                                            className="text-gray-400 hover:text-red-500 p-1"
+                                            className="text-gray-300 hover:text-red-500 transition-colors"
                                         >
-                                            <FaTrash size={11} />
+                                            <FaTrash size={12} />
                                         </button>
                                     </div>
                                 </div>
@@ -141,111 +146,80 @@ const OrderCart = ({
                 </div>
             </div>
 
-            {/* --- Order Details Form --- */}
-            <div className="bg-[#f1f2f6] p-2 border-t border-gray-300 space-y-1 mt-auto flex-shrink-0">
-                {/* Row 1: Booked Room & Select Table */}
-                <div className="grid grid-cols-2 gap-1">
-                    <div className="bg-white border border-gray-400 rounded-sm flex items-center px-1 h-6">
+            {/* --- Bottom Sticky Footer --- */}
+            <div className="sticky bottom-0 bg-white border-t border-gray-300 shadow-xl z-10 flex-shrink-0 animate-in fade-in slide-in-from-bottom duration-500">
+                <div className="bg-[#f1f2f6] p-2 space-y-1">
+                    {/* Row 1: Booked Room & Select Table */}
+                    <div className="grid grid-cols-2 gap-1">
+                        <div className="bg-white border border-gray-400 rounded-md flex items-center px-1 h-8">
+                            <select
+                                className="w-full bg-transparent p-0 outline-none text-xs text-gray-600 font-medium"
+                                value={bookedRoom}
+                                onChange={(e) => setBookedRoom(e.target.value)}
+                            >
+                                <option value="">Booked Room</option>
+                                <option value="101">Room 101</option>
+                                <option value="102">Room 102</option>
+                            </select>
+                        </div>
+                        <div className="bg-white border border-gray-400 rounded-md flex items-center px-1 pl-2 h-8">
+                            <span className="text-gray-500 mr-1 whitespace-nowrap text-xs font-bold">TABLE :</span>
+                            <select
+                                className="w-full bg-transparent p-0 outline-none text-xs text-gray-600 font-black"
+                                value={tableNumber || ""}
+                                onChange={(e) => onTableNumberChange(e.target.value)}
+                            >
+                                <option value="">None</option>
+                                {tables.map(table => (
+                                    <option key={table._id} value={table._id}>{table.tableNo || table.name || `Table ${table._id}`}</option>
+                                ))}
+                            </select>
+                        </div>
+                    </div>
+    
+                    <div className="bg-white border border-gray-400 rounded-md flex items-center px-1 h-8">
                         <select
-                            className="w-full bg-transparent p-0 outline-none text-xs text-gray-600 scale-90 origin-left"
-                            value={bookedRoom}
-                            onChange={(e) => setBookedRoom(e.target.value)}
+                            className="w-full bg-transparent p-0 outline-none text-xs text-gray-600 font-medium"
+                            value={customer ? customer._id : ""}
+                            onChange={(e) => onCustomerChange && onCustomerChange(customers.find(c => c._id === e.target.value))}
                         >
-                            <option value="">Booked Room</option>
-                            <option value="101">Room 101</option>
-                            <option value="102">Room 102</option>
+                            <option value="">Customer (Walking)</option>
+                            {customers.map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
                         </select>
                     </div>
-                    <div className="bg-white border border-gray-400 rounded-sm flex items-center px-1 pl-1 h-6">
-                        <span className="text-gray-500 mr-1 whitespace-nowrap text-[9px] font-medium">Table:</span>
-                        <select
-                            className="w-full bg-transparent p-0 outline-none text-xs text-gray-600 scale-90 origin-left"
-                            value={tableNumber || ""}
-                            onChange={(e) => onTableNumberChange(e.target.value)}
-                        >
-                            <option value="">None</option>
-                            {tables.map(table => (
-                                <option key={table._id} value={table._id}>{table.tableNo || table.name || `Table ${table._id}`}</option>
-                            ))}
-                        </select>
+
+                    <div className="bg-white border border-gray-400 rounded-md h-8 flex items-center">
+                        <input
+                            type="text"
+                            placeholder="Remarks / Note"
+                            className="w-full bg-transparent px-2 outline-none text-xs text-gray-600"
+                            value={remarks}
+                            onChange={(e) => setRemarks(e.target.value)}
+                        />
                     </div>
                 </div>
 
-                {/* Row 2: Customer */}
-                <div className="bg-white border border-gray-400 rounded-sm flex items-center px-1 h-6">
-                    <select
-                        className="w-full bg-transparent p-0 outline-none text-xs text-gray-600 scale-90 origin-left"
-                        value={customer ? customer._id : ""}
-                        onChange={(e) => {
-                            const selected = customers.find(c => c._id === e.target.value);
-                            if (onCustomerChange) onCustomerChange(selected);
-                        }}
-                    >
-                        <option value="">Customer</option>
-                        {customers.map(c => (
-                            <option key={c._id} value={c._id}>{c.name}</option>
-                        ))}
-                    </select>
-                </div>
-
-                {/* Row (New): Served By */}
-                <div className="bg-white border border-gray-400 rounded-sm flex items-center px-1 h-6">
-                    <select
-                        className="w-full bg-transparent p-0 outline-none text-xs text-gray-600 scale-90 origin-left"
-                        value={servedBy}
-                        onChange={(e) => setServedBy(e.target.value)}
-                    >
-                        <option value="">Served By</option>
-                        {users.map(user => (
-                            <option key={user._id} value={user._id}>{user.name}</option>
-                        ))}
-                    </select>
-                </div>
-
-                {/* Row 3: Remarks */}
-                <div className="bg-white border border-gray-400 rounded-sm h-6 flex items-center">
-                    <input
-                        type="text"
-                        placeholder="Remarks"
-                        className="w-full bg-transparent px-2 outline-none text-xs text-gray-600"
-                        value={remarks}
-                        onChange={(e) => setRemarks(e.target.value)}
-                    />
-                </div>
-            </div>
-
-            {/* --- Bottom Action Bar --- */}
-            <div className="bg-[#f1f2f6] p-2 border-t border-gray-300 flex items-center justify-between gap-2 flex-shrink-0">
-                <div className="flex items-center gap-2">
+                <div className="p-3 bg-white flex items-center justify-between gap-3 shadow-[0_-4px_12px_rgba(0,0,0,0.1)]">
                     <button
                         onClick={onClearCart}
-                        className="bg-[#eb4d4b] hover:bg-[#c0392b] text-white px-5 py-1.5 rounded-sm text-xs font-semibold shadow-sm transition-colors"
+                        className="bg-red-50 text-red-600 hover:bg-red-600 hover:text-white px-4 py-2.5 rounded-md text-xs font-black uppercase tracking-tighter border border-red-200 transition-all flex-shrink-0"
                     >
                         Clear
                     </button>
-
-                    {/* VAT Toggle */}
-                    <div className="flex items-center gap-2 px-1">
-                        <span className="text-xs font-medium text-gray-600">Vat 4 %</span>
+    
+                    <div className="flex items-center gap-2 flex-shrink-0 hidden md:flex">
+                        <span className="text-[10px] font-bold text-gray-400 uppercase">VAT</span>
                         <button
                             onClick={() => setVatEnabled(!vatEnabled)}
-                            className={`w-9 h-4.5 rounded-full p-0.5 transition-colors duration-200 ease-in-out relative ${vatEnabled ? 'bg-[#4a69bd]' : 'bg-gray-400'}`}
+                            className={`w-10 h-5 rounded-full p-0.5 transition-all ${vatEnabled ? 'bg-blue-600' : 'bg-gray-300'}`}
                         >
-                            <div className={`bg-white w-3.5 h-3.5 rounded-full shadow-sm absolute top-0.5 transition-all duration-200 ${vatEnabled ? 'left-[calc(100%-16px)]' : 'left-0.5'}`} />
+                            <div className={`bg-white w-4 h-4 rounded-full shadow-sm transform transition-all ${vatEnabled ? 'translate-x-5' : 'translate-x-0'}`} />
                         </button>
                     </div>
-                </div>
-
-                <div className="flex items-center gap-2">
-                    <div className="text-[10px] text-gray-400 text-right mr-1 hidden sm:block tracking-widest">
-                        0/30
-                    </div>
-                    <button className="bg-white border border-gray-400 hover:bg-gray-50 text-gray-600 px-3 py-1.5 rounded-sm text-xs font-medium transition-colors shadow-sm">
-                        Discount
-                    </button>
+    
                     <button
                         onClick={() => onPlaceOrder({ servedBy, remarks })}
-                        className={`${updatingOrderId ? 'bg-[#009432] hover:bg-[#006266] text-white' : 'bg-blue-600 hover:bg-blue-700 text-white'} px-8 py-3 rounded-md text-sm font-black shadow-lg transition-all active:scale-95 flex-1 text-center uppercase tracking-wider`}
+                        className={`${updatingOrderId ? 'bg-[#009432] hover:bg-[#006266] text-white' : 'bg-blue-600 hover:bg-blue-700 text-white'} px-8 py-3.5 rounded-md text-sm font-black shadow-lg transition-all active:scale-95 flex-1 text-center uppercase tracking-wider`}
                     >
                         {updatingOrderId ? 'Update Order' : 'Create Order'}
                     </button>
