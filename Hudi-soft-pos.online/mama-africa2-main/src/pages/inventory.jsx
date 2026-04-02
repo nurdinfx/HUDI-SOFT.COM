@@ -287,8 +287,6 @@ const Inventory = () => {
 
               if (imageUrl && !imageUrl.startsWith('http')) {
                 imageUrl = `${backendUrl}${imageUrl}`;
-              } else if (imageUrl && imageUrl.includes('mama-africa1.onrender.com') && window.location.hostname === 'localhost') {
-                imageUrl = imageUrl.replace('https://mama-africa1.onrender.com', 'http://localhost:5000');
               } else if (!imageUrl) {
                 imageUrl = 'https://via.placeholder.com/200x200?text=No+Image';
               }

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Shield, Key, Smartphone, CheckCircle, AlertCircle } from 'lucide-react';
 import axios from 'axios';
+import { API_CONFIG } from '../config/api.config';
 
 const ActivationPage = () => {
     const [licenseKey, setLicenseKey] = useState('');
@@ -29,7 +30,7 @@ const ActivationPage = () => {
 
         try {
             // Using the actual cloud licensing endpoint
-            const response = await axios.post('https://hudi-soft-com.onrender.com/api/licenses/validate', { 
+            const response = await axios.post(`${API_CONFIG.BACKEND_URL}/api/licenses/validate`, { 
                 licenseKey, 
                 machineId: deviceId 
             });
