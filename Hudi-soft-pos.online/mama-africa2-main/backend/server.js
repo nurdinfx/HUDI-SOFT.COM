@@ -61,38 +61,25 @@ const io = new Server(server, {
   }
 });
 
-// Enhanced Middleware - CORS configuration
-const frontendUrls = process.env.FRONTEND_URL ? process.env.FRONTEND_URL.split(',') : [];
-const allowedOrigins = [
-  ...frontendUrls,
-  'http://localhost:3000',
-  'http://localhost:3001',
-  'http://localhost:5173',
-  'https://hudi-pos-online.onrender.com',
-  'https://hudi-soft-com-m48c.vercel.app',
-  process.env.PRODUCTION_FRONTEND_URL
-].filter(Boolean).map(url => url.trim());
+// Request Logger Middleware
+app.use((req, res, next) => {
+  console.log(`📡 ${new Date().toISOString()} - ${req.method} ${req.url} - Origin: ${req.get('origin') || 'none'}`);
+  next();
+});
 
+// Simplified CORS Configuration
 app.use(cors({
-  origin: function (origin, callback) {
-    // Allow requests with no origin (like mobile apps or curl requests)
-    if (!origin) return callback(null, true);
-
-    if (allowedOrigins.indexOf(origin) !== -1) {
+  origin: (origin, callback) => {
+    // In production, we'll be more specific if needed, but for now allow the Vercel and Render domains
+    if (!origin || origin.includes('vercel.app') || origin.includes('onrender.com') || origin.includes('localhost')) {
       callback(null, true);
     } else {
-      callback(null, true); // Allow all origins in development
+      callback(null, true); // Fallback to allow everything to resolve connectivity issues
     }
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: [
-    'Content-Type',
-    'Authorization',
-    'X-Requested-With',
-    'Accept',
-    'Origin'
-  ]
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin']
 }));
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
@@ -333,9 +320,9 @@ const startServer = async () => {
       console.log('⚠️  Starting server without active MongoDB connection (Render Deployment Check)');
     }
 
-    server.listen(PORT, () => {
-      console.log(`🚀 Server running on port ${PORT}`);
-      console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
+    server.listen(PORT, '0.0.0.0', () => {
+      console.log(`🚀 Server running on 0.0.0.0:${PORT}`);
+      console.log(`📊 Environment: ${process.env.NODE_ENV || 'production'}`);
     });
   } catch (error) {
     console.error('❌ Failed to start server:', error.message);
