@@ -37,7 +37,8 @@ const Inventory = () => {
   const {
     data: categories,
     isRefetching: categoriesRefetching,
-    refresh: loadCategories
+    refresh: loadCategories,
+    setData: setCategories
   } = useOptimisticData('inventory_categories', async () => {
     try {
       const response = await realApi.getCategories();
@@ -453,8 +454,18 @@ const ProductModal = ({
 
   const handleSubmit = (e) => {
     e.preventDefault();
+    
+    // Auto-link new category if we are in "new" mode and have text
+    let finalCategory = formData.category;
+    if (showNewCategory && newCategory.trim()) {
+      finalCategory = newCategory.trim();
+      // Also add it to our local list for next time
+      addNewCategory();
+    }
+
     onSave({
       ...formData,
+      category: finalCategory,
       price: parseFloat(formData.price),
       cost: parseFloat(formData.cost || 0),
       stock: parseInt(formData.stock),
@@ -512,16 +523,18 @@ const ProductModal = ({
                   <select required value={formData.category} onChange={(e) => {
                     if (e.target.value === 'new') setShowNewCategory(true);
                     else setFormData({ ...formData, category: e.target.value });
-                  }} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none bg-white">
+                  }} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none bg-white transition-all">
                     <option value="">Select...</option>
                     {categories.map(c => <option key={c} value={c}>{c}</option>)}
-                    <option value="new" className="text-blue-600 font-medium">+ New Category</option>
+                    <option value="new" className="text-blue-600 font-bold bg-blue-50">+ Add New Category</option>
                   </select>
                 ) : (
-                  <div className="flex gap-2">
-                    <input autoFocus type="text" value={newCategory} onChange={e => setNewCategory(e.target.value)} className="w-full border border-gray-200 rounded-lg px-2 py-2 text-sm" placeholder="New Category" />
-                    <button type="button" onClick={handleAddNewCategory} className="px-2 bg-blue-600 text-white rounded-lg text-xs">Add</button>
-                    <button type="button" onClick={() => setShowNewCategory(false)} className="px-2 bg-gray-200 text-gray-600 rounded-lg text-xs">X</button>
+                  <div className="flex gap-1 group">
+                    <input autoFocus type="text" value={newCategory} onChange={e => setNewCategory(e.target.value)} className="flex-1 border border-blue-300 rounded-l-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500/20 outline-none shadow-inner" placeholder="Enter name..." />
+                    <button type="button" onClick={handleAddNewCategory} className="px-3 bg-blue-600 text-white text-[10px] font-bold uppercase tracking-wider hover:bg-blue-700 transition-colors">Add</button>
+                    <button type="button" onClick={() => setShowNewCategory(false)} className="px-2 bg-gray-100 text-gray-400 border border-l-0 border-gray-200 rounded-r-lg hover:text-red-500 transition-colors" title="Cancel">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                    </button>
                   </div>
                 )}
               </div>
