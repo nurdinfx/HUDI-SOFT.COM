@@ -19,7 +19,8 @@ const OrderCart = ({
     users = [],
     customers = [],
     tables = [],
-    onCustomerChange
+    onCustomerChange,
+    updatingOrderId = null
 }) => {
     const navigate = useNavigate();
     // Local state for form fields
@@ -141,13 +142,12 @@ const OrderCart = ({
             </div>
 
             {/* --- Order Details Form --- */}
-            <div className="bg-[#f1f2f6] p-2 border-t border-gray-300 space-y-1 mt-auto">
-
+            <div className="bg-[#f1f2f6] p-2 border-t border-gray-300 space-y-1 mt-auto flex-shrink-0">
                 {/* Row 1: Booked Room & Select Table */}
                 <div className="grid grid-cols-2 gap-1">
-                    <div className="bg-white border border-gray-400 rounded-sm flex items-center px-1 h-7">
+                    <div className="bg-white border border-gray-400 rounded-sm flex items-center px-1 h-6">
                         <select
-                            className="w-full bg-transparent p-0 outline-none text-xs text-gray-600"
+                            className="w-full bg-transparent p-0 outline-none text-xs text-gray-600 scale-90 origin-left"
                             value={bookedRoom}
                             onChange={(e) => setBookedRoom(e.target.value)}
                         >
@@ -156,10 +156,10 @@ const OrderCart = ({
                             <option value="102">Room 102</option>
                         </select>
                     </div>
-                    <div className="bg-white border border-gray-400 rounded-sm flex items-center px-1 pl-2 h-7">
-                        <span className="text-gray-500 mr-1 whitespace-nowrap text-[10px] font-medium">Table:</span>
+                    <div className="bg-white border border-gray-400 rounded-sm flex items-center px-1 pl-1 h-6">
+                        <span className="text-gray-500 mr-1 whitespace-nowrap text-[9px] font-medium">Table:</span>
                         <select
-                            className="w-full bg-transparent p-0 outline-none text-xs text-gray-600"
+                            className="w-full bg-transparent p-0 outline-none text-xs text-gray-600 scale-90 origin-left"
                             value={tableNumber || ""}
                             onChange={(e) => onTableNumberChange(e.target.value)}
                         >
@@ -172,9 +172,9 @@ const OrderCart = ({
                 </div>
 
                 {/* Row 2: Customer */}
-                <div className="bg-white border border-gray-400 rounded-sm flex items-center px-1 h-7">
+                <div className="bg-white border border-gray-400 rounded-sm flex items-center px-1 h-6">
                     <select
-                        className="w-full bg-transparent p-0 outline-none text-xs text-gray-600"
+                        className="w-full bg-transparent p-0 outline-none text-xs text-gray-600 scale-90 origin-left"
                         value={customer ? customer._id : ""}
                         onChange={(e) => {
                             const selected = customers.find(c => c._id === e.target.value);
@@ -188,10 +188,10 @@ const OrderCart = ({
                     </select>
                 </div>
 
-                {/* Row (New): Served By (Requested by user) */}
-                <div className="bg-white border border-gray-400 rounded-sm flex items-center px-1 h-7">
+                {/* Row (New): Served By */}
+                <div className="bg-white border border-gray-400 rounded-sm flex items-center px-1 h-6">
                     <select
-                        className="w-full bg-transparent p-0 outline-none text-xs text-gray-600"
+                        className="w-full bg-transparent p-0 outline-none text-xs text-gray-600 scale-90 origin-left"
                         value={servedBy}
                         onChange={(e) => setServedBy(e.target.value)}
                     >
@@ -203,7 +203,7 @@ const OrderCart = ({
                 </div>
 
                 {/* Row 3: Remarks */}
-                <div className="bg-white border border-gray-400 rounded-sm h-7 flex items-center">
+                <div className="bg-white border border-gray-400 rounded-sm h-6 flex items-center">
                     <input
                         type="text"
                         placeholder="Remarks"
@@ -245,9 +245,9 @@ const OrderCart = ({
                     </button>
                     <button
                         onClick={() => onPlaceOrder({ servedBy, remarks })}
-                        className="bg-[#f5f6fa] hover:bg-gray-200 text-gray-700 border border-gray-400 px-4 py-1.5 rounded-sm text-xs font-bold shadow-sm transition-colors"
+                        className={`${updatingOrderId ? 'bg-[#009432] hover:bg-[#006266] text-white' : 'bg-[#f5f6fa] hover:bg-gray-200 text-gray-700'} border border-gray-400 px-4 py-1.5 rounded-sm text-xs font-bold shadow-sm transition-colors`}
                     >
-                        Create Order
+                        {updatingOrderId ? 'Update Order' : 'Create Order'}
                     </button>
                 </div>
             </div>
