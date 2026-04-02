@@ -88,7 +88,7 @@ const OrderCart = ({
             {/* --- Product Table Header --- */}
             {/* Image shows "Product Price Quantity Subtotal" headers directly above items, no tabs visible in the cramped view but let's keep it simple */}
             <div className="flex-1 overflow-y-auto bg-white flex flex-col">
-                <div className="bg-[#f1f2f6] text-gray-600 font-semibold border-b border-gray-300 text-xs flex">
+                <div className="bg-[#f1f2f6] text-gray-600 font-semibold border-b border-gray-300 text-xs flex flex-shrink-0">
                     <div className="p-2 w-5/12 pl-3">Product</div>
                     <div className="p-2 w-2/12">Price</div>
                     <div className="p-2 w-2/12">Quantity</div>
@@ -96,7 +96,7 @@ const OrderCart = ({
                     <div className="w-1/12"></div>
                 </div>
 
-                <div className="divide-y divide-gray-100 overflow-y-auto flex-1 h-0">
+                <div className="divide-y divide-gray-100 overflow-y-auto flex-1 min-h-0">
                     {cart.length === 0 ? (
                         <div className="p-12 text-center text-gray-400 italic text-sm">
                             No items in cart
@@ -245,7 +245,7 @@ const OrderCart = ({
                     </button>
                     <button
                         onClick={() => onPlaceOrder({ servedBy, remarks })}
-                        className={`${updatingOrderId ? 'bg-[#009432] hover:bg-[#006266] text-white' : 'bg-[#f5f6fa] hover:bg-gray-200 text-gray-700'} border border-gray-400 px-4 py-1.5 rounded-sm text-xs font-bold shadow-sm transition-colors`}
+                        className={`${updatingOrderId ? 'bg-[#009432] hover:bg-[#006266] text-white' : 'bg-blue-600 hover:bg-blue-700 text-white'} px-8 py-3 rounded-md text-sm font-black shadow-lg transition-all active:scale-95 flex-1 text-center uppercase tracking-wider`}
                     >
                         {updatingOrderId ? 'Update Order' : 'Create Order'}
                     </button>

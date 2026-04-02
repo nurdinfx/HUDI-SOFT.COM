@@ -304,7 +304,7 @@ const POS = () => {
   const formatDate = (d) => d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
 
   return (
-    <div className="pos-fullscreen-container flex flex-col h-[calc(100vh-4.1rem)] bg-gray-50 overflow-hidden">
+    <div className="pos-fullscreen-container flex flex-col h-full bg-gray-50 overflow-hidden">
       {updateOrderId && (
         <div className="bg-blue-600 text-white py-1.5 px-4 text-center text-xs font-bold flex justify-between items-center shadow-md z-[100]">
           <div className="flex items-center gap-2">
@@ -345,7 +345,7 @@ const POS = () => {
       </div>
 
       {/* Main Grid */}
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex overflow-hidden min-h-0">
         {/* Left: Categories & Products */}
         <div className="flex-1 flex flex-col min-w-0 bg-white">
           <div className="flex gap-2 p-4 overflow-x-auto border-b border-gray-100 no-scrollbar">
