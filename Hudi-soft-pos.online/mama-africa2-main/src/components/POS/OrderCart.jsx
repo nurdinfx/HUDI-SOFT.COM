@@ -146,8 +146,8 @@ const OrderCart = ({
                 </div>
             </div>
 
-            {/* --- Bottom Sticky Footer --- */}
-            <div className="sticky bottom-0 bg-white border-t border-gray-300 shadow-xl z-10 flex-shrink-0 animate-in fade-in slide-in-from-bottom duration-500">
+            {/* --- Bottom Static Footer --- */}
+            <div className="bg-white border-t border-gray-300 shadow-xl z-20 flex-shrink-0">
                 <div className="bg-[#f1f2f6] p-2 space-y-1">
                     {/* Row 1: Booked Room & Select Table */}
                     <div className="grid grid-cols-2 gap-1">

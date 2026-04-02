@@ -345,7 +345,7 @@ const POS = () => {
       </div>
 
       {/* Main Grid */}
-      <div className="flex-1 flex overflow-hidden min-h-0">
+      <div className="flex-1 flex overflow-hidden min-h-0 h-[calc(100vh-140px)]">
         {/* Left: Categories & Products */}
         <div className="flex-1 flex flex-col min-w-0 bg-white">
           <div className="flex gap-2 p-4 overflow-x-auto border-b border-gray-100 no-scrollbar">
