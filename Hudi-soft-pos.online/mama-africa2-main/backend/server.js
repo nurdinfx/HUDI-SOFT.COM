@@ -150,6 +150,7 @@ import reportRoutes from './routes/reports.js';
 import inventoryRoutes from './routes/inventory.js';
 import syncRoutes from './routes/sync.js';
 import licenseRoutes from './routes/license.js';
+import adminRoutes from './routes/admin.js';
 
 // Simple File Upload Setup
 import multer from 'multer';
@@ -233,6 +234,7 @@ app.use('/api/v1/reports', reportRoutes);
 app.use('/api/v1/inventory', inventoryRoutes);
 app.use('/api/v1/sync', syncRoutes);
 app.use('/api/v1/license', licenseRoutes);
+app.use('/api/v1/admin', adminRoutes);
 
 // Protect sensitive routes with license check
 app.use(['/api/v1/orders', '/api/v1/products', '/api/v1/customers', '/api/v1/tables', '/api/v1/expenses', '/api/v1/dashboard', '/api/v1/users', '/api/v1/settings', '/api/v1/purchases', '/api/v1/purchase-orders', '/api/v1/suppliers', '/api/v1/finance', '/api/v1/reports', '/api/v1/inventory'], licenseCheck);

@@ -5,12 +5,17 @@ dotenv.config();
 
 const connectDB = async () => {
   try {
-    const uri = process.env.MONGODB_URI;
+    let uri = process.env.MONGODB_URI;
+    if (uri && uri.startsWith('MONGODB_URI=')) {
+        uri = uri.replace('MONGODB_URI=', '');
+    }
+    
     if (uri) {
-        const obfuscatedUri = uri.replace(/:([^@]+)@/, ':****@');
+        // More robust obfuscation that doesn't destroy the protocol prefix
+        const obfuscatedUri = uri.replace(/(\/\/.*:)(.*)(@)/, '$1****$3');
         console.log(`🔗 Attempting connection to: ${obfuscatedUri}`);
     }
-    const conn = await mongoose.connect(process.env.MONGODB_URI, {
+    const conn = await mongoose.connect(uri, {
       bufferCommands: true,
       family: 4,
       serverSelectionTimeoutMS: 5000
