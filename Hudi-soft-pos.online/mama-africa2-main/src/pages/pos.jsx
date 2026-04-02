@@ -31,6 +31,7 @@ import {
   Calendar,
 } from 'lucide-react';
 import OrderCart from '../components/POS/OrderCart';
+import './pos.css';
 
 const POS = () => {
   const navigate = useNavigate();
@@ -304,7 +305,7 @@ const POS = () => {
   const formatDate = (d) => d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
 
   return (
-    <div className="pos-fullscreen-container flex flex-col h-full bg-gray-50 overflow-hidden">
+    <div className="pos-page-wrapper">
       {updateOrderId && (
         <div className="bg-blue-600 text-white py-1.5 px-4 text-center text-xs font-bold flex justify-between items-center shadow-md z-[100]">
           <div className="flex items-center gap-2">
@@ -345,9 +346,9 @@ const POS = () => {
       </div>
 
       {/* Main Grid */}
-      <div className="flex-1 flex overflow-hidden min-h-0 h-[calc(100vh-140px)]">
+      <div className="pos-main-grid">
         {/* Left: Categories & Products */}
-        <div className="flex-1 flex flex-col min-w-0 bg-white">
+        <div className="product-section">
           <div className="flex gap-2 p-4 overflow-x-auto border-b border-gray-100 no-scrollbar">
             {categories.map(c => (
               <button 
@@ -382,8 +383,8 @@ const POS = () => {
           </div>
         </div>
 
-        {/* Right SIDE - CART & CONTROLS */}
-        <div className="w-[400px] min-w-[320px] max-w-[480px] bg-white border-l border-gray-200 flex flex-col shadow-xl z-10 h-full overflow-hidden">
+        {/* Right SIDE - CART & CONTROLS (Using new cart-panel CSS) */}
+        <div className="cart-panel">
           <OrderCart
             cart={cart}
             onUpdateQuantity={updateQuantity}
