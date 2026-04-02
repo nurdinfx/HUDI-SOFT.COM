@@ -8,11 +8,11 @@ const isLocal = false;
 const isProduction = true;
 
 // Get the appropriate API URL based on environment
-const getApiUrl = () => 'https://hudi-soft-com.onrender.com/api/v1';
+const getApiUrl = () => 'https://hudi-pos-online.onrender.com/api/v1';
 
-const getBackendUrl = () => 'https://hudi-soft-com.onrender.com';
+const getBackendUrl = () => 'https://hudi-pos-online.onrender.com';
 
-const getSocketUrl = () => 'https://hudi-soft-com.onrender.com';
+const getSocketUrl = () => 'https://hudi-pos-online.onrender.com';
 
 export const API_CONFIG = {
   get API_URL() { return getApiUrl(); },

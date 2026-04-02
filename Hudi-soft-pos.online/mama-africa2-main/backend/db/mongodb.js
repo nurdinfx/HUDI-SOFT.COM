@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
+import { seedDatabase } from './seed.js';
 
 dotenv.config();
 
@@ -21,6 +22,7 @@ const connectDB = async () => {
       serverSelectionTimeoutMS: 5000
     });
     console.log(`✅ MongoDB Connected: ${conn.connection.host}`);
+    await seedDatabase();
     return true;
   } catch (error) {
     console.error(`❌ MongoDB Connection Error Message: ${error.message}`);
