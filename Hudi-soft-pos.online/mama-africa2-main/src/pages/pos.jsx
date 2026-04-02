@@ -304,7 +304,7 @@ const POS = () => {
   const formatDate = (d) => d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
 
   return (
-    <div className="pos-fullscreen-container flex flex-col h-screen bg-gray-50 overflow-hidden">
+    <div className="pos-fullscreen-container flex flex-col h-[calc(100vh-4.1rem)] bg-gray-50 overflow-hidden">
       {updateOrderId && (
         <div className="bg-blue-600 text-white py-1.5 px-4 text-center text-xs font-bold flex justify-between items-center shadow-md z-[100]">
           <div className="flex items-center gap-2">
@@ -383,7 +383,7 @@ const POS = () => {
         </div>
 
         {/* Right SIDE - CART & CONTROLS */}
-        <div className="w-[480px] bg-white border-l border-gray-200 flex flex-col shadow-xl z-10">
+        <div className="w-[600px] bg-white border-l border-gray-200 flex flex-col shadow-xl z-10">
           <OrderCart
             cart={cart}
             onUpdateQuantity={updateQuantity}

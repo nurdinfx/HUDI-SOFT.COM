@@ -215,7 +215,7 @@ const OrderCart = ({
             </div>
 
             {/* --- Bottom Action Bar --- */}
-            <div className="bg-[#f1f2f6] p-2 border-t border-gray-300 flex items-center justify-between gap-2">
+            <div className="bg-[#f1f2f6] p-2 border-t border-gray-300 flex items-center justify-between gap-2 flex-shrink-0">
                 <div className="flex items-center gap-2">
                     <button
                         onClick={onClearCart}
