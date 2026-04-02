@@ -5,7 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { realApi } from '../api/realApi';
 import { API_CONFIG } from '../config/api.config';
 import { io } from 'socket.io-client';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 
 // --- Global Helpers (Moved outside component to fix ReferenceError and scoping issues) ---
 
@@ -88,6 +88,7 @@ const calculateOrderTotals = (order) => {
 };
 
 const Orders = () => {
+  const navigate = useNavigate();
   const [orders, setOrders] = useState([]);
   const [filteredOrders, setFilteredOrders] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -709,31 +710,9 @@ const Orders = () => {
     }
   };
 
-  const handleUpdateOrder = async (order) => {
-    try {
-      setSelectedOrder(order);
-      // Ensure items have proper structure
-      const itemsWithIds = order.items.map((item, index) => {
-        // If product is missing but we have a name, keep the name
-        // but don't generate a fake ObjectId that will fail backend validation
-        let productData = item.product;
-        if (!productData) {
-          productData = { name: item.name || 'Item' };
-        }
-
-        return {
-          ...item,
-          _id: item._id || `item_${Date.now()}_${index}`,
-          product: productData
-        };
-      });
-      setUpdateOrderItems(itemsWithIds);
-      await loadAvailableProducts();
-      setShowUpdateModal(true);
-    } catch (error) {
-      console.error('Failed to prepare order update:', error);
-      alert('Failed to load order details');
-    }
+  const handleUpdateOrder = (order) => {
+    // Redirect to POS with the updateOrderId parameter
+    navigate(`/pos?updateOrderId=${order._id}`);
   };
 
   const addItemToUpdate = (product) => {

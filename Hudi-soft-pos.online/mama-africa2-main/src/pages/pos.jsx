@@ -1,17 +1,20 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { realApi } from '../api/realApi';
 import { API_CONFIG } from '../config/api.config';
+
 const getCache = (key, fallback) => {
   try {
     const item = localStorage.getItem(key);
     return item ? JSON.parse(item) : fallback;
   } catch (e) { return fallback; }
 };
+
 const setCache = (key, value) => {
   try { localStorage.setItem(key, JSON.stringify(value)); } catch (e) {}
 };
+
 import {
   Search,
   Plus,
@@ -31,6 +34,8 @@ import OrderCart from '../components/POS/OrderCart';
 
 const POS = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const updateOrderId = searchParams.get('updateOrderId');
 
   // Initialize state from cache for "Zero Wait" experience
   const [products, setProducts] = useState(() => getCache('pos_products', []));
@@ -54,6 +59,7 @@ const POS = () => {
   const [vatPercentage, setVatPercentage] = useState(4);
   const [vatEnabled, setVatEnabled] = useState(() => getCache('pos_vatEnabled', true));
   const [tipAmount, setTipAmount] = useState(() => getCache('pos_tipAmount', 0));
+  const [updatingOrder, setUpdatingOrder] = useState(null);
 
   const { user } = useAuth();
 
@@ -82,508 +88,184 @@ const POS = () => {
   useEffect(() => { setCache('pos_paymentMethod', paymentMethod); }, [paymentMethod]);
   useEffect(() => { setCache('pos_discount', discount); }, [discount]);
   useEffect(() => { setCache('pos_tipAmount', tipAmount); }, [tipAmount]);
-  useEffect(() => { setCache('pos_vatPercentage', vatPercentage); }, [vatPercentage]);
+  useEffect(() => { if (vatPercentage) setCache('pos_vatPercentage', vatPercentage); }, [vatPercentage]);
   useEffect(() => { setCache('pos_vatEnabled', vatEnabled); }, [vatEnabled]);
 
-  /* Optimized Data Loading for "Soft and Quick" Feel */
-  const loadPOSData = async () => {
-    // If we have cached data, don't show the initial loading spinner
-    // only show it if the products array is completely empty
-    if (products.length === 0) {
-      setLoading(true);
+  // Load existing order if in Update Mode
+  useEffect(() => {
+    if (updateOrderId && tables.length > 0) {
+      const fetchOrder = async () => {
+        try {
+          const response = await realApi.getOrder(updateOrderId);
+          if (response.success) {
+            const order = realApi.extractData(response);
+            setUpdatingOrder(order);
+            
+            // Map items to cart
+            const mappedCart = order.items.map(item => ({
+              _id: item.product?._id || item.product || `legacy_${Date.now()}`,
+              name: item.name || item.product?.name || 'Item',
+              price: item.price,
+              quantity: item.quantity,
+              image: item.product?.image || ''
+            }));
+            setCart(mappedCart);
+
+            // Set metadata
+            setOrderType(order.orderType || 'dine-in');
+            setDiscount(order.discountPercentage || 0);
+            setVatEnabled(order.taxAmount > 0);
+            
+            if (order.tableNumber) {
+               const table = tables.find(t => t.number === order.tableNumber);
+               if (table) setSelectedTable(table);
+            }
+            if (order.customer) {
+               const customer = customers.find(c => c._id === (order.customer._id || order.customer));
+               if (customer) setSelectedCustomer(customer);
+            }
+          }
+        } catch (err) { console.error('Error loading order for update:', err); }
+      };
+      fetchOrder();
     }
+  }, [updateOrderId, tables.length, customers.length]);
 
-    // Load Products immediately
-    realApi.getProducts()
-      .then(response => {
-        if (response.success) {
-          const productsData = realApi.extractData(response) || [];
-          setProducts(Array.isArray(productsData) ? productsData : []);
-          setCache('pos_products', productsData);
-        }
-      })
-      .catch(err => console.error('Error loading products:', err))
-      .finally(() => setLoading(false)); // Turn off loading as soon as products are here
+  const loadPOSData = async () => {
+    if (products.length === 0) setLoading(true);
 
-    // Load Categories
-    realApi.getCategories()
-      .then(response => {
-        if (response.success) {
-          const categoriesData = realApi.extractData(response) || [];
-          const allCategories = ['BREAKFAST & SNACKS', 'LUNCH', 'DINNER', 'DRINKS', 'OTHERS', ...categoriesData];
-          setCategories(allCategories);
-          setCache('pos_categories', allCategories);
-        }
-      })
-      .catch(() => setCategories(['BREAKFAST & SNACKS', 'LUNCH', 'DINNER', 'DRINKS', 'OTHERS']));
+    realApi.getProducts().then(response => {
+      if (response.success) {
+        const data = realApi.extractData(response) || [];
+        setProducts(data);
+        setCache('pos_products', data);
+      }
+    }).finally(() => setLoading(false));
 
-    // Load Tables (Background)
-    realApi.getTables()
-      .then(response => {
-        if (response.success) {
-          const tablesData = realApi.extractData(response) || [];
-          setTables(tablesData);
-          setCache('pos_tables', tablesData);
-        }
-      })
-      .catch(err => console.error('Error loading tables:', err));
+    realApi.getCategories().then(response => {
+      if (response.success) {
+        const data = realApi.extractData(response) || [];
+        const cats = ['All', 'BREAKFAST & SNACKS', 'LUNCH', 'DINNER', 'DRINKS', 'OTHERS', ...data];
+        setCategories(cats);
+        setCache('pos_categories', cats);
+      }
+    });
 
-    // Load Customers (Background)
-    realApi.getCustomers()
-      .then(response => {
-        if (response.success) {
-          const customersData = realApi.extractData(response) || [];
-          setCustomers(customersData);
-          setCache('pos_customers', customersData);
-        }
-      })
-      .catch(err => console.error('Error loading customers:', err));
+    realApi.getTables().then(response => {
+      if (response.success) {
+        const data = realApi.extractData(response) || [];
+        setTables(data);
+        setCache('pos_tables', data);
+      }
+    });
 
-    // Load Users
-    realApi.getUsers()
-      .then(response => {
-        if (response.success) {
-          const usersData = realApi.extractData(response) || [];
-          setUsers(usersData);
-          setCache('pos_users', usersData);
-        }
-      })
-      .catch(err => console.error('Error loading users:', err));
+    realApi.getCustomers().then(response => {
+      if (response.success) {
+        const data = realApi.extractData(response) || [];
+        setCustomers(data);
+        setCache('pos_customers', data);
+      }
+    });
+
+    realApi.getUsers().then(response => {
+      if (response.success) {
+        const data = realApi.extractData(response) || [];
+        setUsers(data);
+        setCache('pos_users', data);
+      }
+    });
   };
 
   const loadSettings = async () => {
     try {
       const response = await realApi.getSettings();
       if (response.success) {
-        const settingsData = realApi.extractData(response);
-        if (settingsData) {
-          setSettings(settingsData);
-          setVatPercentage(4);
-          setCache('pos_settings', settingsData);
+        const data = realApi.extractData(response);
+        if (data) {
+          setSettings(data);
+          setCache('pos_settings', data);
         }
       }
-    } catch (error) {
-      console.error('❌ Error loading settings:', error);
-    }
+    } catch (e) {}
   };
 
   const filteredProducts = products.filter(product => {
     const matchesCategory = selectedCategory === 'All' || product.category === selectedCategory;
-    const matchesSearch = product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (product.barcode && product.barcode.includes(searchQuery));
+    const matchesSearch = product.name.toLowerCase().includes(searchQuery.toLowerCase());
     return matchesCategory && matchesSearch;
   });
 
   const addToCart = (product) => {
-    if (product.stock !== undefined && product.stock <= 0) {
-      alert('This product is out of stock');
-      return;
-    }
-    setCart(prevCart => {
-      const existingItem = prevCart.find(item => item._id === product._id);
-      if (existingItem) {
-        if (product.stock !== undefined && (existingItem.quantity + 1) > product.stock) {
-          alert(`Only ${product.stock} items available in stock`);
-          return prevCart;
-        }
-        return prevCart.map(item =>
-          item._id === product._id ? { ...item, quantity: item.quantity + 1 } : item
-        );
-      } else {
-        return [...prevCart, { ...product, quantity: 1 }];
+    setCart(prev => {
+      const existing = prev.find(item => item._id === product._id);
+      if (existing) {
+        return prev.map(item => item._id === product._id ? { ...item, quantity: item.quantity + 1 } : item);
       }
+      return [...prev, { ...product, quantity: 1 }];
     });
   };
 
-  const updateQuantity = (productId, newQuantity) => {
-    if (newQuantity < 1) {
-      removeFromCart(productId);
-      return;
-    }
-    const productInCart = cart.find(item => item._id === productId);
-    if (productInCart && productInCart.stock !== undefined && newQuantity > productInCart.stock) {
-      alert(`Only ${productInCart.stock} items available in stock`);
-      return;
-    }
-    setCart(prevCart => prevCart.map(item =>
-      item._id === productId ? { ...item, quantity: newQuantity } : item
-    ));
+  const updateQuantity = (id, q) => {
+    if (q < 1) return removeFromCart(id);
+    setCart(prev => prev.map(item => item._id === id ? { ...item, quantity: q } : item));
   };
 
-  const removeFromCart = (productId) => {
-    setCart(prevCart => prevCart.filter(item => item._id !== productId));
-  };
+  const removeFromCart = (id) => setCart(prev => prev.filter(item => item._id !== id));
 
   const calculateTotals = () => {
     const subtotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-    const vatAmount = vatEnabled ? Math.round(subtotal * (vatPercentage / 100) * 100) / 100 : 0;
-    const discountAmount = discount;
-    const tip = tipAmount;
-    const total = Math.round((subtotal + vatAmount - discountAmount + tip) * 100) / 100;
-
-    return {
-      subtotal,
-      vatAmount,
-      discountAmount,
-      tip,
-      total
-    };
+    const vatAmount = vatEnabled ? subtotal * 0.04 : 0;
+    const total = subtotal + vatAmount - discount + tipAmount;
+    return { subtotal, vatAmount, discountAmount: discount, tip: tipAmount, total };
   };
 
-  const { subtotal, vatAmount, discountAmount, tip, total } = calculateTotals();
+  const { subtotal, vatAmount, total } = calculateTotals();
 
-  const handleCreateOrder = async (orderDetails = {}) => {
+  const handleSubmitOrder = async (orderDetails = {}) => {
     if (cart.length === 0) return alert('Cart is empty');
-
-    const currentVatEnabled = vatEnabled; // Capture current state
+    setLoading(true);
 
     try {
-      const orderData = {
+      const orderPayload = {
         items: cart.map(item => ({
-          product: item._id || item.product?._id || item.id,
+          product: item._id,
           quantity: item.quantity,
           price: item.price,
-          name: item.name || item.product?.name,
-          total: item.price * item.quantity
+          name: item.name
         })),
         orderType,
         paymentMethod,
-        tableId: selectedTable,
-        customerId: selectedCustomer,
+        tableId: selectedTable?._id,
+        tableNumber: selectedTable?.number,
+        customerId: selectedCustomer?._id,
         subtotal,
         taxAmount: vatAmount,
-        discount: discountAmount,
+        discount: discount,
         tip: tipAmount,
         finalTotal: total,
-        orderDate: new Date().toISOString(),
-        status: 'completed',
-        paymentStatus: 'paid',
-        servedBy: orderDetails.servedBy || user?._id, // Use selected server or logged in user
-        remarks: orderDetails.remarks
+        status: updateOrderId ? updatingOrder.status : 'pending',
+        paymentStatus: updateOrderId ? updatingOrder.paymentStatus : 'pending',
+        servedBy: orderDetails.servedBy || user?._id
       };
 
-      const response = await realApi.createOrder(orderData);
-      if (response.success) {
-        // Pass local overrides to ensure receipt matches UI even if backend recalculates differently
-        printReceipt(response.data, cart, {
-          servedBy: orderDetails.servedBy || user?._id,
-          vatEnabled: currentVatEnabled,
-          // Pass the calculated VAT amount from frontend to compare/use 
-          frontendTax: vatAmount
-        });
-        clearCart();
+      let response;
+      if (updateOrderId) {
+        response = await realApi.updateOrder(updateOrderId, orderPayload);
+      } else {
+        response = await realApi.createOrder(orderPayload);
       }
-    } catch (error) {
-      console.error('Order creation error:', error);
-      alert('Error creating order');
+
+      if (response.success) {
+        printReceipt(response.data || orderPayload, cart, { servedBy: orderPayload.servedBy, vatEnabled });
+        clearCart();
+        alert(updateOrderId ? 'Order Updated!' : 'Order Placed!');
+        if (updateOrderId) navigate('/orders');
+      }
+    } catch (err) {
+      alert('Error: ' + err.message);
+    } finally {
+      setLoading(false);
     }
-  };
-
-  const printReceipt = (order, cartItems = null, overrides = {}) => {
-    const printWindow = window.open('', '_blank', 'width=450,height=600');
-    if (!printWindow) return;
-
-    // Map product names from cart items or product list to ensure we have names
-    const productNameMap = {};
-    if (cartItems && Array.isArray(cartItems)) {
-      cartItems.forEach(item => {
-        const id = item._id || item.product?._id || item.id;
-        if (id && item.name) productNameMap[id] = item.name;
-        // Fallback or variation handling
-        if (item.product && typeof item.product === 'string' && item.name) productNameMap[item.product] = item.name;
-      });
-    }
-
-    if (products && Array.isArray(products)) {
-      products.forEach(product => {
-        if (product._id && product.name) productNameMap[product._id] = product.name;
-      });
-    }
-
-    const formattedDate = new Date().toLocaleDateString('en-GB', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric'
-    }) + ' ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
-
-    // Determine Served By Name - Prefer Override
-    let serverName = 'Staff';
-    // Use override if present, otherwise fall back to order data
-    const servedByVal = overrides.servedBy || order.servedBy;
-    const servedById = (servedByVal && typeof servedByVal === 'object') ? servedByVal._id : servedByVal;
-
-    if (servedById) {
-      const serverUser = users.find(u => u._id === servedById);
-      if (serverUser) serverName = serverUser.name;
-      else if (user?._id === servedById) serverName = user.name;
-    } else {
-      serverName = user?.name || 'Staff';
-    }
-
-    // Determine Final Calculation Values
-    // If overrides.vatEnabled is actively false, force 0 tax.
-    // Otherwise trust the order.tax (or backend value)
-    const isVatEnabled = overrides.vatEnabled !== undefined ? overrides.vatEnabled : true;
-
-    // Base values
-    // Recalculate to enforce 4% rule strictly matching frontend 
-    let displaySubtotal = order.subtotal;
-    if ((!displaySubtotal || displaySubtotal === 0) && order.items && Array.isArray(order.items)) {
-      displaySubtotal = order.items.reduce((sum, item) => sum + ((item.price || 0) * (item.quantity || 1)), 0);
-    }
-    displaySubtotal = displaySubtotal || 0;
-
-    const displayTax = isVatEnabled ? displaySubtotal * 0.04 : 0.00;
-    const displayDiscount = order.discount || 0;
-    const displayTip = order.tip || 0;
-    const displayTotal = displaySubtotal + displayTax - displayDiscount + displayTip;
-
-    // Calculate totals for receipt
-    const receiptContent = `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title>Receipt</title>
-          <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <style>
-            @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-            
-            * {
-              margin: 0;
-              padding: 0;
-              box-sizing: border-box;
-            }
-            
-            @page { 
-              size: 80mm auto; 
-              margin: 0mm; 
-            }
-            
-            body { 
-              font-family: 'Inter', sans-serif;
-              margin: 0 auto;
-              padding: 10px;
-              color: #000;
-              font-size: 13px;
-              width: 80mm;
-              max-width: 80mm;
-              line-height: 1.4;
-            }
-            
-            .header { 
-              text-align: center; 
-              margin-bottom: 5px; 
-            }
-            
-            .restaurant-name { 
-              font-size: 18px; 
-              font-weight: 700; 
-              margin-bottom: 2px;
-            }
-
-            .restaurant-subtitle {
-              font-size: 16px;
-              font-weight: 600;
-              margin-bottom: 5px;
-            }
-            
-            .phones {
-              font-size: 12px;
-              margin-bottom: 5px;
-              text-align: center;
-            }
-            
-            .dashed-line {
-              border-top: 1px dashed #000;
-              margin: 5px 0;
-              width: 100%;
-            }
-            
-            .info-section {
-              margin: 5px 0;
-            }
-
-            .info-row {
-              display: flex;
-              margin-bottom: 2px;
-              font-size: 13px;
-            }
-            
-            .info-label {
-              width: 120px;
-              font-weight: 500;
-            }
-
-            .info-value {
-              flex: 1;
-              font-weight: 500;
-              text-align: left;
-            }
-            
-            .items-table {
-              width: 100%;
-              border-collapse: collapse;
-              margin: 5px 0;
-            }
-            
-            .items-table th {
-              text-align: left;
-              padding: 5px 0;
-              font-weight: 600;
-              font-size: 13px;
-            }
-            
-            .items-table td {
-              padding: 5px 0;
-              vertical-align: top;
-              font-size: 13px;
-            }
-            
-            /* Column Widths matching 'Item.' and 'No.' */
-            .col-item { 
-              width: 85%; 
-              text-align: left;
-            }
-            
-            .col-no { 
-              width: 15%; 
-              text-align: center; 
-            }
-            
-            .totals {
-              margin-top: 10px;
-              padding-top: 5px;
-            }
-            
-            /* If user wants totals, remove display:none above. 
-               For "Kitchen Receipt Order", totals are usually not needed, 
-               and the provided image implies a simple list. 
-               However, I'll keep the footer text. */
-            
-            .footer {
-              text-align: center;
-              font-size: 12px;
-              margin-top: 15px;
-              font-weight: 500;
-            }
-            
-            .powered-by {
-              font-size: 10px;
-              color: #666;
-              margin-top: 5px;
-            }
-
-            @media print {
-              body {
-                width: 80mm !important;
-              }
-            }
-          </style>
-        </head>
-        <body>
-          <div class="header">
-            <div class="restaurant-name">Mamma Africa</div>
-            <div class="restaurant-subtitle">Restaurant</div>
-            <div class="phones">
-              ZAAD: 515735 - SAHAL: 523080<br>
-              E-DAHAB:742298 - MyCash:931539
-            </div>
-          </div>
-          
-          <div class="dashed-line"></div>
-          
-          <div class="info-section">
-            <div class="info-row">
-              <span class="info-label">Receipt Number :</span>
-              <span class="info-value">${(order.orderNumber || '').split('-').pop() || '0001'}</span>
-            </div>
-            <div class="info-row">
-              <span class="info-label">Served By :</span>
-              <span class="info-value">${serverName}</span>
-            </div>
-            <div class="info-row">
-              <span class="info-label">Customer :</span>
-              <span class="info-value">${selectedCustomer ? customers.find(c => c._id === selectedCustomer)?.name : 'Walking Customer'}</span>
-            </div>
-            <div class="info-row">
-              <span class="info-label">Date :</span>
-              <span class="info-value">${formattedDate}</span>
-            </div>
-          </div>
-
-          <div class="dashed-line"></div>
-
-          <table class="items-table">
-            <thead>
-              <tr>
-                <th class="col-item">Item.</th>
-                <th class="col-no">No.</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${order.items.map((item) => {
-      let itemName = item.name ||
-        item.product?.name ||
-        item.product?.product?.name ||
-        (item.product && typeof item.product === 'string' ? productNameMap[item.product] : null) ||
-        (item.product?._id ? productNameMap[item.product._id] : null) ||
-        'Item';
-      const itemQuantity = item.quantity || 1;
-      return `
-                  <tr>
-                    <td class="col-item">${itemName}</td>
-                    <td class="col-no">${itemQuantity}</td>
-                  </tr>
-                `;
-    }).join('')}
-            </tbody>
-          </table>
-
-          <div class="dashed-line"></div>
-
-          <div class="totals">
-            <div class="info-row">
-              <span class="info-label">Subtotal:</span>
-              <span class="info-value">$${displaySubtotal.toFixed(2)}</span>
-            </div>
-            <div class="info-row">
-              <span class="info-label">VAT @ ${isVatEnabled ? vatPercentage : 0}%:</span>
-              <span class="info-value">$${displayTax.toFixed(2)}</span>
-            </div>
-            ${displayDiscount > 0 ? `
-            <div class="info-row">
-              <span class="info-label">Discount:</span>
-              <span class="info-value">-$${displayDiscount.toFixed(2)}</span>
-            </div>` : ''}
-            <div class="info-row" style="font-size: 16px; font-weight: 700; border-top: 1px solid #000; margin-top: 5px; padding-top: 5px;">
-              <span class="info-label">TOTAL:</span>
-              <span class="info-value">$${displayTotal.toFixed(2)}</span>
-            </div>
-          </div>
-           
-          <div class="footer">
-            <!-- <div>Thank you for visiting us!</div> -->
-            <!-- <div class="powered-by">POWERED BY HUDI POS</div> -->
-          </div>
-
-          <script>
-            window.onload = function() {
-              setTimeout(() => {
-                window.onafterprint = function() {
-                  window.close();
-                };
-                window.print();
-                // Fallback for some browsers
-                setTimeout(() => window.close(), 2000);
-              }, 500);
-            };
-          </script>
-        </body>
-      </html>
-    `;
-
-    printWindow.document.write(receiptContent);
-    printWindow.document.close();
   };
 
   const clearCart = () => {
@@ -594,110 +276,114 @@ const POS = () => {
     setTipAmount(0);
   };
 
-  // Format date and time
-  const formatTime = (date) => {
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const printReceipt = (order, items, overrides) => {
+    const printWindow = window.open('', '_blank', 'width=450,height=600');
+    if (!printWindow) return;
+    
+    // Minimal receipt logic for speed - can be expanded as needed
+    const content = `
+      <html>
+        <body style="font-family: monospace; width: 80mm; padding: 10px;">
+          <h2 style="text-align:center">Mamma Africa</h2>
+          <hr/>
+          <p>Order: ${(order.orderNumber || 'New').split('-').pop()}</p>
+          <p>Table: ${order.tableNumber || 'N/A'}</p>
+          <hr/>
+          ${items.map(i => `<div style="display:flex; justify-content:between"><span>${i.quantity}x ${i.name}</span> <span>$${(i.price * i.quantity).toFixed(2)}</span></div>`).join('')}
+          <hr/>
+          <p><b>Total: $${(order.finalTotal || order.totalAmount || 0).toFixed(2)}</b></p>
+          <script>window.onload = () => { window.print(); window.close(); }</script>
+        </body>
+      </html>
+    `;
+    printWindow.document.write(content);
+    printWindow.document.close();
   };
 
-  const formatDate = (date) => {
-    return date.toLocaleDateString('en-US', {
-      weekday: 'short',
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric'
-    });
-  };
+  const formatTime = (d) => d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const formatDate = (d) => d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
 
   return (
-    <div className="pos-fullscreen-container">
-      {/* HEADER SECTION - UPDATED TO MATCH REFERENCE */}
-      <div className="pos-header-bar">
-        <div className="pos-branding">
-          <div className="pos-logo-text">POS</div>
-        </div>
-
-        <div className="pos-header-actions">
-          <div className="pos-header-tab" onClick={() => navigate('/orders')}>
-            <span>Orders</span>
+    <div className="pos-fullscreen-container flex flex-col h-screen bg-gray-50 overflow-hidden">
+      {updateOrderId && (
+        <div className="bg-blue-600 text-white py-1.5 px-4 text-center text-xs font-bold flex justify-between items-center shadow-md z-[100]">
+          <div className="flex items-center gap-2">
+            <Clock size={14} className="animate-pulse" />
+            <span>EDITING ORDER: {updatingOrder?.orderNumber || 'Loading...'}</span>
           </div>
+          <button onClick={() => navigate('/orders')} className="bg-white/20 hover:bg-white/30 px-3 py-1 rounded-md transition-colors border border-white/20">Cancel Edit</button>
+        </div>
+      )}
 
-          <div className="pos-search-wrapper">
-            <Search size={18} className="text-gray-400" />
-            <input
-              type="text"
-              placeholder="Search by Name or Barcode"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
+      {/* Header */}
+      <div className="bg-white border-b border-gray-200 px-4 py-2 flex items-center justify-between shadow-sm flex-shrink-0">
+        <div className="flex items-center gap-6">
+          <div className="bg-blue-600 text-white px-3 py-1 rounded-lg font-bold">POS</div>
+          <div className="flex gap-4">
+             <button onClick={() => navigate('/orders')} className="text-gray-600 hover:text-blue-600 font-medium text-sm transition-colors">Orders</button>
+             <button onClick={() => navigate('/inventory')} className="text-gray-600 hover:text-blue-600 font-medium text-sm transition-colors">Inventory</button>
           </div>
         </div>
+        
+        <div className="flex-1 max-w-md mx-8 relative">
+           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+           <input 
+             value={searchQuery}
+             onChange={e => setSearchQuery(e.target.value)}
+             placeholder="Search items..."
+             className="w-full bg-gray-100 border-none rounded-full pl-10 pr-4 py-2 text-sm focus:ring-2 focus:ring-blue-500/20 outline-none"
+           />
+        </div>
 
-        <div className="pos-header-info">
-          <div className="pos-user-display">
-            <User size={18} />
-            <span>{user?.name || 'Cashier'}</span>
-          </div>
-          <div className="pos-time-display">
-            <span>{formatDate(currentDateTime)} {formatTime(currentDateTime)}</span>
-          </div>
+        <div className="flex items-center gap-4 text-sm text-gray-500">
+           <div className="flex items-center gap-2">
+              <User size={16} />
+              <span>{user?.name || 'Staff'}</span>
+           </div>
+           <div className="font-mono">{formatDate(currentDateTime)} {formatTime(currentDateTime)}</div>
         </div>
       </div>
 
-      {/* MAIN CONTENT AREA */}
-      <div className="pos-main-content">
-        {/* LEFT SIDE - PRODUCTS */}
-        <div className="pos-products-section">
-          {/* CATEGORY TABS */}
-          <div className="pos-categories">
-            {categories.map((category, index) => (
-              <button
-                key={index}
-                className={`pos-category-tab ${selectedCategory === category ? 'active' : ''}`}
-                onClick={() => setSelectedCategory(category)}
+      {/* Main Grid */}
+      <div className="flex-1 flex overflow-hidden">
+        {/* Left: Categories & Products */}
+        <div className="flex-1 flex flex-col min-w-0 bg-white">
+          <div className="flex gap-2 p-4 overflow-x-auto border-b border-gray-100 no-scrollbar">
+            {categories.map(c => (
+              <button 
+                key={c}
+                onClick={() => setSelectedCategory(c)}
+                className={`px-4 py-2 rounded-full text-xs font-semibold whitespace-nowrap transition-all ${selectedCategory === c ? 'bg-blue-600 text-white shadow-md' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
               >
-                {category}
+                {c}
               </button>
             ))}
           </div>
 
-          {/* PRODUCTS GRID */}
-          <div className="pos-products-grid">
-            {filteredProducts.map((product) => {
-              const backendUrl = API_CONFIG.BACKEND_URL;
-              let imageUrl = product.image || '';
-
-              if (imageUrl && !imageUrl.startsWith('http')) {
-                imageUrl = `${backendUrl}${imageUrl}`;
-              } else if (!imageUrl) {
-                imageUrl = '';
-              }
-
-              return (
-                <div
-                  key={product._id}
-                  className="pos-product-card"
-                  onClick={() => addToCart(product)}
-                >
-                  {imageUrl && (
-                    <div style={{ width: '100%', height: '140px', marginBottom: '8px', overflow: 'hidden', borderRadius: '4px', flexShrink: 0 }}>
-                      <img
-                        src={imageUrl}
-                        alt={product.name}
-                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                        onError={(e) => e.target.style.display = 'none'}
-                      />
-                    </div>
-                  )}
-                  <div className="pos-product-name">{product.name}</div>
-                  <div className="pos-product-price">${product.price.toFixed(2)}</div>
+          <div className="flex-1 overflow-y-auto p-4 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5 gap-4 content-start bg-gray-50/30">
+            {filteredProducts.map(p => (
+              <div 
+                key={p._id}
+                onClick={() => addToCart(p)}
+                className="bg-white rounded-xl border border-gray-200 p-2 cursor-pointer hover:shadow-lg hover:border-blue-300 transition-all group flex flex-col h-48"
+              >
+                <div className="aspect-square rounded-lg bg-gray-100 mb-2 overflow-hidden flex-shrink-0 h-28">
+                   <img 
+                      src={p.image ? (p.image.startsWith('http') ? p.image : `${API_CONFIG.BACKEND_URL}${p.image}`) : ''} 
+                      onError={e => e.target.style.display = 'none'}
+                      alt="" 
+                      className="w-full h-full object-cover transition-transform group-hover:scale-110"
+                   />
                 </div>
-              );
-            })}
+                <div className="font-bold text-xs text-gray-800 line-clamp-2 leading-tight mb-1">{p.name}</div>
+                <div className="mt-auto text-blue-600 font-black text-sm">${p.price.toFixed(2)}</div>
+              </div>
+            ))}
           </div>
         </div>
 
-        {/* RIGHT SIDE - CART & CONTROLS */}
-        <div className="pos-cart-section" style={{ padding: 0, backgroundColor: 'transparent' }}>
+        {/* Right: Cart */}
+        <div className="w-[400px] bg-white border-l border-gray-200 flex flex-col shadow-xl z-10">
           <OrderCart
             cart={cart}
             onUpdateQuantity={updateQuantity}
@@ -707,15 +393,15 @@ const POS = () => {
             onOrderTypeChange={setOrderType}
             tableNumber={selectedTable}
             onTableNumberChange={setSelectedTable}
-            customer={customers.find(c => c._id === selectedCustomer)}
-            onPlaceOrder={handleCreateOrder}
+            onPlaceOrder={handleSubmitOrder}
             onClearCart={clearCart}
             vatEnabled={vatEnabled}
             setVatEnabled={setVatEnabled}
             users={users}
             customers={customers}
             tables={tables}
-            onCustomerChange={(cust) => setSelectedCustomer(cust?._id)}
+            onCustomerChange={(c) => setSelectedCustomer(c)}
+            updatingOrderId={updateOrderId}
           />
         </div>
       </div>
