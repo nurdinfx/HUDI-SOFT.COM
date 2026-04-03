@@ -110,7 +110,7 @@
         <Grid Grid.Row="1">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" MinWidth="300"/>    <!-- Products area (Left) -->
-                <ColumnDefinition Width="450" MinWidth="380"/>  <!-- Cart panel - responsive -->
+                <ColumnDefinition Width="500" MinWidth="450"/>  <!-- Cart panel - Increased for better proportion -->
             </Grid.ColumnDefinitions>
 
             <!-- ─── LEFT: Products ─── -->
@@ -214,36 +214,37 @@
                         <RowDefinition Height="Auto"/> <!-- Footer Controls -->
                     </Grid.RowDefinitions>
 
-                    <!-- Top Bar: Vat | Local | Sub | Total + Orders Button -->
-                    <Border Grid.Row="0" Background="#1A237E" Padding="20,15">
+                    <!-- Top Bar: Vat | Sub | Total + Orders Button (Redesigned for Professionalism) -->
+                    <Border Grid.Row="0" Background="#1A237E" Padding="20,12">
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
-                            <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Left">
-                                <StackPanel Margin="0,0,15,0">
-                                    <TextBlock Text="VAT" Foreground="#9FA8DA" FontSize="11" FontWeight="Bold"/>
-                                    <TextBlock Text="{Binding Vat, StringFormat='{}{0:N2}'}" Foreground="White" FontSize="16" FontWeight="Black"/>
+                            <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                                <StackPanel Margin="0,0,25,0">
+                                    <TextBlock Text="VAT" Foreground="#9FA8DA" FontSize="10" FontWeight="Bold" Margin="0,0,0,2"/>
+                                    <TextBlock Text="{Binding Vat, StringFormat='{}{0:N2}'}" Foreground="White" FontSize="15" FontWeight="Black"/>
                                 </StackPanel>
-                                <StackPanel Margin="0,0,15,0">
-                                    <TextBlock Text="SUB" Foreground="#9FA8DA" FontSize="11" FontWeight="Bold"/>
-                                    <TextBlock Text="{Binding Subtotal, StringFormat='{}{0:N2}'}" Foreground="White" FontSize="16" FontWeight="Black"/>
+                                <StackPanel Margin="0,0,25,0">
+                                    <TextBlock Text="SUBTOTAL" Foreground="#9FA8DA" FontSize="10" FontWeight="Bold" Margin="0,0,0,2"/>
+                                    <TextBlock Text="{Binding Subtotal, StringFormat='{}{0:N2}'}" Foreground="White" FontSize="15" FontWeight="Black"/>
                                 </StackPanel>
                                 <StackPanel>
-                                    <TextBlock Text="TOTAL" Foreground="#FFD54F" FontSize="12" FontWeight="Black"/>
-                                    <TextBlock Text="{Binding Total, StringFormat='${0:N2}'}" Foreground="#FFD54F" FontSize="28" FontWeight="Black"/>
+                                    <TextBlock Text="TOTAL DUE" Foreground="#FFD54F" FontSize="10" FontWeight="Black" Margin="0,0,0,2"/>
+                                    <TextBlock Text="{Binding Total, StringFormat='${0:N2}'}" Foreground="#FFD54F" FontSize="26" FontWeight="Black"/>
                                 </StackPanel>
                             </StackPanel>
 
                             <Button Grid.Column="1" Command="{Binding DataContext.NavigateToOrdersCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                    Background="#3F51B5" Foreground="White" BorderThickness="0"
-                                    Height="54" Padding="20,0" FontSize="16" FontWeight="Black"
-                                    materialDesign:ButtonAssist.CornerRadius="10"
-                                    Style="{StaticResource MaterialDesignRaisedButton}">
+                                    Style="{StaticResource MaterialDesignOutlinedButton}"
+                                    Foreground="White" BorderBrush="White" BorderThickness="1.5"
+                                    Height="40" Padding="15,0" FontSize="13" FontWeight="Black"
+                                    materialDesign:ButtonAssist.CornerRadius="8"
+                                    VerticalAlignment="Center">
                                 <StackPanel Orientation="Horizontal">
-                                    <materialDesign:PackIcon Kind="History" Width="20" Height="20" Margin="0,0,8,0" VerticalAlignment="Center"/>
-                                    <TextBlock Text="ORDERS"/>
+                                    <materialDesign:PackIcon Kind="History" Width="18" Height="18" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                    <TextBlock Text="VIEW ORDERS"/>
                                 </StackPanel>
                             </Button>
                         </Grid>
@@ -331,36 +332,36 @@
                         </ItemsControl>
                     </ScrollViewer>
 
-                    <!-- Footer Controls -->
-                    <Border Grid.Row="4" BorderBrush="#E0E0E0" BorderThickness="0,1,0,0" Padding="20">
+                    <!-- Footer Controls (Professional & Touch-Safe) -->
+                    <Border Grid.Row="4" BorderBrush="#E0E0E0" BorderThickness="0,1,0,0" Padding="15">
                         <StackPanel>
-                            <!-- Dropdown menus -->
-                            <Grid Margin="0,0,0,15">
+                            <!-- Dropdown menus (Slightly more compact but still touch-friendly) -->
+                            <Grid Margin="0,0,0,12">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="1.5*"/>
                                     <ColumnDefinition Width="*"/>
                                 </Grid.ColumnDefinitions>
                                 <ComboBox Grid.Column="0" ItemsSource="{Binding Rooms}" SelectedItem="{Binding SelectedRoom}"
-                                          Style="{StaticResource MaterialDesignOutlinedComboBox}" Height="54" Padding="15,0" FontSize="16" Margin="0,0,12,0"/>
+                                          Style="{StaticResource MaterialDesignOutlinedComboBox}" Height="50" Padding="12,0" FontSize="15" Margin="0,0,10,0"/>
 
                                 <ComboBox Grid.Column="1" ItemsSource="{Binding Tables}" SelectedItem="{Binding SelectedTable}"
-                                          Style="{StaticResource MaterialDesignOutlinedComboBox}" Height="54" Padding="15,0" FontSize="16"
+                                          Style="{StaticResource MaterialDesignOutlinedComboBox}" Height="50" Padding="12,0" FontSize="15"
                                           materialDesign:HintAssist.Hint="Table"/>
                             </Grid>
 
                             <ComboBox ItemsSource="{Binding Customers}" SelectedItem="{Binding SelectedCustomer}"
-                                      Style="{StaticResource MaterialDesignOutlinedComboBox}" Height="54" Padding="15,0" FontSize="16" Margin="0,0,0,15"
+                                      Style="{StaticResource MaterialDesignOutlinedComboBox}" Height="50" Padding="12,0" FontSize="15" Margin="0,0,0,12"
                                       materialDesign:HintAssist.Hint="Customer"/>
 
                             <ComboBox ItemsSource="{Binding Servers}" SelectedItem="{Binding SelectedServer}"
-                                      Style="{StaticResource MaterialDesignOutlinedComboBox}" Height="54" Padding="15,0" FontSize="16" Margin="0,0,0,15"
+                                      Style="{StaticResource MaterialDesignOutlinedComboBox}" Height="50" Padding="12,0" FontSize="15" Margin="0,0,0,12"
                                       materialDesign:HintAssist.Hint="Served By"/>
 
-                            <!-- Note/Ref Box -->
-                            <Border BorderBrush="#212121" BorderThickness="1" CornerRadius="8" Margin="0,0,0,20">
-                                <TextBox Height="54" BorderThickness="0" Background="Transparent"
-                                         FontSize="16" VerticalContentAlignment="Center" Padding="15,0"
-                                         materialDesign:HintAssist.Hint="Order Notes..."/>
+                            <!-- Note Box (Smaller height, same impact) -->
+                            <Border BorderBrush="#E0E0E0" BorderThickness="1" CornerRadius="8" Margin="0,0,0,15">
+                                <TextBox Height="44" BorderThickness="0" Background="Transparent"
+                                         FontSize="14" VerticalContentAlignment="Center" Padding="12,0"
+                                         materialDesign:HintAssist.Hint="Add order notes..."/>
                             </Border>
 
                             <!-- Action Buttons Grid -->
@@ -373,25 +374,25 @@
 
                                 <Button Grid.Column="0" Command="{Binding ClearCartCommand}"
                                         Background="#EF5350" Foreground="White" BorderThickness="0"
-                                        Height="70" Width="100" Content="CLEAR" FontWeight="Black" FontSize="16"
-                                        Style="{StaticResource MaterialDesignRaisedButton}" Margin="0,0,12,0"
-                                        materialDesign:ButtonAssist.CornerRadius="12"/>
+                                        Height="60" Width="90" Content="CLEAR" FontWeight="Black" FontSize="15"
+                                        Style="{StaticResource MaterialDesignRaisedButton}" Margin="0,0,10,0"
+                                        materialDesign:ButtonAssist.CornerRadius="10"/>
 
                                 <!-- Compact VAT toggle -->
-                                <StackPanel Grid.Column="1" Orientation="Vertical" VerticalAlignment="Center" Margin="0,0,20,0">
-                                    <TextBlock Text="VAT" FontSize="11" FontWeight="Black" HorizontalAlignment="Center" Margin="0,0,0,4"/>
+                                <StackPanel Grid.Column="1" Orientation="Vertical" VerticalAlignment="Center" Margin="5,0,15,0">
+                                    <TextBlock Text="VAT" FontSize="10" FontWeight="Black" HorizontalAlignment="Center" Margin="0,0,0,3"/>
                                     <ToggleButton IsChecked="{Binding IsVatEnabled, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" 
-                                                  Height="28" Width="48" Style="{StaticResource MaterialDesignSwitchToggleButton}"/>
+                                                  Height="24" Width="42" Style="{StaticResource MaterialDesignSwitchToggleButton}"/>
                                 </StackPanel>
 
                                 <Button Grid.Column="2" Command="{Binding CreateOrderCommand}"
                                         Background="#2E7D32" Foreground="White" BorderThickness="0"
-                                        Height="70" FontWeight="Black" FontSize="20"
+                                        Height="60" FontWeight="Black" FontSize="18"
                                         Style="{StaticResource MaterialDesignRaisedButton}"
-                                        materialDesign:ButtonAssist.CornerRadius="12">
+                                        materialDesign:ButtonAssist.CornerRadius="10">
                                     <StackPanel Orientation="Horizontal">
-                                        <materialDesign:PackIcon Kind="CheckCircle" Width="28" Height="28" Margin="0,0,12,0" VerticalAlignment="Center"/>
-                                        <TextBlock Text="CREATE ORDER" VerticalAlignment="Center"/>
+                                        <materialDesign:PackIcon Kind="CheckCircle" Width="24" Height="24" Margin="0,0,10,0" VerticalAlignment="Center"/>
+                                        <TextBlock Text="CONFIRM ORDER" VerticalAlignment="Center"/>
                                     </StackPanel>
                                 </Button>
                             </Grid>

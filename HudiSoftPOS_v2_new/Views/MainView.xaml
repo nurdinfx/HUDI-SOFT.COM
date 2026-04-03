@@ -16,7 +16,7 @@
         TextElement.FontFamily="{DynamicResource MaterialDesignFont}">
 
     <WindowChrome.WindowChrome>
-        <WindowChrome CaptionHeight="90" 
+        <WindowChrome CaptionHeight="64" 
                       CornerRadius="0" 
                       GlassFrameThickness="0" 
                       NonClientFrameEdges="None" 
@@ -74,7 +74,8 @@
                 <!-- Hamburger Menu (Touch Optimized) -->
                 <Button Grid.Column="0" Command="{Binding ToggleSidebarCommand}"
                         Style="{StaticResource MaterialDesignIconForegroundButton}"
-                        Foreground="White" Width="48" Height="48" Margin="0,0,10,0">
+                        Foreground="White" Width="48" Height="48" Margin="0,0,10,0"
+                        WindowChrome.IsHitTestVisibleInChrome="True">
                     <materialDesign:PackIcon Kind="Menu" Width="24" Height="24"/>
                 </Button>
 
@@ -84,34 +85,35 @@
                         <Image Source="pack://application:,,,/Assets/logo.jpg" Stretch="Uniform" Margin="4"/>
                     </Border>
                     <StackPanel VerticalAlignment="Center">
-                        <TextBlock Text="HUDI-SOFT" Foreground="White" FontSize="18" FontWeight="Black"/>
+                        <TextBlock Text="HUDI-SOFT" Foreground="White" FontSize="16" FontWeight="Black"/>
                         <Border Background="#4CAF50" CornerRadius="4" Padding="6,1" HorizontalAlignment="Left" Margin="0,1,0,0">
-                            <TextBlock Text="OFFLINE POS v2" Foreground="White" FontSize="9" FontWeight="Bold"/>
+                            <TextBlock Text="OFFLINE POS v2" Foreground="White" FontSize="8" FontWeight="Bold"/>
                         </Border>
                     </StackPanel>
                 </StackPanel>
 
                 <!-- Active Page Indicator -->
-                <TextBlock Grid.Column="2" Text="{Binding CurrentPageTitle}" Foreground="#42A5F5" FontSize="16" FontWeight="Bold" VerticalAlignment="Center" Margin="20,0,0,0"/>
+                <TextBlock Grid.Column="2" Text="{Binding CurrentPageTitle}" Foreground="#42A5F5" FontSize="15" FontWeight="Bold" VerticalAlignment="Center" Margin="20,0,0,0"/>
 
                 <!-- Status Info: User + Time -->
-                <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,20,0">
-                    <StackPanel VerticalAlignment="Center" Margin="0,0,20,0" Visibility="{Binding Path=ActualWidth, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource HideOnSmallWidthConverter}, ConverterParameter=1100}">
-                        <TextBlock Text="{Binding CurrentUserFullName}" Foreground="White" FontSize="14" FontWeight="Bold" HorizontalAlignment="Right"/>
-                        <TextBlock Text="{Binding CurrentUserRole}" Foreground="#888" FontSize="10" FontWeight="Bold" HorizontalAlignment="Right"/>
+                <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center" WindowChrome.IsHitTestVisibleInChrome="True">
+                    <StackPanel VerticalAlignment="Center" Margin="0,0,15,0" Visibility="{Binding Path=ActualWidth, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource HideOnSmallWidthConverter}, ConverterParameter=1100}">
+                        <TextBlock Text="{Binding CurrentUserFullName}" Foreground="White" FontSize="13" FontWeight="Bold" HorizontalAlignment="Right"/>
+                        <TextBlock Text="{Binding CurrentUserRole}" Foreground="#888" FontSize="9" FontWeight="Bold" HorizontalAlignment="Right"/>
                     </StackPanel>
-                    <TextBlock Text="{Binding CurrentTime}" Foreground="White" FontSize="20" FontWeight="Black" VerticalAlignment="Center" Margin="0,0,5,0"/>
+                    <TextBlock Text="{Binding CurrentTime}" Foreground="White" FontSize="18" FontWeight="Black" VerticalAlignment="Center" Margin="0,0,5,0"/>
                 </StackPanel>
 
                 <!-- Modern Logout Button -->
                 <Button Grid.Column="4" Command="{Binding LogoutCommand}"
                         Background="#EF5350" Foreground="White" BorderThickness="0"
-                        Height="40" Padding="20,0" FontSize="13" FontWeight="Black"
+                        Height="36" Padding="15,0" FontSize="12" FontWeight="Black"
                         materialDesign:ButtonAssist.CornerRadius="6"
                         Style="{StaticResource MaterialDesignRaisedButton}"
-                        Margin="0,0,15,0">
+                        Margin="15,0,10,0"
+                        WindowChrome.IsHitTestVisibleInChrome="True">
                     <StackPanel Orientation="Horizontal">
-                        <materialDesign:PackIcon Kind="Logout" Width="16" Height="16" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                        <materialDesign:PackIcon Kind="Logout" Width="14" Height="14" VerticalAlignment="Center" Margin="0,0,6,0"/>
                         <TextBlock Text="LOGOUT" VerticalAlignment="Center"/>
                     </StackPanel>
                 </Button>
