@@ -17,27 +17,39 @@ router.get('/device-id', async (req, res) => {
 });
 
 /**
- * Activate license - MongoDB Version
+ * Activate/Validate license - MongoDB Version (Supports Cloud Deployment)
  */
-router.post('/activate', async (req, res) => {
-    const { licenseKey } = req.body;
+router.post('/validate', async (req, res) => {
+    const { licenseKey, machineId: clientMachineId } = req.body;
 
     if (!licenseKey) {
         return res.status(400).json({ success: false, message: 'License key is required' });
     }
 
-    try {
-        const currentDeviceId = await machineId.machineId();
+    if (!clientMachineId) {
+        return res.status(400).json({ success: false, message: 'Device ID (machineId) is required' });
+    }
 
+    try {
         const startDate = new Date();
         const expiryDate = new Date();
         expiryDate.setFullYear(startDate.getFullYear() + 5);
 
-        await License.findOneAndUpdate(
-            { deviceId: currentDeviceId },
+        // Find if this license is already bound to another device
+        const existingLicense = await License.findOne({ licenseKey });
+        
+        if (existingLicense && existingLicense.deviceId && existingLicense.deviceId !== clientMachineId) {
+            return res.status(403).json({ 
+                success: false, 
+                message: 'This license key is already linked to another device. Please contact support.' 
+            });
+        }
+
+        const license = await License.findOneAndUpdate(
+            { licenseKey }, // Find by license key to bind it correctly
             { 
                 $set: { 
-                    licenseKey, 
+                    deviceId: clientMachineId, 
                     startDate, 
                     expiryDate, 
                     status: 'active', 
@@ -50,7 +62,8 @@ router.post('/activate', async (req, res) => {
         res.json({
             success: true,
             message: 'HUDI-SOFT Activated successfully! License valid for 5 years.',
-            expiryDate: expiryDate.toISOString()
+            expiryDate: expiryDate.toISOString(),
+            status: license.status
         });
     } catch (error) {
         console.error('Activation error:', error);
@@ -61,13 +74,18 @@ router.post('/activate', async (req, res) => {
 /**
  * Check license status - MongoDB Version
  */
-router.get('/status', async (req, res) => {
+router.post('/status', async (req, res) => {
+    const { machineId: clientMachineId } = req.body;
+    
+    if (!clientMachineId) {
+        return res.status(400).json({ success: false, message: 'Device ID (machineId) is required' });
+    }
+
     try {
-        const currentDeviceId = await machineId.machineId();
-        const license = await License.findOne({ deviceId: currentDeviceId });
+        const license = await License.findOne({ deviceId: clientMachineId });
 
         if (!license) {
-            return res.json({ success: false, message: 'Not activated', deviceId: currentDeviceId });
+            return res.json({ success: false, message: 'Not activated', deviceId: clientMachineId });
         }
 
         res.json({ success: true, license: license.toObject() });

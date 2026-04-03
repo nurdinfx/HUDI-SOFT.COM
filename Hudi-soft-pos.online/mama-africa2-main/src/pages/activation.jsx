@@ -39,12 +39,12 @@ const ActivationPage = () => {
 
         try {
             // Using the actual cloud licensing endpoint
-            const response = await axios.post(`${API_CONFIG.BACKEND_URL}/api/licenses/validate`, { 
+            const response = await axios.post(`${API_CONFIG.API_URL}/license/validate`, { 
                 licenseKey, 
                 machineId: deviceId 
             });
 
-            if (response.data.success || response.status === 200) {
+            if (response.data.success) {
                 localStorage.setItem('pos_license_key', licenseKey);
                 setStatus('activated');
                 setMessage('License activated successfully.');

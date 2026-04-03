@@ -61,8 +61,9 @@ const RequestDemo = () => {
                     {trialInfo ? (
                         <div className="space-y-6 text-left mb-8">
                             <p className="text-slate-600 text-center font-light">
-                                We've generated a 3-day free trial license for your {formData.systemType.split(' ')[2]}. 
-                                Download the system below and use this key to activate it.
+                                {formData.systemType === 'POS Online' 
+                                    ? "Your cloud trial is ready! Launch the system below and use this key to activate your account."
+                                    : `We've generated a 3-day free trial license for your ${formData.systemType.split(' ')[2]}. Download the system below and use this key to activate it.`}
                             </p>
                             
                             <div className="bg-slate-50 p-6 rounded-3xl border border-dashed border-blue-200">
@@ -76,17 +77,17 @@ const RequestDemo = () => {
                             <div className="flex flex-col gap-4">
                                 <a 
                                     href={formData.systemType === 'POS Online' 
-                                        ? `https://hudi-soft-com-m48c.vercel.app/activation?key=${trialInfo.licenseKey}` 
+                                        ? `https://hudi-pos-online.onrender.com/activation?key=${trialInfo.licenseKey}` 
                                         : trialInfo.downloadUrl}
                                     target={formData.systemType === 'POS Online' ? "_blank" : "_self"}
                                     rel="noopener noreferrer"
                                     className="w-full py-5 bg-blue-600 text-white rounded-2xl font-black text-center hover:bg-blue-700 transition-all shadow-xl shadow-blue-500/20"
                                 >
-                                    {formData.systemType === 'POS Online' ? 'Launch POS Online (Web App)' : 'Download System Installer'}
+                                    {formData.systemType === 'POS Online' ? 'Launch POS Online (PWA)' : 'Download System Installer'}
                                 </a>
-                                <p className="text-xs text-slate-400 text-center italic">
+                                <p className="text-xs text-slate-400 text-center italic leading-relaxed">
                                     {formData.systemType === 'POS Online' 
-                                        ? "Install the app on your home screen (PWA) for the best experience."
+                                        ? "💡 PRO TIP: For the best experience, click 'Add to Home Screen' in your browser to install the POS app on your device."
                                         : `Need help? Our team will still reach out to ${formData.phone} shortly.`}
                                 </p>
                             </div>
