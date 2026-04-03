@@ -2,8 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { Shield, Key, Smartphone, CheckCircle, AlertCircle } from 'lucide-react';
 import axios from 'axios';
 import { API_CONFIG } from '../config/api.config';
+import { useLocation } from 'react-router-dom';
 
 const ActivationPage = () => {
+    const location = useLocation();
     const [licenseKey, setLicenseKey] = useState('');
     const [deviceId, setDeviceId] = useState('');
     const [status, setStatus] = useState('checking'); // 'checking', 'unactivated', 'activated'
@@ -18,10 +20,17 @@ const ActivationPage = () => {
             } else {
                 setStatus('unactivated');
                 setDeviceId(Math.random().toString(36).substring(2, 10).toUpperCase());
+                
+                // Auto-fill from URL if present
+                const params = new URLSearchParams(location.search);
+                const keyFromUrl = params.get('key') || params.get('license');
+                if (keyFromUrl) {
+                    setLicenseKey(keyFromUrl.toUpperCase());
+                }
             }
         };
         checkStatus();
-    }, []);
+    }, [location.search]);
 
     const handleActivate = async (e) => {
         e.preventDefault();

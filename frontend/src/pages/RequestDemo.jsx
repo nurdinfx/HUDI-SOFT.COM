@@ -75,13 +75,19 @@ const RequestDemo = () => {
 
                             <div className="flex flex-col gap-4">
                                 <a 
-                                    href={trialInfo.downloadUrl}
+                                    href={formData.systemType === 'POS Online' 
+                                        ? `https://hudi-soft-com-m48c.vercel.app/activation?key=${trialInfo.licenseKey}` 
+                                        : trialInfo.downloadUrl}
+                                    target={formData.systemType === 'POS Online' ? "_blank" : "_self"}
+                                    rel="noopener noreferrer"
                                     className="w-full py-5 bg-blue-600 text-white rounded-2xl font-black text-center hover:bg-blue-700 transition-all shadow-xl shadow-blue-500/20"
                                 >
-                                    Download System Installer
+                                    {formData.systemType === 'POS Online' ? 'Launch POS Online (Web App)' : 'Download System Installer'}
                                 </a>
                                 <p className="text-xs text-slate-400 text-center italic">
-                                    Need help? Our team will still reach out to {formData.phone} shortly.
+                                    {formData.systemType === 'POS Online' 
+                                        ? "Install the app on your home screen (PWA) for the best experience."
+                                        : `Need help? Our team will still reach out to ${formData.phone} shortly.`}
                                 </p>
                             </div>
                         </div>

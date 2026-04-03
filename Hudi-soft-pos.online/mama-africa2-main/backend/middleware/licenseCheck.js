@@ -7,11 +7,9 @@ import machineId from 'node-machine-id';
  */
 export const licenseCheck = async (req, res, next) => {
     try {
-        // IMPORTANT: Render/Docker containers often cannot access hardware IDs.
-        // We bypass this check in production to ensure the app remains accessible.
-        if (process.env.NODE_ENV === 'production' || process.env.RENDER === 'true') {
-            return next();
-        }
+        // License check is now enforced for Cloud App (POS Online)
+        // Hardware IDs (machine-id) might be unreliable in some cloud environments,
+        // but it is still used for local/electron deployments.
 
         const currentDeviceId = await machineId.machineId();
 
