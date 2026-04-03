@@ -54,24 +54,26 @@
             <res:StringToUpperCaseConverter x:Key="StringToUpperCaseConverter"/>
 
             <!-- Global UI Rules (Touch Optimized) -->
-            <System:Double x:Key="PageTitleFontSize" xmlns:System="clr-namespace:System;assembly=mscorlib">36</System:Double>
-            <System:Double x:Key="SectionTitleFontSize" xmlns:System="clr-namespace:System;assembly=mscorlib">28</System:Double>
-            <System:Double x:Key="NormalFontSize" xmlns:System="clr-namespace:System;assembly=mscorlib">22</System:Double>
-            <System:Double x:Key="TableFontSize" xmlns:System="clr-namespace:System;assembly=mscorlib">20</System:Double>
-            <System:Double x:Key="InputFontSize" xmlns:System="clr-namespace:System;assembly=mscorlib">24</System:Double>
+            <System:Double x:Key="PageTitleFontSize" xmlns:System="clr-namespace:System;assembly=mscorlib">42</System:Double>
+            <System:Double x:Key="SectionTitleFontSize" xmlns:System="clr-namespace:System;assembly=mscorlib">32</System:Double>
+            <System:Double x:Key="NormalFontSize" xmlns:System="clr-namespace:System;assembly=mscorlib">24</System:Double>
+            <System:Double x:Key="TableFontSize" xmlns:System="clr-namespace:System;assembly=mscorlib">22</System:Double>
+            <System:Double x:Key="InputFontSize" xmlns:System="clr-namespace:System;assembly=mscorlib">26</System:Double>
             <System:Double x:Key="ButtonFontSize" xmlns:System="clr-namespace:System;assembly=mscorlib">24</System:Double>
-            <System:Double x:Key="TotalFontSize" xmlns:System="clr-namespace:System;assembly=mscorlib">44</System:Double>
+            <System:Double x:Key="TotalFontSize" xmlns:System="clr-namespace:System;assembly=mscorlib">54</System:Double>
             
-            <System:Double x:Key="MainActionBtnHeight" xmlns:System="clr-namespace:System;assembly=mscorlib">120</System:Double>
-            <System:Double x:Key="SecondaryBtnHeight" xmlns:System="clr-namespace:System;assembly=mscorlib">90</System:Double>
-            <System:Double x:Key="SidebarBtnHeight" xmlns:System="clr-namespace:System;assembly=mscorlib">80</System:Double>
+            <System:Double x:Key="MainActionBtnHeight" xmlns:System="clr-namespace:System;assembly=mscorlib">140</System:Double>
+            <System:Double x:Key="SecondaryBtnHeight" xmlns:System="clr-namespace:System;assembly=mscorlib">100</System:Double>
+            <System:Double x:Key="SidebarBtnHeight" xmlns:System="clr-namespace:System;assembly=mscorlib">90</System:Double>
+            <System:Double x:Key="TouchFriendlyHeight" xmlns:System="clr-namespace:System;assembly=mscorlib">54</System:Double>
 
             <!-- Global Button Style -->
             <Style x:Key="BrandButtonStyle" TargetType="Button" BasedOn="{StaticResource MaterialDesignFlatButton}">
-                <Setter Property="FontWeight" Value="Bold"/>
+                <Setter Property="FontWeight" Value="Black"/>
                 <Setter Property="FontSize" Value="{StaticResource ButtonFontSize}"/>
-                <Setter Property="Height" Value="{StaticResource MainActionBtnHeight}"/>
-                <Setter Property="materialDesign:ButtonAssist.CornerRadius" Value="12"/>
+                <Setter Property="Height" Value="{StaticResource TouchFriendlyHeight}"/>
+                <Setter Property="materialDesign:ButtonAssist.CornerRadius" Value="10"/>
+                <Setter Property="Padding" Value="20,0"/>
             </Style>
 
             <DataTemplate DataType="{x:Type vm:DashboardViewModel}">

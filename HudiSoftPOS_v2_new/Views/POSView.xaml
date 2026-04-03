@@ -18,11 +18,11 @@
             <Setter Property="Foreground" Value="#212121"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="BorderBrush" Value="#E0E0E0"/>
-            <Setter Property="FontSize" Value="12"/>
-            <Setter Property="FontWeight" Value="Bold"/>
-            <Setter Property="Height" Value="36"/>
-            <Setter Property="Padding" Value="16,0"/>
-            <Setter Property="Margin" Value="0,0,10,0"/>
+            <Setter Property="FontSize" Value="16"/>
+            <Setter Property="FontWeight" Value="Black"/>
+            <Setter Property="Height" Value="54"/>
+            <Setter Property="Padding" Value="24,0"/>
+            <Setter Property="Margin" Value="0,0,12,0"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Template">
                 <Setter.Value>
@@ -30,15 +30,15 @@
                         <Border x:Name="bg" Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="4"
+                                CornerRadius="8"
                                 Padding="{TemplateBinding Padding}">
                             <ContentPresenter VerticalAlignment="Center" HorizontalAlignment="Center"/>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsChecked" Value="True">
-                                <Setter TargetName="bg" Property="Background" Value="White"/>
+                                <Setter TargetName="bg" Property="Background" Value="#1565C0"/>
                                 <Setter TargetName="bg" Property="BorderBrush" Value="#1565C0"/>
-                                <Setter Property="Foreground" Value="#1565C0"/>
+                                <Setter Property="Foreground" Value="White"/>
                             </Trigger>
                             <Trigger Property="IsMouseOver" Value="True">
                                 <Setter TargetName="bg" Property="Background" Value="#F5F5F5"/>
@@ -152,10 +152,10 @@
                         </ItemsControl.ItemsPanel>
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
-                                <Button Width="110" Height="160" Margin="0,0,10,10"
+                                <Button Width="140" Height="200" Margin="0,0,15,15"
                                         Padding="0" BorderThickness="1"
                                         BorderBrush="#E0E0E0" Background="White"
-                                        materialDesign:ButtonAssist.CornerRadius="8"
+                                        materialDesign:ButtonAssist.CornerRadius="12"
                                         Command="{Binding DataContext.AddToCartCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                         CommandParameter="{Binding}"
                                         Cursor="Hand">
@@ -164,26 +164,27 @@
                                             <Border x:Name="card" Background="{TemplateBinding Background}"
                                                     BorderBrush="{TemplateBinding BorderBrush}"
                                                     BorderThickness="{TemplateBinding BorderThickness}"
-                                                    CornerRadius="8">
+                                                    CornerRadius="12"
+                                                    Effect="{DynamicResource MaterialDesignShadowDepth1}">
                                                 <Grid>
                                                     <Grid.RowDefinitions>
                                                         <RowDefinition Height="*"/>
                                                         <RowDefinition Height="Auto"/>
                                                     </Grid.RowDefinitions>
-                                                    <!-- Product Image / Placeholder (Matches Inventory Style) -->
-                                                    <Border Margin="8,8,8,4" Background="#F8FAFB" BorderBrush="#F5F5F5" BorderThickness="1" CornerRadius="8" ClipToBounds="True">
+                                                    <!-- Product Image -->
+                                                    <Border Margin="10,10,10,5" Background="#F8FAFB" CornerRadius="8" ClipToBounds="True">
                                                         <Grid>
-                                                            <materialDesign:PackIcon Kind="ImageOutline" Width="30" Height="30" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="#E0E0E0"
+                                                            <materialDesign:PackIcon Kind="ImageOutline" Width="40" Height="40" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="#E0E0E0"
                                                                                    Visibility="{Binding ImagePath, Converter={StaticResource InverseStringToVisibilityConverter}}"/>
                                                             <Image Source="{Binding ImagePath}" Stretch="UniformToFill" HorizontalAlignment="Center" VerticalAlignment="Center"
                                                                    Visibility="{Binding ImagePath, Converter={StaticResource StringToVisibilityConverter}}"/>
                                                         </Grid>
                                                     </Border>
-                                                    <StackPanel Grid.Row="1" Margin="8,0,8,12">
-                                                        <TextBlock Text="{Binding Name}" FontSize="12" FontWeight="Bold" Foreground="#212121"
-                                                                   HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap" MaxHeight="32"/>
-                                                        <TextBlock Text="{Binding Price, StringFormat='${0:N2}'}" FontSize="13" FontWeight="Black"
-                                                                   Foreground="#212121" HorizontalAlignment="Center" Margin="0,2,0,0"/>
+                                                    <StackPanel Grid.Row="1" Margin="10,0,10,15">
+                                                        <TextBlock Text="{Binding Name}" FontSize="14" FontWeight="Bold" Foreground="#212121"
+                                                                   HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap" MaxHeight="40"/>
+                                                        <TextBlock Text="{Binding Price, StringFormat='${0:N2}'}" FontSize="16" FontWeight="Black"
+                                                                   Foreground="#1565C0" HorizontalAlignment="Center" Margin="0,4,0,0"/>
                                                     </StackPanel>
                                                 </Grid>
                                             </Border>
@@ -214,37 +215,36 @@
                     </Grid.RowDefinitions>
 
                     <!-- Top Bar: Vat | Local | Sub | Total + Orders Button -->
-                    <Border Grid.Row="0" Background="#3F51B5" Padding="15,10">
+                    <Border Grid.Row="0" Background="#1A237E" Padding="20,15">
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
-                            <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Left" MaxWidth="300">
-                                <StackPanel Margin="0,0,10,0">
-                                    <TextBlock Text="Vat:" Foreground="#BBDEFB" FontSize="10" FontWeight="Bold"/>
-                                    <TextBlock Text="{Binding Vat, StringFormat='{}{0:N2}'}" Foreground="White" FontSize="13" FontWeight="Black"/>
+                            <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Left">
+                                <StackPanel Margin="0,0,15,0">
+                                    <TextBlock Text="VAT" Foreground="#9FA8DA" FontSize="11" FontWeight="Bold"/>
+                                    <TextBlock Text="{Binding Vat, StringFormat='{}{0:N2}'}" Foreground="White" FontSize="16" FontWeight="Black"/>
                                 </StackPanel>
-                                <StackPanel Margin="0,0,10,0">
-                                    <TextBlock Text="Local:" Foreground="#BBDEFB" FontSize="10" FontWeight="Bold"/>
-                                    <TextBlock Text="{Binding LocalAmount, StringFormat='{}{0:N0}'}" Foreground="White" FontSize="13" FontWeight="Black"/>
-                                </StackPanel>
-                                <StackPanel Margin="0,0,10,0">
-                                    <TextBlock Text="Sub:" Foreground="#BBDEFB" FontSize="10" FontWeight="Bold"/>
-                                    <TextBlock Text="{Binding Subtotal, StringFormat='{}{0:N2}'}" Foreground="White" FontSize="13" FontWeight="Black"/>
+                                <StackPanel Margin="0,0,15,0">
+                                    <TextBlock Text="SUB" Foreground="#9FA8DA" FontSize="11" FontWeight="Bold"/>
+                                    <TextBlock Text="{Binding Subtotal, StringFormat='{}{0:N2}'}" Foreground="White" FontSize="16" FontWeight="Black"/>
                                 </StackPanel>
                                 <StackPanel>
-                                    <TextBlock Text="Total:" Foreground="#BBDEFB" FontSize="10" FontWeight="Bold"/>
-                                    <TextBlock Text="{Binding Total, StringFormat='{}{0:N2}'}" Foreground="White" FontSize="13" FontWeight="Black"/>
+                                    <TextBlock Text="TOTAL" Foreground="#FFD54F" FontSize="12" FontWeight="Black"/>
+                                    <TextBlock Text="{Binding Total, StringFormat='${0:N2}'}" Foreground="#FFD54F" FontSize="28" FontWeight="Black"/>
                                 </StackPanel>
                             </StackPanel>
 
                             <Button Grid.Column="1" Command="{Binding DataContext.NavigateToOrdersCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                    Background="#1A237E" Foreground="White" BorderThickness="0"
-                                    Height="42" Width="80" FontSize="14" FontWeight="Bold"
-                                    materialDesign:ButtonAssist.CornerRadius="6"
+                                    Background="#3F51B5" Foreground="White" BorderThickness="0"
+                                    Height="54" Padding="20,0" FontSize="16" FontWeight="Black"
+                                    materialDesign:ButtonAssist.CornerRadius="10"
                                     Style="{StaticResource MaterialDesignRaisedButton}">
-                                <TextBlock Text="Orders"/>
+                                <StackPanel Orientation="Horizontal">
+                                    <materialDesign:PackIcon Kind="History" Width="20" Height="20" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                    <TextBlock Text="ORDERS"/>
+                                </StackPanel>
                             </Button>
                         </Grid>
                     </Border>
@@ -332,56 +332,35 @@
                     </ScrollViewer>
 
                     <!-- Footer Controls -->
-                    <Border Grid.Row="4" BorderBrush="#E0E0E0" BorderThickness="0,1,0,0" Padding="15">
+                    <Border Grid.Row="4" BorderBrush="#E0E0E0" BorderThickness="0,1,0,0" Padding="20">
                         <StackPanel>
-                            <!-- Dropdown menus: show on click, close when you click outside -->
-                            <Grid Margin="0,0,0,10">
+                            <!-- Dropdown menus -->
+                            <Grid Margin="0,0,0,15">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="1.5*"/>
                                     <ColumnDefinition Width="*"/>
                                 </Grid.ColumnDefinitions>
                                 <ComboBox Grid.Column="0" ItemsSource="{Binding Rooms}" SelectedItem="{Binding SelectedRoom}"
-                                          Style="{StaticResource MaterialDesignOutlinedComboBox}" Height="40" Padding="12,0" FontSize="13" Margin="0,0,10,0"
-                                          ToolTip="Dropdown: click to open, click outside to close"/>
+                                          Style="{StaticResource MaterialDesignOutlinedComboBox}" Height="54" Padding="15,0" FontSize="16" Margin="0,0,12,0"/>
 
                                 <ComboBox Grid.Column="1" ItemsSource="{Binding Tables}" SelectedItem="{Binding SelectedTable}"
-                                          Style="{StaticResource MaterialDesignOutlinedComboBox}" Height="40" Padding="12,0" FontSize="13"
-                                          materialDesign:HintAssist.Hint="Table: None"
-                                          ToolTip="Dropdown: click to open, click outside to close"/>
+                                          Style="{StaticResource MaterialDesignOutlinedComboBox}" Height="54" Padding="15,0" FontSize="16"
+                                          materialDesign:HintAssist.Hint="Table"/>
                             </Grid>
 
                             <ComboBox ItemsSource="{Binding Customers}" SelectedItem="{Binding SelectedCustomer}"
-                                      Style="{StaticResource MaterialDesignOutlinedComboBox}" Height="40" Padding="12,0" FontSize="13" Margin="0,0,0,10"
-                                      materialDesign:HintAssist.Hint="Customer"
-                                      ToolTip="Dropdown: click to open, click outside to close"/>
+                                      Style="{StaticResource MaterialDesignOutlinedComboBox}" Height="54" Padding="15,0" FontSize="16" Margin="0,0,0,15"
+                                      materialDesign:HintAssist.Hint="Customer"/>
 
                             <ComboBox ItemsSource="{Binding Servers}" SelectedItem="{Binding SelectedServer}"
-                                      Style="{StaticResource MaterialDesignOutlinedComboBox}" Height="40" Padding="12,0" FontSize="13" Margin="0,0,0,10"
-                                      materialDesign:HintAssist.Hint="Served By"
-                                      ToolTip="Dropdown: click to open, click outside to close"/>
-
-                            <!-- Toggle visibility: Discount section (show/hide on toggle) -->
-                            <Border Margin="0,0,0,10" Visibility="{Binding IsDiscountSectionVisible, Converter={StaticResource BoolToVis}}">
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto"/>
-                                        <ColumnDefinition Width="*"/>
-                                        <ColumnDefinition Width="Auto"/>
-                                    </Grid.ColumnDefinitions>
-                                    <TextBlock Text="Discount %" FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                                    <TextBox Grid.Column="1" Text="{Binding DiscountPercent, UpdateSourceTrigger=PropertyChanged}"
-                                             Height="36" Padding="8,0" FontSize="14" VerticalContentAlignment="Center"
-                                             materialDesign:HintAssist.Hint="e.g. 10 or 5.5"/>
-                                    <ToggleButton Grid.Column="2" IsChecked="{Binding IsDiscountPercent, Mode=TwoWay}"
-                                                  Content="%" Width="40" Height="28" Margin="8,0,0,0"
-                                                  ToolTip="Toggle: % or fixed amount"/>
-                                </Grid>
-                            </Border>
+                                      Style="{StaticResource MaterialDesignOutlinedComboBox}" Height="54" Padding="15,0" FontSize="16" Margin="0,0,0,15"
+                                      materialDesign:HintAssist.Hint="Served By"/>
 
                             <!-- Note/Ref Box -->
-                            <Border BorderBrush="#212121" BorderThickness="1" CornerRadius="4" Margin="0,0,0,12">
-                                <TextBox Height="36" BorderThickness="0" Background="Transparent"
-                                         FontSize="14" VerticalContentAlignment="Center" Padding="10,0"/>
+                            <Border BorderBrush="#212121" BorderThickness="1" CornerRadius="8" Margin="0,0,0,20">
+                                <TextBox Height="54" BorderThickness="0" Background="Transparent"
+                                         FontSize="16" VerticalContentAlignment="Center" Padding="15,0"
+                                         materialDesign:HintAssist.Hint="Order Notes..."/>
                             </Border>
 
                             <!-- Action Buttons Grid -->
@@ -389,36 +368,32 @@
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto"/> <!-- Clear -->
                                     <ColumnDefinition Width="Auto"/> <!-- VAT toggle -->
-                                    <ColumnDefinition Width="Auto"/> <!-- Discount visibility toggle -->
                                     <ColumnDefinition Width="*"/>    <!-- Create Order button -->
                                 </Grid.ColumnDefinitions>
 
                                 <Button Grid.Column="0" Command="{Binding ClearCartCommand}"
                                         Background="#EF5350" Foreground="White" BorderThickness="0"
-                                        Height="48" Width="85" Content="Clear" FontWeight="Black" FontSize="15"
-                                        Style="{StaticResource MaterialDesignRaisedButton}" Margin="0,0,8,0"
-                                        materialDesign:ButtonAssist.CornerRadius="8"/>
+                                        Height="70" Width="100" Content="CLEAR" FontWeight="Black" FontSize="16"
+                                        Style="{StaticResource MaterialDesignRaisedButton}" Margin="0,0,12,0"
+                                        materialDesign:ButtonAssist.CornerRadius="12"/>
 
-                                <!-- Toggle visibility: VAT on/off -->
-                                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,12,0" ToolTip="Toggle VAT">
-                                    <TextBlock Text="VAT" FontSize="12" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                <!-- Compact VAT toggle -->
+                                <StackPanel Grid.Column="1" Orientation="Vertical" VerticalAlignment="Center" Margin="0,0,20,0">
+                                    <TextBlock Text="VAT" FontSize="11" FontWeight="Black" HorizontalAlignment="Center" Margin="0,0,0,4"/>
                                     <ToggleButton IsChecked="{Binding IsVatEnabled, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" 
-                                                  Height="22" Width="38" Style="{StaticResource MaterialDesignSwitchToggleButton}"/>
+                                                  Height="28" Width="48" Style="{StaticResource MaterialDesignSwitchToggleButton}"/>
                                 </StackPanel>
 
-                                <!-- Toggle visibility: show/hide discount section on click -->
-                                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,12,0">
-                                    <TextBlock Text="Discount" FontSize="12" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                    <ToggleButton IsChecked="{Binding IsDiscountSectionVisible, Mode=TwoWay}"
-                                                  Height="22" Width="38" Style="{StaticResource MaterialDesignSwitchToggleButton}"
-                                                  ToolTip="Toggle visibility: show/hide discount %"/>
-                                </StackPanel>
-
-                                <Button Grid.Column="3" Command="{Binding CreateOrderCommand}"
-                                        Background="#1565C0" Foreground="White" BorderThickness="0"
-                                        Height="48" Content="Create Order" FontWeight="Bold" FontSize="14"
+                                <Button Grid.Column="2" Command="{Binding CreateOrderCommand}"
+                                        Background="#2E7D32" Foreground="White" BorderThickness="0"
+                                        Height="70" FontWeight="Black" FontSize="20"
                                         Style="{StaticResource MaterialDesignRaisedButton}"
-                                        materialDesign:ButtonAssist.CornerRadius="8"/>
+                                        materialDesign:ButtonAssist.CornerRadius="12">
+                                    <StackPanel Orientation="Horizontal">
+                                        <materialDesign:PackIcon Kind="CheckCircle" Width="28" Height="28" Margin="0,0,12,0" VerticalAlignment="Center"/>
+                                        <TextBlock Text="CREATE ORDER" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Button>
                             </Grid>
                         </StackPanel>
                     </Border>

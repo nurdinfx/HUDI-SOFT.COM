@@ -59,129 +59,101 @@
             <RowDefinition Height="*"/>    <!-- Body -->
         </Grid.RowDefinitions>
 
-        <!-- ═══════════════════ HEADER ═══════════════════ -->
-        <Border Grid.Row="0" Background="#1565C0" MouseLeftButtonDown="Header_MouseLeftButtonDown">
-            <Grid Height="90" Margin="10,0">
+        <!-- ═══════════════════ MODERN HEADER ═══════════════════ -->
+        <Border Grid.Row="0" Background="#121212" BorderBrush="#33FFFFFF" BorderThickness="0,0,0,1" MouseLeftButtonDown="Header_MouseLeftButtonDown">
+            <Grid Height="64" Margin="10,0">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/> <!-- Hamburger -->
                     <ColumnDefinition Width="Auto"/> <!-- Logo Area -->
-                    <ColumnDefinition Width="*"/>    <!-- Spacer -->
-                    <ColumnDefinition Width="Auto"/> <!-- Right info -->
+                    <ColumnDefinition Width="*"/>    <!-- Page Title / Spacer -->
+                    <ColumnDefinition Width="Auto"/> <!-- Right info (Time/Time) -->
                     <ColumnDefinition Width="Auto"/> <!-- Logout -->
-                    <ColumnDefinition Width="Auto"/> <!-- Window controls: Min, Max, Close -->
+                    <ColumnDefinition Width="Auto"/> <!-- Window controls -->
                 </Grid.ColumnDefinitions>
 
-                <!-- Hamburger Menu -->
+                <!-- Hamburger Menu (Touch Optimized) -->
                 <Button Grid.Column="0" Command="{Binding ToggleSidebarCommand}"
                         Style="{StaticResource MaterialDesignIconForegroundButton}"
-                        Foreground="White" Width="50" Height="50" Margin="5,0,10,0">
-                    <materialDesign:PackIcon Kind="Menu" Width="28" Height="28"/>
+                        Foreground="White" Width="48" Height="48" Margin="0,0,10,0">
+                    <materialDesign:PackIcon Kind="Menu" Width="24" Height="24"/>
                 </Button>
 
-                <!-- Logo + Dismissible subtitle -->
+                <!-- Modern Logo Branding -->
                 <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,30,0" Orientation="Horizontal">
-                    <Border Width="44" Height="44" CornerRadius="10" Background="White" Margin="0,0,12,0" VerticalAlignment="Center">
-                        <Image Source="pack://application:,,,/Assets/logo.jpg" Stretch="Uniform" Margin="5"/>
+                    <Border Width="36" Height="36" CornerRadius="8" Background="White" Margin="0,0,10,0" VerticalAlignment="Center">
+                        <Image Source="pack://application:,,,/Assets/logo.jpg" Stretch="Uniform" Margin="4"/>
                     </Border>
                     <StackPanel VerticalAlignment="Center">
-                        <TextBlock Text="HUDI-SOFT POS" Foreground="#BBDEFB" FontSize="11" FontWeight="Bold" Margin="0,0,0,-2"/>
-                        <TextBlock Text="HUDI-SOFT Business Suite" Foreground="White" FontSize="22" FontWeight="Black"/>
-                        <!-- Dismissible component: click X to hide -->
-                        <Border Background="#0D47A1" CornerRadius="4" Padding="8,4" HorizontalAlignment="Left" Margin="0,4,0,0"
-                                Visibility="{Binding IsHeaderSubtitleVisible, Converter={StaticResource BooleanToVisibilityConverter}}">
-                            <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="Xess Suite" Foreground="#BBDEFB" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center"/>
-                                <Button Command="{Binding DismissHeaderSubtitleCommand}" Width="24" Height="24" Margin="6,0,0,0"
-                                        Background="Transparent" BorderThickness="0" Cursor="Hand" ToolTip="Dismiss">
-                                    <Button.Template>
-                                        <ControlTemplate TargetType="Button">
-                                            <Border Background="{TemplateBinding Background}" CornerRadius="2">
-                                                <TextBlock Text="✕" FontSize="12" Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                            </Border>
-                                            <ControlTemplate.Triggers>
-                                                <Trigger Property="IsMouseOver" Value="True">
-                                                    <Setter Property="Background" Value="#1565C0"/>
-                                                </Trigger>
-                                            </ControlTemplate.Triggers>
-                                        </ControlTemplate>
-                                    </Button.Template>
-                                </Button>
-                            </StackPanel>
-                        </Border>
-                        <Border Background="#4CAF50" CornerRadius="4" Padding="6,1" HorizontalAlignment="Left" Margin="0,2,0,0">
-                            <TextBlock Text="ONLINE" Foreground="White" FontSize="9" FontWeight="Bold"/>
+                        <TextBlock Text="HUDI-SOFT" Foreground="White" FontSize="18" FontWeight="Black"/>
+                        <Border Background="#4CAF50" CornerRadius="4" Padding="6,1" HorizontalAlignment="Left" Margin="0,1,0,0">
+                            <TextBlock Text="OFFLINE POS v2" Foreground="White" FontSize="9" FontWeight="Bold"/>
                         </Border>
                     </StackPanel>
                 </StackPanel>
 
-                <!-- Current Page Title (center area) -->
-                <StackPanel Grid.Column="2" VerticalAlignment="Center" HorizontalAlignment="Left" Margin="20,0,0,0">
-                    <TextBlock Text="{Binding CurrentPageTitle}" Foreground="White" FontSize="16" FontWeight="Bold"/>
-                </StackPanel>
+                <!-- Active Page Indicator -->
+                <TextBlock Grid.Column="2" Text="{Binding CurrentPageTitle}" Foreground="#42A5F5" FontSize="16" FontWeight="Bold" VerticalAlignment="Center" Margin="20,0,0,0"/>
 
-                <!-- Right: Admin Info + Time -->
+                <!-- Status Info: User + Time -->
                 <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,20,0">
-                    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,0,20,0" Visibility="{Binding Path=ActualWidth, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource HideOnSmallWidthConverter}, ConverterParameter=1000}">
-                        <TextBlock Text="{Binding CurrentUserRole}" Foreground="#BBDEFB" FontSize="10" FontWeight="Bold" HorizontalAlignment="Right"/>
+                    <StackPanel VerticalAlignment="Center" Margin="0,0,20,0" Visibility="{Binding Path=ActualWidth, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource HideOnSmallWidthConverter}, ConverterParameter=1100}">
                         <TextBlock Text="{Binding CurrentUserFullName}" Foreground="White" FontSize="14" FontWeight="Bold" HorizontalAlignment="Right"/>
+                        <TextBlock Text="{Binding CurrentUserRole}" Foreground="#888" FontSize="10" FontWeight="Bold" HorizontalAlignment="Right"/>
                     </StackPanel>
-                    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,0,15,0">
-                        <TextBlock Text="{Binding CurrentDate}" Foreground="#BBDEFB" FontSize="10" FontWeight="Bold"/>
-                        <TextBlock Text="{Binding CurrentTime}" Foreground="White" FontSize="20" FontWeight="Black"/>
-                    </StackPanel>
+                    <TextBlock Text="{Binding CurrentTime}" Foreground="White" FontSize="20" FontWeight="Black" VerticalAlignment="Center" Margin="0,0,5,0"/>
                 </StackPanel>
 
-                <!-- Logout Button -->
+                <!-- Modern Logout Button -->
                 <Button Grid.Column="4" Command="{Binding LogoutCommand}"
-                        Background="White" Foreground="#1565C0" BorderThickness="0"
-                        Height="44" Padding="25,0" FontSize="14" FontWeight="Black"
-                        materialDesign:ButtonAssist.CornerRadius="8"
+                        Background="#EF5350" Foreground="White" BorderThickness="0"
+                        Height="40" Padding="20,0" FontSize="13" FontWeight="Black"
+                        materialDesign:ButtonAssist.CornerRadius="6"
                         Style="{StaticResource MaterialDesignRaisedButton}"
-                        Margin="0,0,10,0">
+                        Margin="0,0,15,0">
                     <StackPanel Orientation="Horizontal">
-                        <materialDesign:PackIcon Kind="Logout" Width="18" Height="18" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                        <materialDesign:PackIcon Kind="Logout" Width="16" Height="16" VerticalAlignment="Center" Margin="0,0,8,0"/>
                         <TextBlock Text="LOGOUT" VerticalAlignment="Center"/>
                     </StackPanel>
                 </Button>
 
-                <!-- Window controls: Minimize, Maximize, Close -->
+                <!-- Chrome-Style Window Controls -->
                 <StackPanel Grid.Column="5" Orientation="Horizontal" VerticalAlignment="Top" HorizontalAlignment="Right" WindowChrome.IsHitTestVisibleInChrome="True">
-                    <Button x:Name="BtnMinimize" Click="BtnMinimize_Click" Width="46" Height="32" Background="Transparent" BorderThickness="0" Cursor="Hand" ToolTip="Minimize">
+                    <Button x:Name="BtnMinimize" Click="BtnMinimize_Click" Width="46" Height="32" Background="Transparent" BorderThickness="0">
                         <Button.Template>
                             <ControlTemplate TargetType="Button">
-                                <Border Background="{TemplateBinding Background}" CornerRadius="0">
-                                    <materialDesign:PackIcon Kind="WindowMinimize" Width="18" Height="18" Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,0,0,8"/>
+                                <Border Background="{TemplateBinding Background}">
+                                    <Path Data="M0,0 L10,0" Stroke="White" StrokeThickness="1" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,4,0,0"/>
                                 </Border>
                                 <ControlTemplate.Triggers>
                                     <Trigger Property="IsMouseOver" Value="True">
-                                        <Setter Property="Background" Value="#20FFFFFF"/>
+                                        <Setter Property="Background" Value="#25FFFFFF"/>
                                     </Trigger>
                                 </ControlTemplate.Triggers>
                             </ControlTemplate>
                         </Button.Template>
                     </Button>
-                    <Button x:Name="BtnMaximize" Click="BtnMaximize_Click" Width="46" Height="32" Background="Transparent" BorderThickness="0" Cursor="Hand" ToolTip="Maximize">
+                    <Button x:Name="BtnMaximize" Click="BtnMaximize_Click" Width="46" Height="32" Background="Transparent" BorderThickness="0">
                         <Button.Template>
                             <ControlTemplate TargetType="Button">
-                                <Border Background="{TemplateBinding Background}" CornerRadius="0">
-                                    <materialDesign:PackIcon x:Name="MaxIcon" Kind="WindowMaximize" Width="16" Height="16" Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                <Border Background="{TemplateBinding Background}">
+                                    <Path x:Name="StateIcon" Data="M0,0 L10,0 L10,10 L0,10 Z" Stroke="White" StrokeThickness="1" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                 </Border>
                                 <ControlTemplate.Triggers>
                                     <Trigger Property="IsMouseOver" Value="True">
-                                        <Setter Property="Background" Value="#20FFFFFF"/>
+                                        <Setter Property="Background" Value="#25FFFFFF"/>
                                     </Trigger>
                                     <DataTrigger Binding="{Binding WindowState, RelativeSource={RelativeSource AncestorType=Window}}" Value="Maximized">
-                                        <Setter TargetName="MaxIcon" Property="Kind" Value="WindowRestore"/>
+                                        <Setter TargetName="StateIcon" Property="Data" Value="M2,2 L10,2 L10,10 L2,10 Z M0,0 L8,0 L8,8 L0,8 Z"/>
                                     </DataTrigger>
                                 </ControlTemplate.Triggers>
                             </ControlTemplate>
                         </Button.Template>
                     </Button>
-                    <Button x:Name="BtnClose" Click="BtnClose_Click" Width="46" Height="32" Background="Transparent" BorderThickness="0" Cursor="Hand" ToolTip="Close">
+                    <Button x:Name="BtnClose" Click="BtnClose_Click" Width="46" Height="32" Background="Transparent" BorderThickness="0">
                         <Button.Template>
                             <ControlTemplate TargetType="Button">
-                                <Border Background="{TemplateBinding Background}" CornerRadius="0">
-                                    <materialDesign:PackIcon Kind="WindowClose" Width="18" Height="18" Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                <Border Background="{TemplateBinding Background}">
+                                    <Path Data="M0,0 L10,10 M0,10 L10,0" Stroke="White" StrokeThickness="1" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                                 </Border>
                                 <ControlTemplate.Triggers>
                                     <Trigger Property="IsMouseOver" Value="True">
