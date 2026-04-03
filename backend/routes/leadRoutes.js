@@ -23,9 +23,13 @@ router.post('/', async (req, res) => {
 
         let trialInfo = null;
         let productType = '';
-        if (systemType === 'POS Online') productType = 'POS_ONLINE';
-        else if (systemType === 'POS Desktop') productType = 'POS_OFFLINE';
-        else if (systemType === 'Inventory System') productType = 'HMS';
+        const lowerSystemType = systemType.toLowerCase();
+        
+        if (lowerSystemType.includes('pos online')) productType = 'POS_ONLINE';
+        else if (lowerSystemType.includes('pos desktop') || lowerSystemType.includes('pos offline')) productType = 'POS_OFFLINE';
+        else if (lowerSystemType.includes('inventory') || lowerSystemType.includes('hospital') || lowerSystemType.includes('hms')) productType = 'HMS';
+
+        console.log(`💡 Product Type resolved as: ${productType || 'NONE'}`);
 
         // Automatically generate a 3-day trial license for POS or HMS
         if (productType) {

@@ -24,7 +24,7 @@ const leadSchema = new mongoose.Schema({
     },
     systemType: {
         type: String,
-        enum: ['POS Online', 'POS Desktop', 'Inventory System', 'Existing Customer', 'Other'],
+        enum: ['POS Online', 'POS Desktop', 'Hospital Management System (HMS)', 'Inventory System', 'Existing Customer', 'Other'],
         required: true,
         trim: true,
         default: 'Other'
@@ -59,11 +59,10 @@ const leadSchema = new mongoose.Schema({
 });
 
 // Added pre-validate hook for deep debugging on Render
-leadSchema.pre('validate', function(next) {
+leadSchema.pre('validate', async function() {
     if (this.systemType) {
         console.log(`🔍 [PRE-VALIDATE] systemType: "${this.systemType}" (Length: ${this.systemType.length})`);
     }
-    next();
 });
 
 module.exports = mongoose.model('Lead', leadSchema);

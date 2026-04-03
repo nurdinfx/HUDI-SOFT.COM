@@ -159,11 +159,12 @@ const RequestDemo = () => {
                             <label className="text-xs font-black uppercase tracking-widest text-slate-400">Tell us about yourself.</label>
                             <div className="space-y-3">
                                 {[
-                                    { value: 'POS Online', label: 'I\'d like a POS Online consultation (Cloud App)' },
-                                    { value: 'POS Desktop', label: 'I\'d like a POS Offline consultation (Desktop App)' },
-                                    { value: 'Inventory System', label: 'I\'d like a Hospital System consultation' },
-                                    { value: 'Existing Customer', label: 'I\'m an existing customer' },
-                                    { value: 'Other', label: 'Other' }
+                                    { value: 'POS Online', label: 'Cloud POS - Access from anywhere (Cloud SaaS)' },
+                                    { value: 'POS Desktop', label: 'Desktop POS - Reliable offline performance (Desktop App)' },
+                                    { value: 'Hospital Management System (HMS)', label: 'Hospital Management System (HMS)' },
+                                    { value: 'Inventory System', label: 'Warehouse & Inventory Management' },
+                                    { value: 'Existing Customer', label: 'Support - I am an existing HUDI SOFT customer' },
+                                    { value: 'Other', label: 'Custom Enterprise Request' }
                                 ].map((option) => (
                                     <label key={option.value} className="flex items-center gap-4 p-4 bg-slate-50 rounded-2xl border border-slate-100 cursor-pointer hover:bg-slate-100 transition-colors">
                                         <input
