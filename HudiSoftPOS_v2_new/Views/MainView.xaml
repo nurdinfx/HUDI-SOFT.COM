@@ -16,7 +16,7 @@
         TextElement.FontFamily="{DynamicResource MaterialDesignFont}">
 
     <WindowChrome.WindowChrome>
-        <WindowChrome CaptionHeight="64" 
+        <WindowChrome CaptionHeight="0" 
                       CornerRadius="0" 
                       GlassFrameThickness="0" 
                       NonClientFrameEdges="None" 
@@ -60,7 +60,7 @@
         </Grid.RowDefinitions>
 
         <!-- ═══════════════════ MODERN HEADER ═══════════════════ -->
-        <Border Grid.Row="0" Background="#121212" BorderBrush="#33FFFFFF" BorderThickness="0,0,0,1" MouseLeftButtonDown="Header_MouseLeftButtonDown">
+        <Border Grid.Row="0" Background="#1565C0" BorderBrush="#33FFFFFF" BorderThickness="0,0,0,1" Panel.ZIndex="10" MouseLeftButtonDown="Header_MouseLeftButtonDown">
             <Grid Height="64" Margin="10,0">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/> <!-- Hamburger -->
@@ -87,7 +87,7 @@
                     <StackPanel VerticalAlignment="Center">
                         <TextBlock Text="HUDI-SOFT" Foreground="White" FontSize="16" FontWeight="Black"/>
                         <Border Background="#4CAF50" CornerRadius="4" Padding="6,1" HorizontalAlignment="Left" Margin="0,1,0,0">
-                            <TextBlock Text="OFFLINE POS v2" Foreground="White" FontSize="8" FontWeight="Bold"/>
+                            <TextBlock Text="Xara Suite" Foreground="White" FontSize="10" FontWeight="Black"/>
                         </Border>
                     </StackPanel>
                 </StackPanel>
@@ -180,7 +180,7 @@
             <ContentControl Grid.Column="1" Content="{Binding CurrentView}" Panel.ZIndex="0"/>
 
             <!-- Overlay: click blank area (right side) to close sidebar - covers content when sidebar open -->
-            <Button Grid.Column="1" Panel.ZIndex="10"
+            <Button Grid.Column="1" Panel.ZIndex="90"
                     Command="{Binding CloseSidebarCommand}"
                     Visibility="{Binding IsSidebarOpen, Converter={StaticResource BooleanToVisibilityConverter}}"
                     HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
@@ -195,7 +195,7 @@
             </Button>
 
             <!-- Sidebar (Top Layer) - larger width -->
-            <Border Grid.Column="0" Background="#1565C0" Width="320"
+            <Border Grid.Column="0" Background="#1A237E" Width="320" Panel.ZIndex="100"
                     Visibility="{Binding IsSidebarOpen, Converter={StaticResource BooleanToVisibilityConverter}}">
                 <Grid>
                     <Grid.RowDefinitions>
