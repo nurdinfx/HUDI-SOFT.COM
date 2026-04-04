@@ -11,7 +11,7 @@
         Icon="pack://application:,,,/Assets/logo.png"
         Height="720" Width="1280"
         MinWidth="1024" MinHeight="600"
-        WindowState="Maximized" WindowStyle="None" ResizeMode="CanResizeWithGrip"
+        WindowState="Maximized" WindowStyle="None" ResizeMode="CanResize"
         Background="#F4F6F8"
         TextElement.FontFamily="{DynamicResource MaterialDesignFont}">
 
@@ -19,8 +19,9 @@
         <WindowChrome CaptionHeight="0" 
                       CornerRadius="0" 
                       GlassFrameThickness="0" 
+                      UseAeroCaptionButtons="False"
                       NonClientFrameEdges="None" 
-                      ResizeBorderThickness="8" />
+                      ResizeBorderThickness="6" />
     </WindowChrome.WindowChrome>
 
     <Window.Resources>
@@ -75,10 +76,10 @@
                 <Rectangle Grid.ColumnSpan="6" Fill="Transparent" IsHitTestVisible="True" MouseLeftButtonDown="Header_MouseLeftButtonDown" Panel.ZIndex="0"/>
 
                 <!-- Hamburger Menu (Touch Optimized) -->
-                <Button Grid.Column="0" Command="{Binding ToggleSidebarCommand}" Panel.ZIndex="50"
+                <Button Grid.Column="0" Command="{Binding ToggleSidebarCommand}" Panel.ZIndex="999"
                         Style="{StaticResource MaterialDesignIconForegroundButton}"
                         Foreground="White" Width="48" Height="48" Margin="0,0,10,0"
-                        WindowChrome.IsHitTestVisibleInChrome="True">
+                        WindowChrome.IsHitTestVisibleInChrome="True" IsHitTestVisible="True">
                     <materialDesign:PackIcon Kind="Menu" Width="24" Height="24"/>
                 </Button>
 
