@@ -60,7 +60,7 @@
         </Grid.RowDefinitions>
 
         <!-- ═══════════════════ MODERN HEADER ═══════════════════ -->
-        <Border Grid.Row="0" Background="#1565C0" BorderBrush="#33FFFFFF" BorderThickness="0,0,0,1" Panel.ZIndex="10" MouseLeftButtonDown="Header_MouseLeftButtonDown">
+        <Border Grid.Row="0" Background="#1565C0" BorderBrush="#33FFFFFF" BorderThickness="0,0,0,1" Panel.ZIndex="10">
             <Grid Height="64" Margin="10,0">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/> <!-- Hamburger -->
@@ -70,9 +70,12 @@
                     <ColumnDefinition Width="Auto"/> <!-- Logout -->
                     <ColumnDefinition Width="Auto"/> <!-- Window controls -->
                 </Grid.ColumnDefinitions>
+                
+                <!-- Background Drag Handle: Separated from buttons to fix hit-testing -->
+                <Rectangle Grid.ColumnSpan="6" Fill="Transparent" IsHitTestVisible="True" MouseLeftButtonDown="Header_MouseLeftButtonDown" Panel.ZIndex="0"/>
 
                 <!-- Hamburger Menu (Touch Optimized) -->
-                <Button Grid.Column="0" Command="{Binding ToggleSidebarCommand}"
+                <Button Grid.Column="0" Command="{Binding ToggleSidebarCommand}" Panel.ZIndex="50"
                         Style="{StaticResource MaterialDesignIconForegroundButton}"
                         Foreground="White" Width="48" Height="48" Margin="0,0,10,0"
                         WindowChrome.IsHitTestVisibleInChrome="True">
@@ -80,7 +83,7 @@
                 </Button>
 
                 <!-- Modern Logo Branding -->
-                <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,30,0" Orientation="Horizontal">
+                <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,30,0" Orientation="Horizontal" Panel.ZIndex="50">
                     <Border Width="36" Height="36" CornerRadius="8" Background="White" Margin="0,0,10,0" VerticalAlignment="Center">
                         <Image Source="pack://application:,,,/Assets/logo.jpg" Stretch="Uniform" Margin="4"/>
                     </Border>
@@ -93,7 +96,7 @@
                 </StackPanel>
 
                 <!-- Active Page Indicator -->
-                <TextBlock Grid.Column="2" Text="{Binding CurrentPageTitle}" Foreground="#42A5F5" FontSize="15" FontWeight="Bold" VerticalAlignment="Center" Margin="20,0,0,0"/>
+                <TextBlock Grid.Column="2" Text="{Binding CurrentPageTitle}" Foreground="White" HorizontalAlignment="Center" FontSize="15" FontWeight="Bold" VerticalAlignment="Center" Panel.ZIndex="50"/>
 
                 <!-- Status Info: User + Time -->
                 <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center" WindowChrome.IsHitTestVisibleInChrome="True">
@@ -105,21 +108,21 @@
                 </StackPanel>
 
                 <!-- Modern Logout Button -->
-                <Button Grid.Column="4" Command="{Binding LogoutCommand}"
-                        Background="#EF5350" Foreground="White" BorderThickness="0"
+                <Button Grid.Column="4" Command="{Binding LogoutCommand}" Panel.ZIndex="50"
+                        Background="White" Foreground="#1565C0" BorderThickness="0"
                         Height="36" Padding="15,0" FontSize="12" FontWeight="Black"
                         materialDesign:ButtonAssist.CornerRadius="6"
-                        Style="{StaticResource MaterialDesignRaisedButton}"
+                        Style="{StaticResource MaterialDesignFlatMidButton}"
                         Margin="15,0,10,0"
                         WindowChrome.IsHitTestVisibleInChrome="True">
                     <StackPanel Orientation="Horizontal">
-                        <materialDesign:PackIcon Kind="Logout" Width="14" Height="14" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                        <TextBlock Text="LOGOUT" VerticalAlignment="Center"/>
+                        <materialDesign:PackIcon Kind="Logout" Width="14" Height="14" VerticalAlignment="Center" Margin="0,0,6,0" Foreground="#1565C0"/>
+                        <TextBlock Text="LOGOUT" VerticalAlignment="Center" Foreground="#1565C0"/>
                     </StackPanel>
                 </Button>
 
                 <!-- Chrome-Style Window Controls -->
-                <StackPanel Grid.Column="5" Orientation="Horizontal" VerticalAlignment="Top" HorizontalAlignment="Right" WindowChrome.IsHitTestVisibleInChrome="True">
+                <StackPanel Grid.Column="5" Orientation="Horizontal" VerticalAlignment="Top" HorizontalAlignment="Right" WindowChrome.IsHitTestVisibleInChrome="True" Panel.ZIndex="50">
                     <Button x:Name="BtnMinimize" Click="BtnMinimize_Click" Width="46" Height="32" Background="Transparent" BorderThickness="0">
                         <Button.Template>
                             <ControlTemplate TargetType="Button">
