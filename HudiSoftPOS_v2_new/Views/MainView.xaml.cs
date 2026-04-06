@@ -19,11 +19,6 @@ namespace HudiSoftPOS.Views
             catch { /* keep app running even if icon fails */ }
         }
 
-        private void Header_MouseLeftButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
-        {
-            if (e.ChangedButton == System.Windows.Input.MouseButton.Left)
-                this.DragMove();
-        }
 
         private void BtnMinimize_Click(object sender, RoutedEventArgs e)
         {

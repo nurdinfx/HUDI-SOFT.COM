@@ -16,9 +16,9 @@
         TextElement.FontFamily="{DynamicResource MaterialDesignFont}">
 
     <WindowChrome.WindowChrome>
-        <WindowChrome CaptionHeight="0" 
+        <WindowChrome CaptionHeight="64" 
                       CornerRadius="0" 
-                      GlassFrameThickness="0" 
+                      GlassFrameThickness="1" 
                       UseAeroCaptionButtons="False"
                       NonClientFrameEdges="None" 
                       ResizeBorderThickness="6" />
@@ -72,9 +72,7 @@
                     <ColumnDefinition Width="Auto"/> <!-- Window controls -->
                 </Grid.ColumnDefinitions>
                 
-                <!-- Background Drag Handle: Separated from buttons to fix hit-testing -->
-                <Rectangle Grid.ColumnSpan="6" Fill="Transparent" IsHitTestVisible="True" MouseLeftButtonDown="Header_MouseLeftButtonDown" Panel.ZIndex="0"/>
-
+                <!-- Background Drag Handle removed: WindowChrome.CaptionHeight="64" handles native dragging natively -->
                 <!-- Hamburger Menu (Touch Optimized) -->
                 <Button Grid.Column="0" Command="{Binding ToggleSidebarCommand}" Panel.ZIndex="999"
                         Style="{StaticResource MaterialDesignIconForegroundButton}"
@@ -113,7 +111,7 @@
                         Background="White" Foreground="#1565C0" BorderThickness="0"
                         Height="36" Padding="15,0" FontSize="12" FontWeight="Black"
                         materialDesign:ButtonAssist.CornerRadius="6"
-                        Style="{StaticResource MaterialDesignFlatMidButton}"
+                        Style="{StaticResource MaterialDesignFlatButton}"
                         Margin="15,0,10,0"
                         WindowChrome.IsHitTestVisibleInChrome="True">
                     <StackPanel Orientation="Horizontal">
