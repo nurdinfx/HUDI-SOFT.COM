@@ -1,12 +1,6 @@
 {
-  "buildCommand": "cd HUDI-SOFT.COM-main/DATEL-CARE && npm run build",
-  "installCommand": "cd HUDI-SOFT.COM-main/DATEL-CARE && npm install",
-  "outputDirectory": "HUDI-SOFT.COM-main/DATEL-CARE/.next",
-  "framework": "nextjs",
-  "rewrites": [
-    {
-      "source": "/api/:path*",
-      "destination": "https://hudi-hospital.onrender.com/api/:path*"
-    }
-  ]
+  "buildCommand": "cd HUDI-SOFT.COM-main/frontend && npm run build",
+  "installCommand": "cd HUDI-SOFT.COM-main/frontend && npm install",
+  "outputDirectory": "HUDI-SOFT.COM-main/frontend/dist",
+  "framework": "vite"
 }
