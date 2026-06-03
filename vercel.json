@@ -1,6 +1,6 @@
 {
-  "buildCommand": "cd HUDI-SOFT.COM-main/frontend && npm run build",
-  "installCommand": "cd HUDI-SOFT.COM-main/frontend && npm install",
-  "outputDirectory": "HUDI-SOFT.COM-main/frontend/dist",
+  "buildCommand": "cd frontend && npm run build",
+  "installCommand": "cd frontend && npm install",
+  "outputDirectory": "frontend/dist",
   "framework": "vite"
 }

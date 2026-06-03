@@ -1,12 +1,17 @@
 {
-  "buildCommand": "cd DATEL-CARE && npm run build",
-  "installCommand": "cd DATEL-CARE && npm install",
-  "outputDirectory": "DATEL-CARE/.next",
-  "framework": "nextjs",
-  "rewrites": [
+  "version": 2,
+  "builds": [
     {
-      "source": "/api/:path*",
-      "destination": "https://hudi-hospital.onrender.com/api/:path*"
+      "src": "HUDI-SOFT-HMS-main/package.json",
+      "use": "@vercel/next"
     }
-  ]
+  ],
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/HUDI-SOFT-HMS-main/$1" }
+  ],
+  "functions": {
+    "HUDI-SOFT-HMS-main/app/api/**/*.{js,ts}": {
+      "runtime": "@vercel/node"
+    }
+  }
 }
