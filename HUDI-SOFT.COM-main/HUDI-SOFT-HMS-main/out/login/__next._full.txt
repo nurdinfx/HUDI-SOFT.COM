@@ -1,0 +1,60 @@
+1:"$Sreact.fragment"
+2:I[89554,["/_next/static/chunks/cc97af17858eb09d.js","/_next/static/chunks/3328268e69046654.js","/_next/static/chunks/0c450b6206d1affa.js","/_next/static/chunks/27e08ea51c56477b.js"],"ThemeProvider"]
+3:I[91432,["/_next/static/chunks/cc97af17858eb09d.js","/_next/static/chunks/3328268e69046654.js","/_next/static/chunks/0c450b6206d1affa.js","/_next/static/chunks/27e08ea51c56477b.js"],"AuthProvider"]
+4:I[19053,["/_next/static/chunks/cc97af17858eb09d.js","/_next/static/chunks/3328268e69046654.js","/_next/static/chunks/0c450b6206d1affa.js","/_next/static/chunks/27e08ea51c56477b.js"],"LicenseGuard"]
+5:I[39756,["/_next/static/chunks/ff1a16fafef87110.js","/_next/static/chunks/202b956bc838ef27.js"],"default"]
+6:I[37457,["/_next/static/chunks/ff1a16fafef87110.js","/_next/static/chunks/202b956bc838ef27.js"],"default"]
+7:I[46696,["/_next/static/chunks/cc97af17858eb09d.js","/_next/static/chunks/3328268e69046654.js","/_next/static/chunks/0c450b6206d1affa.js","/_next/static/chunks/27e08ea51c56477b.js"],"Toaster"]
+8:I[92821,["/_next/static/chunks/cc97af17858eb09d.js","/_next/static/chunks/3328268e69046654.js","/_next/static/chunks/0c450b6206d1affa.js","/_next/static/chunks/27e08ea51c56477b.js"],"PwaInstallPrompt"]
+9:I[2355,["/_next/static/chunks/cc97af17858eb09d.js","/_next/static/chunks/3328268e69046654.js","/_next/static/chunks/0c450b6206d1affa.js","/_next/static/chunks/27e08ea51c56477b.js"],"Analytics"]
+e:I[68027,["/_next/static/chunks/ff1a16fafef87110.js","/_next/static/chunks/202b956bc838ef27.js"],"default"]
+:HL["/_next/static/chunks/6c4cfc7bbe9c9d4a.css","style"]
+:HL["/_next/static/chunks/038094c4502b81a0.css","style"]
+:HL["/_next/static/media/70bc3e132a0a741e-s.p.15008bfb.woff2","font",{"crossOrigin":"","type":"font/woff2"}]
+:HL["/_next/static/media/83afe278b6a6bb3c-s.p.3a6ba036.woff2","font",{"crossOrigin":"","type":"font/woff2"}]
+a:T55f,
+              if ('serviceWorker' in navigator) {
+                window.addEventListener('load', function() {
+                  navigator.serviceWorker.register('/sw.js').then(
+                    function(registration) {
+                      console.log('ServiceWorker registration successful with scope: ', registration.scope);
+                    },
+                    function(err) {
+                      console.log('ServiceWorker registration failed: ', err);
+                    }
+                  );
+                });
+
+                // Global suppression for MetaMask and other external extension errors
+                window.addEventListener('unhandledrejection', (event) => {
+                  const msg = event.reason?.message || String(event.reason || '');
+                  if (msg.includes('MetaMask') || msg.includes('inpage.js')) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                  }
+                });
+                window.addEventListener('error', (event) => {
+                  const msg = event.message || '';
+                  if (msg.includes('MetaMask') || (event.filename && event.filename.includes('inpage.js'))) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                  }
+                }, true);
+
+              }
+            0:{"P":null,"b":"MGdyyGV6QuQTboBbcj6nT","c":["","login"],"q":"","i":false,"f":[[["",{"children":["login",{"children":["__PAGE__",{}]}]},"$undefined","$undefined",true],[["$","$1","c",{"children":[[["$","link","0",{"rel":"stylesheet","href":"/_next/static/chunks/6c4cfc7bbe9c9d4a.css","precedence":"next","crossOrigin":"$undefined","nonce":"$undefined"}],["$","link","1",{"rel":"stylesheet","href":"/_next/static/chunks/038094c4502b81a0.css","precedence":"next","crossOrigin":"$undefined","nonce":"$undefined"}],["$","script","script-0",{"src":"/_next/static/chunks/cc97af17858eb09d.js","async":true,"nonce":"$undefined"}],["$","script","script-1",{"src":"/_next/static/chunks/3328268e69046654.js","async":true,"nonce":"$undefined"}],["$","script","script-2",{"src":"/_next/static/chunks/0c450b6206d1affa.js","async":true,"nonce":"$undefined"}],["$","script","script-3",{"src":"/_next/static/chunks/27e08ea51c56477b.js","async":true,"nonce":"$undefined"}]],["$","html",null,{"lang":"en","suppressHydrationWarning":true,"children":[["$","head",null,{"children":[["$","link",null,{"rel":"manifest","href":"/manifest.webmanifest"}],["$","meta",null,{"name":"apple-mobile-web-app-capable","content":"yes"}],["$","meta",null,{"name":"apple-mobile-web-app-status-bar-style","content":"black-translucent"}],["$","meta",null,{"name":"apple-mobile-web-app-title","content":"HUDI HMS"}],["$","meta",null,{"name":"mobile-web-app-capable","content":"yes"}],["$","link",null,{"rel":"apple-touch-icon","href":"/logo-192.png"}],["$","link",null,{"rel":"apple-touch-icon","sizes":"180x180","href":"/logo-192.png"}],["$","link",null,{"rel":"apple-touch-icon","sizes":"152x152","href":"/logo-192.png"}],["$","link",null,{"rel":"apple-touch-icon","sizes":"144x144","href":"/logo-144.png"}],["$","link",null,{"rel":"apple-touch-icon","sizes":"120x120","href":"/logo-144.png"}],["$","link",null,{"rel":"apple-touch-icon","sizes":"76x76","href":"/logo-144.png"}],["$","link",null,{"rel":"apple-touch-startup-image","href":"/logo-512.png"}],["$","meta",null,{"name":"viewport","content":"width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover"}],["$","meta",null,{"name":"theme-color","content":"#0d9488"}]]}],["$","body",null,{"className":"inter_5901b7c6-module__ec5Qua__variable jetbrains_mono_8d4dab2e-module__xz2qEq__variable font-sans antialiased","children":[["$","$L2",null,{"attribute":"class","defaultTheme":"light","enableSystem":true,"disableTransitionOnChange":true,"children":["$","$L3",null,{"children":[["$","$L4",null,{"children":["$","$L5",null,{"parallelRouterKey":"children","error":"$undefined","errorStyles":"$undefined","errorScripts":"$undefined","template":["$","$L6",null,{}],"templateStyles":"$undefined","templateScripts":"$undefined","notFound":[[["$","title",null,{"children":"404: This page could not be found."}],["$","div",null,{"style":{"fontFamily":"system-ui,\"Segoe UI\",Roboto,Helvetica,Arial,sans-serif,\"Apple Color Emoji\",\"Segoe UI Emoji\"","height":"100vh","textAlign":"center","display":"flex","flexDirection":"column","alignItems":"center","justifyContent":"center"},"children":["$","div",null,{"children":[["$","style",null,{"dangerouslySetInnerHTML":{"__html":"body{color:#000;background:#fff;margin:0}.next-error-h1{border-right:1px solid rgba(0,0,0,.3)}@media (prefers-color-scheme:dark){body{color:#fff;background:#000}.next-error-h1{border-right:1px solid rgba(255,255,255,.3)}}"}}],["$","h1",null,{"className":"next-error-h1","style":{"display":"inline-block","margin":"0 20px 0 0","padding":"0 23px 0 0","fontSize":24,"fontWeight":500,"verticalAlign":"top","lineHeight":"49px"},"children":404}],["$","div",null,{"style":{"display":"inline-block"},"children":["$","h2",null,{"style":{"fontSize":14,"fontWeight":400,"lineHeight":"49px","margin":0},"children":"This page could not be found."}]}]]}]}]],[]],"forbidden":"$undefined","unauthorized":"$undefined"}]}],["$","$L7",null,{"position":"top-right","richColors":true,"closeButton":true}],["$","$L8",null,{}]]}]}],["$","$L9",null,{}],["$","script",null,{"dangerouslySetInnerHTML":{"__html":"$a"}}]]}]]}]]}],{"children":["$Lb",{"children":["$Lc",{},null,false,false]},null,false,false]},null,false,false],"$Ld",false]],"m":"$undefined","G":["$e",[]],"S":true}
+f:I[47257,["/_next/static/chunks/ff1a16fafef87110.js","/_next/static/chunks/202b956bc838ef27.js"],"ClientPageRoot"]
+10:I[89954,["/_next/static/chunks/cc97af17858eb09d.js","/_next/static/chunks/3328268e69046654.js","/_next/static/chunks/0c450b6206d1affa.js","/_next/static/chunks/27e08ea51c56477b.js","/_next/static/chunks/de86baca2d6fd196.js"],"default"]
+13:I[97367,["/_next/static/chunks/ff1a16fafef87110.js","/_next/static/chunks/202b956bc838ef27.js"],"OutletBoundary"]
+14:"$Sreact.suspense"
+16:I[97367,["/_next/static/chunks/ff1a16fafef87110.js","/_next/static/chunks/202b956bc838ef27.js"],"ViewportBoundary"]
+18:I[97367,["/_next/static/chunks/ff1a16fafef87110.js","/_next/static/chunks/202b956bc838ef27.js"],"MetadataBoundary"]
+b:["$","$1","c",{"children":[null,["$","$L5",null,{"parallelRouterKey":"children","error":"$undefined","errorStyles":"$undefined","errorScripts":"$undefined","template":["$","$L6",null,{}],"templateStyles":"$undefined","templateScripts":"$undefined","notFound":"$undefined","forbidden":"$undefined","unauthorized":"$undefined"}]]}]
+c:["$","$1","c",{"children":[["$","$Lf",null,{"Component":"$10","serverProvidedParams":{"searchParams":{},"params":{},"promises":["$@11","$@12"]}}],[["$","script","script-0",{"src":"/_next/static/chunks/de86baca2d6fd196.js","async":true,"nonce":"$undefined"}]],["$","$L13",null,{"children":["$","$14",null,{"name":"Next.MetadataOutlet","children":"$@15"}]}]]}]
+d:["$","$1","h",{"children":[null,["$","$L16",null,{"children":"$L17"}],["$","div",null,{"hidden":true,"children":["$","$L18",null,{"children":["$","$14",null,{"name":"Next.Metadata","children":"$L19"}]}]}],["$","meta",null,{"name":"next-size-adjust","content":""}]]}]
+11:{}
+12:"$c:props:children:0:props:serverProvidedParams:params"
+17:[["$","meta","0",{"charSet":"utf-8"}],["$","meta","1",{"name":"viewport","content":"width=device-width, initial-scale=1, maximum-scale=1"}],["$","meta","2",{"name":"theme-color","content":"#0d9488"}]]
+1a:I[27201,["/_next/static/chunks/ff1a16fafef87110.js","/_next/static/chunks/202b956bc838ef27.js"],"IconMark"]
+15:null
+19:[["$","title","0",{"children":"HUDI_SOFT // HSM"}],["$","meta","1",{"name":"description","content":"Professional hospital and clinic management: patients, appointments, OPD, IPD, billing, pharmacy, laboratory, and reports."}],["$","link","2",{"rel":"manifest","href":"/manifest.webmanifest","crossOrigin":"$undefined"}],["$","meta","3",{"name":"generator","content":"v0.app"}],["$","meta","4",{"name":"format-detection","content":"telephone=no"}],["$","meta","5",{"name":"mobile-web-app-capable","content":"yes"}],["$","meta","6",{"name":"apple-mobile-web-app-title","content":"HUDI_SOFT // HSM"}],["$","meta","7",{"name":"apple-mobile-web-app-status-bar-style","content":"default"}],["$","link","8",{"rel":"shortcut icon","href":"/logo.jpg"}],["$","link","9",{"rel":"icon","href":"/logo.jpg"}],["$","link","10",{"rel":"apple-touch-icon","href":"/logo.jpg"}],["$","$L1a","11",{}]]
