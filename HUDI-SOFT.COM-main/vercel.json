@@ -1,0 +1,12 @@
+{
+  "buildCommand": "cd DATEL-CARE && npm run build",
+  "installCommand": "cd DATEL-CARE && npm install",
+  "outputDirectory": "DATEL-CARE/.next",
+  "framework": "nextjs",
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "https://hudi-hospital.onrender.com/api/:path*"
+    }
+  ]
+}

@@ -1,10 +1,24 @@
 'use client';
 
 import * as React from 'react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { licenseApi, setLicenseKey } from '@/lib/api';
 import { ShieldCheck, Lock, Zap, Building2, AlertTriangle, Key } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+
+function getLicenseKeyFromUrl(): string {
+    if (typeof window === 'undefined') return '';
+    const search = new URLSearchParams(window.location.search);
+    const fromSearch = search.get('key') || search.get('license') || search.get('activation');
+    if (fromSearch) return fromSearch;
+
+    const hash = window.location.hash;
+    if (hash.includes('?')) {
+        const hashParams = new URLSearchParams(hash.split('?')[1]);
+        return hashParams.get('key') || hashParams.get('license') || hashParams.get('activation') || '';
+    }
+    return '';
+}
 
 export function LicenseGuard({ children }: { children: React.ReactNode }) {
     const [isValid, setIsValid] = useState<boolean | null>(null);
@@ -13,55 +27,91 @@ export function LicenseGuard({ children }: { children: React.ReactNode }) {
     const [error, setError] = useState<string | null>(null);
     const [licenseInfo, setLicenseInfo] = useState<any>(null);
 
-    const checkLicense = async () => {
-        const storedKey = localStorage.getItem('hms_license_key');
-        if (!storedKey) {
-            setIsValid(false);
-            setLoading(false);
-            return;
-        }
-
-        try {
-            const data = await licenseApi.validate(storedKey);
-            if (data.valid) {
-                setIsValid(true);
-                setLicenseInfo(data);
-            } else {
-                setIsValid(false);
-                setError(data.message);
-            }
-        } catch (err: any) {
-            setIsValid(false);
-            setError(err.message || 'Connection failed');
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    useEffect(() => {
-        checkLicense();
-    }, []);
-
-    const handleActivate = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!key.trim()) return;
+    const activateWithKey = useCallback(async (rawKey: string) => {
+        const normalized = rawKey.toUpperCase().trim();
+        if (!normalized) return;
 
         setLoading(true);
         setError(null);
         try {
-            const data = await licenseApi.validate(key);
+            const data = await licenseApi.validate(normalized);
             if (data.valid) {
-                setLicenseKey(key);
+                setLicenseKey(normalized);
                 setIsValid(true);
                 setLicenseInfo(data);
+                setKey(normalized);
+                if (typeof window !== 'undefined' && window.location.search) {
+                    const url = new URL(window.location.href);
+                    url.searchParams.delete('key');
+                    url.searchParams.delete('license');
+                    url.searchParams.delete('activation');
+                    window.history.replaceState({}, '', url.pathname + url.hash);
+                }
             } else {
-                setError(data.message);
+                setIsValid(false);
+                setError(data.message || 'Invalid license key.');
             }
         } catch (err: any) {
-            setError(err.message || 'Activation failed');
+            setIsValid(false);
+            const message = err instanceof Error ? err.message : 'Activation failed. Check your connection and try again.';
+            setError(message);
         } finally {
             setLoading(false);
         }
+    }, []);
+
+    useEffect(() => {
+        let cancelled = false;
+
+        const run = async () => {
+            const urlKey = getLicenseKeyFromUrl();
+            if (urlKey) {
+                const normalized = urlKey.toUpperCase().trim();
+                setKey(normalized);
+                if (!cancelled) await activateWithKey(normalized);
+                return;
+            }
+
+            const storedKey = localStorage.getItem('hms_license_key');
+            if (!storedKey) {
+                if (!cancelled) {
+                    setIsValid(false);
+                    setLoading(false);
+                }
+                return;
+            }
+
+            const normalizedStored = storedKey.toUpperCase().trim();
+            setKey(normalizedStored);
+            try {
+                const data = await licenseApi.validate(storedKey);
+                if (cancelled) return;
+                if (data.valid) {
+                    setIsValid(true);
+                    setLicenseInfo(data);
+                } else {
+                    setIsValid(false);
+                    setError(data.message);
+                }
+            } catch (err: any) {
+                if (cancelled) return;
+                setIsValid(false);
+                setError(err instanceof Error ? err.message : 'Connection failed');
+            } finally {
+                if (!cancelled) setLoading(false);
+            }
+        };
+
+        run();
+        return () => {
+            cancelled = true;
+        };
+    }, [activateWithKey]);
+
+    const handleActivate = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!key.trim() || loading) return;
+        await activateWithKey(key);
     };
 
     if (loading && isValid === null) {

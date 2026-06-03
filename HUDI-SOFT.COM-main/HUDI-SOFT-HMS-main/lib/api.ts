@@ -23,15 +23,7 @@ function getLicenseBaseUrl(): string {
     if (fromEnv) return fromEnv;
 
     if (typeof window !== 'undefined') {
-        const host = window.location.hostname;
-        const isCapacitorOrLocal =
-            !host ||
-            host === 'localhost' ||
-            host === '127.0.0.1' ||
-            host.endsWith('.localhost');
-        if (!isCapacitorOrLocal) {
-            return `${window.location.origin}/license-api`;
-        }
+        return `${window.location.origin}/api`;
     }
     return CENTRAL_LICENSE_API;
 }
@@ -41,58 +33,45 @@ const getBaseUrl = () => `${API_BASE}/api`;
 const LICENSE_REQUEST_TIMEOUT_MS = 20000;
 
 async function fetchLicenseValidate(licenseKey: string, machineID: string) {
-    const bases = [getLicenseBaseUrl()];
-    if (!bases[0].startsWith(CENTRAL_LICENSE_API)) {
-        bases.push(CENTRAL_LICENSE_API);
-    }
-
     const body = JSON.stringify({ licenseKey, machineID });
-    let lastError: Error | null = null;
-
-    for (const base of bases) {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), LICENSE_REQUEST_TIMEOUT_MS);
-        try {
-            const res = await fetch(`${base.replace(/\/$/, '')}/licenses/validate`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body,
-                signal: controller.signal,
-            });
-            const data = await res.json().catch(() => ({}));
-            if (!res.ok) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), LICENSE_REQUEST_TIMEOUT_MS);
+    try {
+        const res = await fetch(`/api/licenses/validate`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body,
+            signal: controller.signal,
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+            throw new Error(
+                (data as { message?: string }).message ||
+                    (data as { error?: string }).error ||
+                    `License check failed (${res.status})`
+            );
+        }
+        return data as {
+            valid: boolean;
+            message: string;
+            expiryDate: string;
+            isTrial: boolean;
+            daysRemaining: number;
+            companyName?: string;
+        };
+    } catch (err: unknown) {
+        if (err instanceof Error) {
+            if (err.name === 'AbortError') {
                 throw new Error(
-                    (data as { message?: string }).message ||
-                        (data as { error?: string }).error ||
-                        `License check failed (${res.status})`
+                    'License server timed out. The server may be waking up — wait 30 seconds and try again.'
                 );
             }
-            return data as {
-                valid: boolean;
-                message: string;
-                expiryDate: string;
-                isTrial: boolean;
-                daysRemaining: number;
-                companyName?: string;
-            };
-        } catch (err: unknown) {
-            if (err instanceof Error) {
-                if (err.name === 'AbortError') {
-                    lastError = new Error(
-                        'License server timed out. The server may be waking up — wait 30 seconds and try again.'
-                    );
-                } else {
-                    lastError = err;
-                }
-            } else {
-                lastError = new Error('Could not reach the license server.');
-            }
-        } finally {
-            clearTimeout(timeoutId);
+            throw err;
         }
+        throw new Error('Could not reach the license server.');
+    } finally {
+        clearTimeout(timeoutId);
     }
-
-    throw lastError || new Error('Could not reach the license server.');
 }
 
 console.log(`🚀 HMS Frontend Engine active. API Base: ${getBaseUrl()}`);
@@ -180,7 +159,7 @@ export const authApi = {
 export const licenseApi = {
     validate: async (key: string) => {
         const licenseKey = normalizeLicenseKey(key);
-        if (!licenseKey || licenseKey.length < 20) {
+        if (!licenseKey || licenseKey.length < 5) {
             throw new Error('Please enter your full license key from the demo email or request page.');
         }
         return fetchLicenseValidate(licenseKey, getMachineId());
