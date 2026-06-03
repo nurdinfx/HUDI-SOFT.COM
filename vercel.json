@@ -1,6 +1,6 @@
 {
-  "buildCommand": "cd frontend && npm run build",
-  "installCommand": "cd frontend && npm install",
-  "outputDirectory": "frontend/dist",
-  "framework": "vite"
+  "buildCommand": "cd HUDI-SOFT-HMS-main && npm run build",
+  "installCommand": "cd HUDI-SOFT-HMS-main && npm install",
+  "outputDirectory": "HUDI-SOFT-HMS-main/.next",
+  "framework": "nextjs"
 }
