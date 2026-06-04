@@ -13,6 +13,7 @@ import { toast } from "sonner"
 import { format } from "date-fns"
 
 export default function NurseVitalsPage() {
+  const [mounted, setMounted] = useState(false)
   const [patients, setPatients] = useState<Patient[]>([])
   const [selectedPatientId, setSelectedPatientId] = useState<string>("")
   const [vitalsHistory, setVitalsHistory] = useState<Vitals[]>([])
@@ -27,6 +28,7 @@ export default function NurseVitalsPage() {
   })
 
   useEffect(() => {
+    setMounted(true)
     patientsApi.getAll()
       .then(setPatients)
       .catch((err) => {
@@ -42,6 +44,8 @@ export default function NurseVitalsPage() {
       setVitalsHistory([])
     }
   }, [selectedPatientId])
+
+  if (!mounted) return null
 
   const fetchHistory = async (patientId: string) => {
     setFetchingHistory(true)
