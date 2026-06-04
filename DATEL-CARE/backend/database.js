@@ -25,10 +25,20 @@ function ipv4Lookup(hostname, options, callback) {
  * This avoids the Supabase "tenant/user dot in hostname" DNS bug on Render.
  */
 function parseConnectionConfig(urlString) {
-  if (!urlString) return null;
+  if (!urlString) {
+    console.error('❌ DATABASE_URL is not set');
+    return null;
+  }
 
   try {
-    const url = new URL(urlString);
+    // Make sure URL has "//" after "postgresql:"
+    let fixedUrl = urlString;
+    if (fixedUrl.startsWith('postgresql:') && !fixedUrl.startsWith('postgresql://')) {
+      fixedUrl = fixedUrl.replace('postgresql:', 'postgresql://');
+      console.warn('⚠️ Fixed DATABASE_URL (added "//" after protocol)');
+    }
+
+    const url = new URL(fixedUrl);
     const config = {
       host:     url.hostname,
       port:     parseInt(url.port, 10) || 5432,
@@ -54,6 +64,8 @@ function parseConnectionConfig(urlString) {
     return config;
   } catch (e) {
     console.error('❌ DATABASE_URL parse error:', e.message);
+    console.error('   Provided DATABASE_URL:', urlString);
+    console.error('   A valid PostgreSQL URL should look like: postgresql://USER:PASSWORD@HOST:PORT/DATABASE');
     return null;
   }
 }
