@@ -15,17 +15,22 @@ export function normalizeLicenseKey(key: string): string {
 }
 
 /**
- * Web (Vercel): same-origin /license-api proxy avoids CORS.
- * Capacitor / localhost: full Render URL (bundled app has no Vercel proxy).
+ * Web (Vercel): same-origin /api avoids CORS (Next route or Vercel rewrite).
+ * Native/Capacitor: set NEXT_PUBLIC_LICENSE_API_URL to central Render API.
  */
-function getLicenseBaseUrl(): string {
+export function getLicenseValidateUrl(): string {
     const fromEnv = process.env.NEXT_PUBLIC_LICENSE_API_URL?.trim().replace(/\/$/, '');
-    if (fromEnv) return fromEnv;
-
-    if (typeof window !== 'undefined') {
-        return `${window.location.origin}/api`;
+    if (fromEnv) {
+        if (fromEnv.includes('hudi-hospital.onrender.com')) {
+            console.warn('[license] hudi-hospital.onrender.com is deprecated; use hudi-soft-com.onrender.com');
+            return fromEnv.replace('hudi-hospital.onrender.com', 'hudi-soft-com.onrender.com');
+        }
+        return `${fromEnv}/licenses/validate`;
     }
-    return CENTRAL_LICENSE_API;
+    if (typeof window !== 'undefined') {
+        return `${window.location.origin}/api/licenses/validate`;
+    }
+    return `${CENTRAL_LICENSE_API}/licenses/validate`;
 }
 
 const getBaseUrl = () => `${API_BASE}/api`;
@@ -33,37 +38,66 @@ const getBaseUrl = () => `${API_BASE}/api`;
 const LICENSE_REQUEST_TIMEOUT_MS = 20000;
 
 async function fetchLicenseValidate(licenseKey: string, machineID: string) {
+    const url = getLicenseValidateUrl();
     const body = JSON.stringify({ licenseKey, machineID });
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), LICENSE_REQUEST_TIMEOUT_MS);
+
+    if (typeof window !== 'undefined') {
+        console.log('[license] validate →', url.replace(licenseKey, '***'));
+    }
+
     try {
-        const res = await fetch(`/api/licenses/validate`, {
+        const res = await fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body,
             signal: controller.signal,
         });
         const data = await res.json().catch(() => ({}));
+
         if (!res.ok) {
+            const payload = data as { message?: string; error?: string; valid?: boolean };
             throw new Error(
-                (data as { message?: string }).message ||
-                    (data as { error?: string }).error ||
+                payload.message ||
+                    payload.error ||
                     `License check failed (${res.status})`
             );
         }
-        return data as {
-            valid: boolean;
+
+        const result = data as {
+            valid?: boolean;
+            success?: boolean;
             message: string;
             expiryDate: string;
             isTrial: boolean;
             daysRemaining: number;
             companyName?: string;
         };
+
+        const isValid = result.valid === true || result.success === true;
+        if (!isValid) {
+            throw new Error(result.message || 'Invalid license key');
+        }
+
+        return {
+            valid: true as const,
+            message: result.message || 'License is valid',
+            expiryDate: result.expiryDate,
+            isTrial: result.isTrial ?? false,
+            daysRemaining: result.daysRemaining ?? 0,
+            companyName: result.companyName,
+        };
     } catch (err: unknown) {
         if (err instanceof Error) {
             if (err.name === 'AbortError') {
                 throw new Error(
                     'License server timed out. The server may be waking up — wait 30 seconds and try again.'
+                );
+            }
+            if (err.message.includes('Failed to fetch') || err.message.includes('NetworkError')) {
+                throw new Error(
+                    'Could not reach the license server. Check your connection or try again in 30 seconds.'
                 );
             }
             throw err;

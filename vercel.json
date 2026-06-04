@@ -2,5 +2,19 @@
   "buildCommand": "cd HUDI-SOFT-HMS-main && npm run build",
   "installCommand": "cd HUDI-SOFT-HMS-main && npm install",
   "outputDirectory": "HUDI-SOFT-HMS-main/.next",
-  "framework": "nextjs"
+  "framework": "nextjs",
+  "rewrites": [
+    {
+      "source": "/api/licenses/:path*",
+      "destination": "https://hudi-soft-com.onrender.com/api/licenses/:path*"
+    },
+    {
+      "source": "/license-api/:path*",
+      "destination": "https://hudi-soft-com.onrender.com/api/:path*"
+    },
+    {
+      "source": "/api/:path*",
+      "destination": "https://hudi-soft-hms.onrender.com/api/:path*"
+    }
+  ]
 }

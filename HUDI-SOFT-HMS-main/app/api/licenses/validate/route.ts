@@ -1,75 +1,60 @@
 import { NextResponse } from 'next/server';
 
-// Pre-defined valid licenses matching the POS and other systems
-const VALID_LICENSES: Record<string, any> = {
-    'HUDI-DEMO-2025-SUCCESS': {
-        valid: true,
-        expiryDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-        isTrial: true,
-        daysRemaining: 30,
-        type: 'demo',
-        message: 'Demo license activated successfully!'
-    },
-    'HUDI-PRO-ENTERPRISE-2025': {
-        valid: true,
-        expiryDate: new Date(Date.now() + 365 * 5 * 24 * 60 * 60 * 1000).toISOString(),
-        isTrial: false,
-        daysRemaining: 1825,
-        type: 'enterprise',
-        message: 'Enterprise license activated successfully!'
-    },
-    'HUDI-STD-2025-LICENSE': {
-        valid: true,
-        expiryDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
-        isTrial: false,
-        daysRemaining: 365,
-        type: 'standard',
-        message: 'Standard license activated successfully!'
-    }
-};
+const CENTRAL_LICENSE_API =
+  process.env.LICENSE_API_URL?.replace(/\/$/, '') ||
+  'https://hudi-soft-com.onrender.com/api';
 
+const PROXY_TIMEOUT_MS = 25000;
+
+/**
+ * Server-side proxy: browser calls same-origin /api/licenses/validate (no CORS).
+ * Forwards to the central licensing API on Render (MongoDB-backed keys).
+ */
 export async function POST(request: Request) {
-    try {
-        const body = await request.json();
-        const { licenseKey, machineID } = body;
+  const started = Date.now();
+  try {
+    const body = await request.json();
+    const licenseKey = body?.licenseKey || body?.key;
+    const machineID = body?.machineID || body?.machineId;
 
-        if (!licenseKey) {
-            return NextResponse.json(
-                { valid: false, message: 'License key is required' },
-                { status: 400 }
-            );
-        }
-
-        const cleanKey = licenseKey.toUpperCase().trim();
-
-        // First check our known valid licenses
-        if (VALID_LICENSES[cleanKey]) {
-            return NextResponse.json(VALID_LICENSES[cleanKey]);
-        }
-
-        // Also accept any properly formatted license key (12+ chars with hyphens)
-        if (cleanKey.length >= 12 && cleanKey.includes('-')) {
-            return NextResponse.json({
-                valid: true,
-                expiryDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
-                isTrial: false,
-                daysRemaining: 365,
-                type: 'professional',
-                message: 'License activated successfully!'
-            });
-        }
-
-        // Invalid license
-        return NextResponse.json({
-            valid: false,
-            message: 'Invalid license key. Please check and try again.'
-        });
-
-    } catch (error) {
-        console.error('License validation error:', error);
-        return NextResponse.json(
-            { valid: false, message: 'Server error during validation' },
-            { status: 500 }
-        );
+    if (!licenseKey) {
+      return NextResponse.json(
+        { valid: false, message: 'License key is required' },
+        { status: 400 }
+      );
     }
+
+    const upstream = await fetch(`${CENTRAL_LICENSE_API}/licenses/validate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ licenseKey, machineID }),
+      signal: AbortSignal.timeout(PROXY_TIMEOUT_MS),
+    });
+
+    const data = await upstream.json().catch(() => ({}));
+    console.log(
+      `[license-proxy] status=${upstream.status} ms=${Date.now() - started} key=${String(licenseKey).slice(0, 8)}…`
+    );
+
+    return NextResponse.json(data, { status: upstream.status });
+  } catch (error) {
+    const message =
+      error instanceof Error && error.name === 'TimeoutError'
+        ? 'License server timed out. Wait 30 seconds and try again (Render may be waking up).'
+        : 'Could not reach the license server. Please try again.';
+
+    console.error('[license-proxy] error:', error);
+    return NextResponse.json({ valid: false, message }, { status: 502 });
+  }
+}
+
+export async function OPTIONS() {
+  return new NextResponse(null, {
+    status: 204,
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type',
+    },
+  });
 }

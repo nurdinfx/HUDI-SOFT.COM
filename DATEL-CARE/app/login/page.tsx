@@ -77,8 +77,7 @@ function LoginContent() {
     setActivationError("");
     try {
       const machineID = getMachineId();
-      const apiBase = process.env.NEXT_PUBLIC_API_URL || "https://hudi-soft-hms.onrender.com";
-      const response = await fetch(`${apiBase}/api/licenses/validate`, {
+      const response = await fetch("/api/licenses/validate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ licenseKey: key, machineID })
@@ -122,8 +121,7 @@ function LoginContent() {
 
     try {
       const machineID = getMachineId();
-      const apiBase = process.env.NEXT_PUBLIC_API_URL || "https://hudi-soft-hms.onrender.com";
-      const response = await fetch(`${apiBase}/api/licenses/validate`, {
+      const response = await fetch("/api/licenses/validate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ licenseKey: activationKey.trim(), machineID })

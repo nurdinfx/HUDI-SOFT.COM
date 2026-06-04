@@ -5,16 +5,12 @@
   "framework": "nextjs",
   "rewrites": [
     {
-      "source": "/api/licenses/validate",
-      "destination": "/api/licenses/validate"
-    },
-    {
       "source": "/api/licenses/:path*",
-      "destination": "https://hudi-hospital.onrender.com/api/licenses/:path*"
+      "destination": "https://hudi-soft-com.onrender.com/api/licenses/:path*"
     },
     {
       "source": "/api/:path*",
-      "destination": "https://hudi-hospital.onrender.com/api/:path*"
+      "destination": "https://hudi-soft-hms.onrender.com/api/:path*"
     }
   ]
 }

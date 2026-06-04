@@ -14,7 +14,8 @@ const validateLicense = async (req, res) => {
         console.warn(`[License Validation] MongoDB not ready (state: ${dbState})`);
         return res.status(503).json({ valid: false, message: 'License service temporarily unavailable. Please try again later.' });
     }
-    console.log(`[License Validation] Attempt - Key: ${licenseKey}, Machine: ${machineID}`);
+    const origin = req.headers.origin || req.headers.referer || 'direct';
+    console.log(`[License Validation] POST origin=${origin} key=${licenseKey.substring(0, 8)}… machine=${machineID}`);
 
     if (!licenseKey || !machineID) {
         console.warn('[License Validation] Missing parameters');

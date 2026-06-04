@@ -5,6 +5,7 @@ import { ThemeProvider } from '@/components/theme-provider'
 import { AuthProvider } from '@/lib/auth-context'
 import { Toaster } from 'sonner'
 import { PwaInstallPrompt } from '@/components/pwa-install-prompt'
+import { Suspense } from 'react'
 import { LicenseGuard } from '@/components/license-guard'
 import './globals.css'
 
@@ -68,9 +69,11 @@ export default function RootLayout({
       <body className={`${inter.variable} ${jetbrainsMono.variable} font-sans antialiased`}>
         <ThemeProvider attribute="class" defaultTheme="light" enableSystem disableTransitionOnChange>
           <AuthProvider>
-            <LicenseGuard>
-              {children}
-            </LicenseGuard>
+            <Suspense fallback={null}>
+              <LicenseGuard>
+                {children}
+              </LicenseGuard>
+            </Suspense>
             <Toaster position="top-right" richColors closeButton />
             <PwaInstallPrompt />
           </AuthProvider>
