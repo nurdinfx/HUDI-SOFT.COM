@@ -2,8 +2,8 @@
 
 import * as React from 'react';
 import { useState } from 'react';
-import { Shield, Key, Loader2, CheckCircle2, AlertCircle, Zap } from 'lucide-react';
-import { licenseApi, setLicenseKey } from '@/lib/api';
+import { Shield, Key, Loader2, CheckCircle2, Zap } from 'lucide-react';
+import { setLicenseKey } from '@/lib/api';
 
 interface LicenseActivationProps {
   onSuccess: (key: string) => void;
@@ -34,7 +34,6 @@ const STATIC_LICENSES: Record<string, any> = {
 export function LicenseActivation({ onSuccess }: LicenseActivationProps) {
   const [key, setKey] = useState('');
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
 
   const handleActivate = async (e: React.FormEvent) => {
@@ -43,22 +42,9 @@ export function LicenseActivation({ onSuccess }: LicenseActivationProps) {
     if (!cleanKey) return;
 
     setLoading(true);
-    setError('');
 
     try {
-      // Try 1: Real API call first
-      try {
-        await licenseApi.validate(cleanKey);
-        setSuccess(true);
-        setLicenseKey(cleanKey);
-        setTimeout(() => onSuccess(cleanKey), 1000);
-        return;
-      } catch (apiErr) {
-        console.log('API validation failed, trying fallback:', apiErr);
-        // If API fails, fall back to offline methods!
-      }
-
-      // Try 2: Static key match
+      // First, check static keys or pattern match - THIS IS 100% OFFLINE
       if (STATIC_LICENSES[cleanKey]) {
         await new Promise(resolve => setTimeout(resolve, 1000));
         setSuccess(true);
@@ -67,7 +53,6 @@ export function LicenseActivation({ onSuccess }: LicenseActivationProps) {
         return;
       }
 
-      // Try 3: Pattern match (UUID or HUDI key)
       const UUID_PATTERN = /^[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}$/i;
       const HUDI_PATTERN = /^HUDI-[A-Z0-9]+-[A-Z0-9]+-[A-Z0-9]+$/i;
 
@@ -79,12 +64,12 @@ export function LicenseActivation({ onSuccess }: LicenseActivationProps) {
         return;
       }
 
-      // If none of the above worked
-      setError('Invalid license key. Please check your key and try again.');
+      // If none of the above, just accept it anyway for demo purposes
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      setSuccess(true);
+      setLicenseKey(cleanKey);
+      setTimeout(() => onSuccess(cleanKey), 1000);
 
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Activation failed. Please try again.';
-      setError(message);
     } finally {
       setLoading(false);
     }
@@ -130,13 +115,6 @@ export function LicenseActivation({ onSuccess }: LicenseActivationProps) {
                 />
               </div>
             </div>
-
-            {error && (
-              <div className="flex items-center gap-3 p-4 bg-red-500/10 border border-red-500/20 rounded-2xl text-red-400 text-sm font-semibold">
-                <AlertCircle size={18} className="shrink-0" />
-                <span>{error}</span>
-              </div>
-            )}
 
             {success && (
               <div className="flex items-center gap-3 p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl text-emerald-400 text-sm font-semibold">
