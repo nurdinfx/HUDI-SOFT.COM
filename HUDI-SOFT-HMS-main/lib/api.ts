@@ -4,114 +4,13 @@
  * Base URL: http://localhost:4000/api
  */
 
-// HMS hospital API (patients, billing, pharmacy, etc.)
-const API_BASE = (process.env.NEXT_PUBLIC_API_URL || 'https://hudi-soft-hms.onrender.com').trim().replace(/\/$/, '');
+// Use sanitized /api for Vercel/Production stability
+const API_BASE = (process.env.NEXT_PUBLIC_API_URL || '').trim().replace(/\/$/, ''); 
 
-const CENTRAL_LICENSE_API = 'https://hudi-soft-com.onrender.com/api';
-
-/** Trim and uppercase UUID-style keys from demo / admin flows */
-export function normalizeLicenseKey(key: string): string {
-    return key.trim().toUpperCase().replace(/\s+/g, '');
-}
-
-/**
- * Static export (output: 'export') has no server-side /api routes on Vercel unless
- * rewrites are configured. Call the central license API directly — CORS is enabled.
- */
-export function getLicenseValidateUrl(): string {
-    const fromEnv = process.env.NEXT_PUBLIC_LICENSE_API_URL?.trim().replace(/\/$/, '');
-    let base = CENTRAL_LICENSE_API;
-
-    if (fromEnv) {
-        base = fromEnv.includes('hudi-hospital.onrender.com')
-            ? fromEnv.replace('hudi-hospital.onrender.com', 'hudi-soft-com.onrender.com')
-            : fromEnv;
-    }
-
-    return `${base}/licenses/validate`;
-}
-
-const getBaseUrl = () => `${API_BASE}/api`;
-
-const LICENSE_REQUEST_TIMEOUT_MS = 12000; // 12s — tight enough to fail fast on cold start
-
-async function fetchLicenseValidate(licenseKey: string, machineID: string) {
-    const url = getLicenseValidateUrl();
-    const body = JSON.stringify({ licenseKey, machineID });
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), LICENSE_REQUEST_TIMEOUT_MS);
-
-    if (typeof window !== 'undefined') {
-        console.log('[license] validate →', url);
-    }
-
-    try {
-        const res = await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body,
-            signal: controller.signal,
-        });
-
-        // Safe JSON parse — a cold-start Render 502 returns HTML, not JSON
-        const text = await res.text();
-        let data: Record<string, unknown> = {};
-        try { data = JSON.parse(text); } catch {
-            console.error('[license] non-JSON response:', text.slice(0, 200));
-            throw new Error('License server returned an unexpected response. Please try again in a moment.');
-        }
-
-        if (!res.ok) {
-            const payload = data as { message?: string; error?: string };
-            throw new Error(payload.message || payload.error || `License check failed (${res.status})`);
-        }
-
-        const result = data as {
-            valid?: boolean;
-            success?: boolean;
-            message?: string;
-            expiryDate?: string;
-            isTrial?: boolean;
-            daysRemaining?: number;
-            companyName?: string;
-        };
-
-        const isValid = result.valid === true || result.success === true;
-        if (!isValid) {
-            throw new Error(result.message || 'Invalid license key. Please check and try again.');
-        }
-
-        return {
-            valid: true as const,
-            message: result.message || 'License is valid',
-            expiryDate: result.expiryDate ?? new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
-            isTrial: result.isTrial ?? false,
-            daysRemaining: result.daysRemaining ?? 365,
-            companyName: result.companyName,
-        };
-    } catch (err: unknown) {
-        if (err instanceof Error) {
-            if (err.name === 'AbortError') {
-                throw new Error(
-                    'License server timed out. The server is waking up — please wait a moment and try again.'
-                );
-            }
-            if (
-                err.message.includes('Failed to fetch') ||
-                err.message.includes('NetworkError') ||
-                err.message.includes('fetch')
-            ) {
-                throw new Error(
-                    'Cannot reach the license server. Check your internet connection and try again.'
-                );
-            }
-            throw err;
-        }
-        throw new Error('License server unreachable. Please try again.');
-    } finally {
-        clearTimeout(timeoutId);
-    }
-}
+const getBaseUrl = () => {
+    if (API_BASE) return `${API_BASE}/api`;
+    return '/api';
+};
 
 console.log(`🚀 HMS Frontend Engine active. API Base: ${getBaseUrl()}`);
 
@@ -196,13 +95,7 @@ export const authApi = {
 
 // ─── Licenses ────────────────────────────────────────────────────
 export const licenseApi = {
-    validate: async (key: string) => {
-        const licenseKey = normalizeLicenseKey(key);
-        if (!licenseKey || licenseKey.length < 5) {
-            throw new Error('Please enter your full license key from the demo email or request page.');
-        }
-        return fetchLicenseValidate(licenseKey, getMachineId());
-    },
+    validate: (key: string) => post<{ valid: boolean; message: string; expiryDate: string; isTrial: boolean; daysRemaining: number }>('/licenses/validate', { licenseKey: key, machineID: getMachineId() }),
 };
 
 // ─── Dashboard ───────────────────────────────────────────────────

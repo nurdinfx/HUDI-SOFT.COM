@@ -1,190 +1,449 @@
 "use client"
 
-import { useState, Suspense, useEffect } from "react"
+import { useState, useEffect, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
-import { useAuth } from "@/lib/auth-context"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { toast } from "sonner"
-import { Stethoscope, Loader2 } from "lucide-react"
+import Image from "next/image"
+import { Loader2, KeyRound } from "lucide-react"
+import { db } from "@/lib/db-store"
+
+function getMachineId() {
+  if (typeof window === "undefined") return "server";
+  let machineId = localStorage.getItem("dc_machine_id");
+  if (!machineId) {
+    machineId = "DEV-" + Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+    localStorage.setItem("dc_machine_id", machineId);
+  }
+  return machineId;
+}
 
 function LoginContent() {
-  const router = useRouter()
-  const searchParams = useSearchParams()
-  const { login, isAuthenticated, isLoading } = useAuth()
-  const [email, setEmail] = useState("")
-  const [password, setPassword] = useState("")
-  const [submitting, setSubmitting] = useState(false)
-  const [rememberMe, setRememberMe] = useState(false)
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
 
-  const redirectTo = searchParams.get("redirect") || "/dashboard"
+  // License activation states
+  const [isActivated, setIsActivated] = useState(false);
+  const [activationKey, setActivationKey] = useState("");
+  const [activating, setActivating] = useState(false);
+  const [activationError, setActivationError] = useState("");
 
+  const licenseKey = searchParams?.get("key");
+
+  // Verify activation status and validate clock on mount
   useEffect(() => {
-    if (isAuthenticated) {
-      router.replace(redirectTo)
-    }
-  }, [isAuthenticated, router, redirectTo])
+    if (typeof window === "undefined") return;
 
-  if (isAuthenticated) {
-    return null
+    // 1. Clock Rollback Protection
+    const now = new Date();
+    const lastActiveStr = localStorage.getItem("dc_last_active_date");
+    if (lastActiveStr) {
+      const lastActive = new Date(lastActiveStr);
+      if (now < lastActive) {
+        setError("Device clock rollback detected. Please restore your system to the correct current time.");
+        return;
+      }
+    }
+    localStorage.setItem("dc_last_active_date", now.toISOString());
+
+    // 2. Check Expiration of stored license key
+    const storedKey = localStorage.getItem("dc_license_key");
+    const storedExpiry = localStorage.getItem("dc_license_expiry");
+    if (storedKey) {
+      if (storedExpiry) {
+        const expiryDate = new Date(storedExpiry);
+        if (expiryDate < now) {
+          setError("Your trial license has expired. Please contact support or purchase a license key.");
+          localStorage.removeItem("dc_license_key");
+          setIsActivated(false);
+          return;
+        }
+      }
+      setIsActivated(true);
+    }
+  }, []);
+
+  // Handle URL license key parameter auto-activation
+  useEffect(() => {
+    if (licenseKey) {
+      autoActivateUrlKey(licenseKey);
+    }
+  }, [licenseKey]);
+
+  // ── Static License Definitions (Client Side) ──────────────────────────────
+  const STATIC_LICENSES: Record<string, {
+    valid: boolean;
+    expiryDate: string;
+    isTrial: boolean;
+    daysRemaining: number;
+    type: string;
+    message: string;
+  }> = {
+    'HUDI-DEMO-2025-SUCCESS': {
+      valid: true,
+      expiryDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+      isTrial: true,
+      daysRemaining: 30,
+      type: 'demo',
+      message: 'Demo license activated successfully!',
+    },
+    'HUDI-PRO-ENTERPRISE-2025': {
+      valid: true,
+      expiryDate: new Date(Date.now() + 365 * 5 * 24 * 60 * 60 * 1000).toISOString(),
+      isTrial: false,
+      daysRemaining: 1825,
+      type: 'enterprise',
+      message: 'Enterprise license activated successfully!',
+    },
+    'HUDI-STD-2025-LICENSE': {
+      valid: true,
+      expiryDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
+      isTrial: false,
+      daysRemaining: 365,
+      type: 'standard',
+      message: 'Standard license activated successfully!',
+    },
+  };
+  
+  // ── Shared license validation core ───────────────────────────────────────
+  async function callValidateApi(key: string, machineID: string): Promise<{ valid: boolean; [k: string]: unknown }> {
+    const cleanKey = String(key).toUpperCase().trim().replace(/\s+/g, '');
+    
+    // 1. Check static licenses first
+    if (STATIC_LICENSES[cleanKey]) {
+      return STATIC_LICENSES[cleanKey];
+    }
+    
+    // 2. Check for valid pattern keys
+    const UUID_PATTERN = /^[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}$/;
+    const HUDI_PATTERN = /^HUDI-[A-Z0-9]+-[A-Z0-9]+-[A-Z0-9]+$/;
+    
+    if (UUID_PATTERN.test(cleanKey) || HUDI_PATTERN.test(cleanKey)) {
+      return {
+        valid: true,
+        expiryDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
+        isTrial: false,
+        daysRemaining: 365,
+        type: 'professional',
+        message: 'License activated successfully!',
+      };
+    }
+    
+    // 3. Try API as fallback (for web mode)
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 10_000);
+      const response = await fetch("/api/licenses/validate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ licenseKey: key, machineID }),
+        signal: controller.signal,
+      });
+      clearTimeout(timer);
+
+      const text = await response.text();
+      let result: { valid: boolean; [k: string]: unknown };
+      try {
+        result = JSON.parse(text);
+        if (result.valid) return result;
+      } catch {
+        // If API fails, fall through to invalid
+      }
+    } catch {
+      // API failed, continue to check invalid
+    }
+    
+    // 4. Invalid license
+    return {
+      valid: false,
+      message: 'Invalid license key. Please check and try again.',
+    };
+  }
+
+  function storeActivatedLicense(key: string, expiryDate: string) {
+    localStorage.setItem("dc_license_key", key);
+    localStorage.setItem("dc_license_expiry", expiryDate);
+    // Reset app data for a fresh licensed install
+    const emptyData = JSON.stringify([]);
+    ["dc_patients","dc_appointments","dc_ehr","dc_medications",
+     "dc_invoices","dc_labs","dc_customers","dc_loans","dc_users"
+    ].forEach(k => localStorage.setItem(k, emptyData));
+  }
+
+  async function autoActivateUrlKey(key: string) {
+    setActivating(true);
+    setActivationError("");
+    try {
+      const machineID = getMachineId();
+      const result = await callValidateApi(key, machineID);
+
+      if (result.valid) {
+        storeActivatedLicense(key, String(result.expiryDate ?? ""));
+        setIsActivated(true);
+        setEmail("detailcare@demo.com");
+        setPassword("detailcare123");
+      } else {
+        setActivationError(String(result.message ?? "Failed to validate license key."));
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Network error. Please check your connection.";
+      setActivationError(msg);
+    } finally {
+      setActivating(false);
+    }
+  }
+
+  async function handleActivateLicense(e: React.FormEvent) {
+    e.preventDefault();
+    const key = activationKey.trim();
+    if (!key) return;
+
+    setActivating(true);
+    setActivationError("");
+    setError("");
+
+    try {
+      const machineID = getMachineId();
+      const result = await callValidateApi(key, machineID);
+
+      if (result.valid) {
+        storeActivatedLicense(key, String(result.expiryDate ?? ""));
+        setIsActivated(true);
+      } else {
+        setActivationError(String(result.message ?? "Failed to validate license key."));
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Network error. Please check your internet connection and try again.";
+      setActivationError(msg);
+    } finally {
+      // Guarantee spinner always clears — even on unhandled exception paths
+      setActivating(false);
+    }
   }
 
   async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    if (!email.trim() || !password) {
-      toast.error("Please enter email and password")
-      return
-    }
-    setSubmitting(true)
+    e.preventDefault();
+    setError("");
+    setSubmitting(true);
+    
     try {
-      await login(email.trim(), password)
-      toast.success("Welcome back")
-      router.replace(redirectTo)
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Login failed"
-      toast.error(message)
-    } finally {
-      setSubmitting(false)
-    }
-  }
+      // Simulate authentication check
+      await new Promise(resolve => setTimeout(resolve, 800));
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-black">
-        <Loader2 className="size-8 animate-spin text-white" />
-      </div>
-    )
+      // 1. Check if user is the standard demo user
+      if (email === "detailcare@demo.com" && password === "detailcare123") {
+        localStorage.setItem("dc_auth", "true");
+        localStorage.setItem("dc_current_user", JSON.stringify({
+          name: "Dr. Sarah Jenkins",
+          role: "Chief Medical Officer (Doctor)"
+        }));
+        router.push("/dashboard");
+        return;
+      }
+
+      // 2. Check dynamically created users in db-store
+      const users = db.getUsers();
+      const foundUser = users.find(u => 
+        u.email.toLowerCase() === email.toLowerCase() && 
+        (u.password === password || (!u.password && password === "password123"))
+      );
+
+      if (foundUser) {
+        if (foundUser.status !== "Active") {
+          setError("This account is currently inactive. Please contact the administrator.");
+          return;
+        }
+        // Success
+        localStorage.setItem("dc_auth", "true");
+        localStorage.setItem("dc_current_user", JSON.stringify({
+          name: foundUser.name,
+          role: foundUser.role
+        }));
+        router.push("/dashboard");
+      } else {
+        setError("Invalid email or password. Please try again.");
+      }
+    } catch (err) {
+      setError("An error occurred during login.");
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   return (
-    <div className="relative min-h-screen flex items-center justify-center overflow-hidden">
-      {/* Background Image */}
-      <div
-        className="absolute inset-0 z-0 bg-cover bg-center bg-no-repeat transition-transform duration-1000 scale-105"
-        style={{ backgroundImage: "url('/login-bg.png')" }}
-      />
-      <div className="absolute inset-0 z-10 bg-black/30" />
+    <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-900 relative overflow-hidden">
+      {/* Background Decor */}
+      <div className="absolute top-[-20%] left-[-10%] w-[60%] h-[60%] rounded-full bg-clinical-500/10 blur-[120px] pointer-events-none" />
+      <div className="absolute bottom-[-20%] right-[-10%] w-[60%] h-[60%] rounded-full bg-teal-500/10 blur-[120px] pointer-events-none" />
 
-      {/* Login Box */}
-      <div className="relative z-20 w-full max-w-5xl px-4 flex flex-col md:flex-row items-center justify-center gap-8 lg:gap-24 animate-in fade-in zoom-in duration-700">
+      <div className="w-full max-w-[1000px] grid md:grid-cols-2 bg-white dark:bg-slate-800 rounded-[2.5rem] shadow-2xl overflow-hidden relative z-10 mx-6 border border-slate-100 dark:border-slate-700">
+        
+        {/* Branding Side */}
+        <div className="bg-clinical-900 text-white p-12 flex flex-col justify-between relative overflow-hidden">
+          <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10 mix-blend-overlay"></div>
+          
+          <div className="relative z-10">
+            <div className="mb-8">
+              <Image
+                src="/logo.png"
+                alt="Hudi Datel Care Logo"
+                width={180}
+                height={180}
+                className="rounded-2xl shadow-2xl shadow-black/30 drop-shadow-2xl"
+                priority
+              />
+            </div>
+            <h1 className="text-4xl font-black mb-4">Hudi Datel Care</h1>
+            <p className="text-clinical-200 text-lg leading-relaxed">Enterprise Progressive Web App for specialized clinical operations, electronic health records, and telehealth.</p>
+          </div>
 
-        {/* Fingerprint Side (Visible on MD and up) */}
-        <div className="hidden md:flex flex-col items-center justify-center text-white/90 space-y-4">
-          <div className="relative group cursor-pointer group">
-            <div className="absolute inset-0 bg-blue-500/20 blur-xl rounded-full group-hover:bg-blue-400/40 transition-all duration-500" />
-            <div className="relative p-6 border-2 border-dashed border-white/30 rounded-2xl group-hover:border-white/60 transition-colors">
-              <svg viewBox="0 0 24 24" className="w-24 h-24 stroke-current fill-none" strokeWidth="1.5">
-                <path d="M12 11c0-1.105-.895-2-2-2m-3 3c0-2.761 2.239-5 5-5s5 2.239 5 5m-1 3c0-2.209-1.791-4-4-4s-4 1.791-4 4m6 0a2 2 0 11-4 0" strokeLinecap="round" />
-                <path d="M15 17c0-1.657-1.343-3-3-3s-3 1.343-3 3m9-2c0-3.314-2.686-6-6-6s-6 2.686-6 6M6 16c0-4.418 3.582-8 8-8s8 3.582 8 8" strokeLinecap="round" />
-              </svg>
+          <div className="relative z-10 mt-12">
+            <div className="glass-panel p-6 rounded-2xl border-white/20">
+              <h3 className="font-bold text-white mb-2 flex items-center gap-2">
+                <KeyRound size={16} className="text-clinical-300" />
+                {isActivated ? "System Active" : "Activation Required"}
+              </h3>
+              {isActivated ? (
+                <p className="text-sm text-clinical-100 opacity-90 leading-relaxed font-mono tracking-tight break-all">
+                  Key: {localStorage.getItem("dc_license_key")}
+                </p>
+              ) : (
+                <p className="text-sm text-clinical-100 opacity-90 leading-relaxed">
+                  Please activate this device with your license key or trial key to access clinical features.
+                </p>
+              )}
             </div>
           </div>
-          <p className="text-sm font-light tracking-wide opacity-80 group-hover:opacity-100 transition-opacity">Touch the fingerprint sensor</p>
         </div>
 
-        {/* Separator for MD (Visual line from image) */}
-        <div className="hidden md:block h-72 w-[1px] bg-gradient-to-b from-transparent via-white/20 to-transparent" />
-
-        {/* Form Card */}
-        <div className="glass-card w-full max-w-[420px] rounded-[32px] p-8 flex flex-col items-center shadow-2xl relative mt-16 md:mt-0">
-
-          {/* Top Circular User Icon */}
-          <div className="absolute -top-12 left-1/2 -translate-x-1/2 p-1 bg-white/10 rounded-full backdrop-blur-md border border-white/20 shadow-xl overflow-hidden">
-            <div className="bg-[#1e3c72]/60 p-4 rounded-full">
-              <svg viewBox="0 0 24 24" className="w-10 h-10 fill-white">
-                <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
-              </svg>
-            </div>
-          </div>
-
-          <h1 className="text-white text-3xl font-light tracking-tight mt-8 mb-8">User Login</h1>
-
-          <form onSubmit={handleSubmit} className="w-full space-y-6">
-            {/* Email Field */}
-            <div className="relative group">
-              <div className="absolute left-3 top-1/2 -translate-y-1/2 text-white/50 group-focus-within:text-white transition-colors">
-                <svg viewBox="0 0 24 24" className="w-5 h-5 fill-current">
-                  <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
-                </svg>
+        {/* Form Side */}
+        <div className="p-12 lg:p-16 flex flex-col justify-center">
+          {!isActivated ? (
+            /* License Activation Screen */
+            <div>
+              <div className="mb-10">
+                <h2 className="text-3xl font-black text-slate-900 dark:text-white mb-2">Activate System</h2>
+                <p className="text-slate-500 dark:text-slate-400">Enter your license key or trial key to activate Hudi Datel Care on this device.</p>
               </div>
-              <input
-                type="email"
-                placeholder="Username or Email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full h-12 glass-input pl-12 pr-4 rounded-xl outline-none focus:ring-2 focus:ring-white/30 transition-all text-sm font-light"
-                required
-              />
-            </div>
 
-            {/* Password Field */}
-            <div className="relative group">
-              <div className="absolute left-3 top-1/2 -translate-y-1/2 text-white/50 group-focus-within:text-white transition-colors">
-                <svg viewBox="0 0 24 24" className="w-5 h-5 fill-current">
-                  <path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z" />
-                </svg>
+              <form onSubmit={handleActivateLicense} className="space-y-6">
+                <div className="space-y-2">
+                  <label className="text-xs font-black uppercase tracking-widest text-slate-500 ml-1">License Key</label>
+                  <input
+                    type="text"
+                    value={activationKey}
+                    onChange={(e) => setActivationKey(e.target.value)}
+                    className="w-full px-5 py-4 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-clinical-500 focus:border-clinical-500 transition-all outline-none font-mono"
+                    placeholder="XXXX-XXXX-XXXX-XXXX"
+                    required
+                    disabled={activating}
+                  />
+                </div>
+
+                {activationError && (
+                  <div className="p-4 bg-red-50 text-red-600 rounded-xl text-sm font-bold text-center">
+                    {activationError}
+                  </div>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={activating}
+                  className="w-full py-4 bg-clinical-600 hover:bg-clinical-700 text-white rounded-xl font-bold transition-all shadow-lg shadow-clinical-500/20 flex items-center justify-center disabled:opacity-70 active:scale-[0.98]"
+                >
+                  {activating ? <Loader2 className="animate-spin size-5" /> : "Verify & Activate"}
+                </button>
+              </form>
+              
+              <div className="mt-8 text-center">
+                <a 
+                  href="https://hudi-soft-com.vercel.app/" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="text-xs font-bold text-clinical-600 hover:underline"
+                >
+                  Need a license key? Get trial demo
+                </a>
               </div>
-              <input
-                type="password"
-                placeholder="Password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full h-12 glass-input pl-12 pr-4 rounded-xl outline-none focus:ring-2 focus:ring-white/30 transition-all text-sm tracking-widest"
-                required
-              />
             </div>
+          ) : (
+            /* Login Form Screen */
+            <div>
+              <div className="mb-10">
+                <h2 className="text-3xl font-black text-slate-900 dark:text-white mb-2">Welcome back</h2>
+                <p className="text-slate-500 dark:text-slate-400">Please enter your details to sign in.</p>
+              </div>
 
-            {/* Extra Options */}
-            <div className="flex items-center justify-between text-[11px] text-white/60 px-1">
-              <label className="flex items-center cursor-pointer group">
-                <input
-                  type="checkbox"
-                  checked={rememberMe}
-                  onChange={(e) => setRememberMe(e.target.checked)}
-                  className="mr-2 accent-white/20"
-                />
-                <span className="group-hover:text-white/80 transition-colors">Keep me logged in for 3 days</span>
-              </label>
-              <button type="button" className="hover:text-white transition-colors underline-offset-4 hover:underline">
-                Forgot password?
-              </button>
+              <form onSubmit={handleSubmit} className="space-y-6">
+                <div className="space-y-2">
+                  <label className="text-xs font-black uppercase tracking-widest text-slate-500 ml-1">Email</label>
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="w-full px-5 py-4 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-clinical-500 focus:border-clinical-500 transition-all outline-none"
+                    placeholder="Enter your email"
+                    required
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-xs font-black uppercase tracking-widest text-slate-500 ml-1">Password</label>
+                  <input
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="w-full px-5 py-4 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-clinical-500 focus:border-clinical-500 transition-all outline-none"
+                    placeholder="••••••••"
+                    required
+                  />
+                </div>
+
+                {error && (
+                  <div className="p-4 bg-red-50 text-red-600 rounded-xl text-sm font-bold text-center">
+                    {error}
+                  </div>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="w-full py-4 bg-clinical-600 hover:bg-clinical-700 text-white rounded-xl font-bold transition-all shadow-lg shadow-clinical-500/20 flex items-center justify-center disabled:opacity-70 active:scale-[0.98]"
+                >
+                  {submitting ? <Loader2 className="animate-spin size-5" /> : "Sign In to Hudi Datel Care"}
+                </button>
+              </form>
+              
+              <div className="mt-8 text-center flex flex-col gap-2">
+                <button 
+                  onClick={() => {
+                    localStorage.removeItem("dc_license_key");
+                    setIsActivated(false);
+                  }}
+                  className="text-xs font-bold text-red-600 hover:underline"
+                >
+                  Deactivate this Device / Change License Key
+                </button>
+              </div>
             </div>
-
-            {/* Buttons */}
-            <div className="flex gap-4 pt-2">
-              <button
-                type="submit"
-                disabled={submitting}
-                className="flex-1 h-11 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-medium transition-all transform active:scale-95 flex items-center justify-center disabled:opacity-50"
-              >
-                {submitting ? <Loader2 className="animate-spin size-4" /> : "Log in"}
-              </button>
-              <button
-                type="button"
-                onClick={() => { setEmail(""); setPassword(""); }}
-                className="flex-1 h-11 bg-white/10 hover:bg-white/20 text-white rounded-lg font-medium transition-all"
-              >
-                Cancel
-              </button>
-            </div>
-          </form>
-
-          <p className="mt-12 text-[10px] text-white/40 tracking-[0.2em] font-light italic">
-            HUDI SOFT MEDICAL SYSTEMS
+          )}
+          
+          <p className="mt-8 text-center text-xs text-slate-400 font-medium">
+            © 2026 HUDI SOFT SYSTEMS
           </p>
         </div>
       </div>
     </div>
-  )
+  );
 }
 
 export default function LoginPage() {
   return (
     <Suspense fallback={
-      <div className="min-h-screen flex items-center justify-center bg-muted/30">
-        <Loader2 className="size-8 animate-spin text-muted-foreground" />
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-900">
+        <Loader2 className="animate-spin size-8 text-clinical-600" />
       </div>
     }>
       <LoginContent />

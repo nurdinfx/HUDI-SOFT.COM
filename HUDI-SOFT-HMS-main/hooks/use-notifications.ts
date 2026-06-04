@@ -61,7 +61,8 @@ export function useNotifications() {
             setSubscription(sub);
 
             // Send subscription to backend
-            await fetch('/api/push/subscribe', {
+            const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+            await fetch(`${apiBase}/api/push/subscribe`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({

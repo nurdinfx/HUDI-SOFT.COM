@@ -1,19 +1,23 @@
 {
-    "buildCommand": "pnpm run build",
-    "installCommand": "pnpm install",
+    "buildCommand": "npm run build",
+    "installCommand": "npm install",
     "framework": "nextjs",
     "rewrites": [
         {
-            "source": "/api/licenses/:path*",
-            "destination": "https://hudi-soft-com.onrender.com/api/licenses/:path*"
-        },
-        {
-            "source": "/license-api/:path*",
-            "destination": "https://hudi-soft-com.onrender.com/api/:path*"
+            "source": "/api/licenses/validate",
+            "destination": "/api/licenses/validate"
         },
         {
             "source": "/api/:path*",
             "destination": "https://hudi-soft-hms.onrender.com/api/:path*"
+        }
+    ],
+    "headers": [
+        {
+            "source": "/api/(.*)",
+            "headers": [
+                { "key": "X-Content-Type-Options", "value": "nosniff" }
+            ]
         }
     ]
 }

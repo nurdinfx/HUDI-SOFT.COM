@@ -7,7 +7,8 @@ const { v4: uuidv4 } = require('uuid');
 
 async function migrate() {
     try {
-        console.log('🚀 Starting Revenue Analytics Migration...');
+        console.log('🚀 Revenue Analytics Migration v2 starting...');
+        // v2: no process.exit — throws on failure so server.js catch handles it
 
         // 1. Create Departments Table
         await db.exec(`
@@ -76,7 +77,10 @@ async function migrate() {
         console.log('✨ Migration completed successfully!');
     } catch (err) {
         console.error('❌ Migration failed:', err.message);
-        process.exit(1);
+        // Throw so server.js can catch — do NOT call process.exit(1) here.
+        // Killing the process prevents the HTTP server from starting, which
+        // causes Render to report "No open ports detected" and crash-loop.
+        throw err;
     }
 }
 

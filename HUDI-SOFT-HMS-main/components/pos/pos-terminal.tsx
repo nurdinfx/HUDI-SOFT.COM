@@ -15,14 +15,13 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { pharmacyApi, laboratoryApi, patientsApi, posApi, creditApi, settingsApi, hrApi, type POSItem, type Patient, type HospitalSettings } from "@/lib/api"
+import { db, Patient, Customer, Medication, Invoice, Loan } from "@/lib/db-store"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { cn } from "@/lib/utils"
-import { useAuth } from "@/lib/auth-context"
 
 interface CatalogItem {
     id: string;
@@ -33,8 +32,16 @@ interface CatalogItem {
     stock?: number;
 }
 
+interface POSItem {
+    id: string;
+    name: string;
+    type: 'medicine' | 'lab' | 'service';
+    category: string;
+    unitPrice: number;
+    quantity: number;
+}
+
 export function POSTerminal() {
-    const { user } = useAuth()
     const [catalog, setCatalog] = useState<CatalogItem[]>([])
     const [searchTerm, setSearchTerm] = useState("")
     const [categoryFilter, setCategoryFilter] = useState("all")
@@ -47,7 +54,7 @@ export function POSTerminal() {
     const [patientSearch, setPatientSearch] = useState("")
     const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null)
 
-    const [paymentMethod, setPaymentMethod] = useState("cash") // cash, card, mobile, insurance, bank
+    const [paymentMethod, setPaymentMethod] = useState("Zaad") // Zaad, Sahal, Edahab, MyCash, Credit
     const [amountPaid, setAmountPaid] = useState<string>("")
     const [isProcessing, setIsProcessing] = useState(false)
 
@@ -55,68 +62,48 @@ export function POSTerminal() {
     const [showReceipt, setShowReceipt] = useState(false)
     const [receiptMode, setReceiptMode] = useState<'review' | 'print'>('review')
 
-    const [patientHistory, setPatientHistory] = useState<any>(null)
-    const [isLoadingPending, setIsLoadingPending] = useState(false)
-    const [insuranceDetails, setInsuranceDetails] = useState({ company: "", policyNumber: "", claimAmount: 0 })
     const [showHistory, setShowHistory] = useState(false)
 
-    // Credit Module State
-    const [creditCustomers, setCreditCustomers] = useState<any[]>([])
-    const [selectedCreditCustomer, setSelectedCreditCustomer] = useState<any | null>(null)
-    const [hospitalSettings, setHospitalSettings] = useState<HospitalSettings | null>(null)
+    // Credit Customer State
+    const [creditCustomers, setCreditCustomers] = useState<Customer[]>([])
+    const [selectedCreditCustomer, setSelectedCreditCustomer] = useState<Customer | null>(null)
 
-    // Employee Credit State
-    const [employees, setEmployees] = useState<any[]>([])
-    const [selectedEmployee, setSelectedEmployee] = useState<any | null>(null)
-
-    // Load Initial Data
+    // Load Initial Data from db-store
     useEffect(() => {
-        async function loadData() {
-            try {
-                const [meds, labs, pats, emps] = await Promise.all([
-                    pharmacyApi.getMedicines(),
-                    laboratoryApi.getCatalog(),
-                    patientsApi.getAll(),
-                    hrApi.getEmployees().catch(() => [])
-                ]);
+        const meds = db.getMedications()
+        const pats = db.getPatients()
+        const customers = db.getCustomers()
+        
+        const formattedMeds: CatalogItem[] = meds.map(m => ({
+            id: m.id,
+            name: m.name,
+            type: 'medicine',
+            category: 'Pharmacy',
+            unitPrice: m.price,
+            stock: m.stock
+        }))
 
-                const formattedMeds: CatalogItem[] = (meds || []).map(m => ({
-                    id: m.id,
-                    name: m.name,
-                    type: 'medicine',
-                    category: 'Pharmacy',
-                    unitPrice: m.sellingPrice,
-                    stock: m.quantity
-                }))
+        // Mock Lab Tests for POS
+        const mockLabs: CatalogItem[] = [
+            { id: "L-001", name: "Complete Blood Count (CBC)", type: "lab", category: "Laboratory", unitPrice: 25.00 },
+            { id: "L-002", name: "Lipid Profile", type: "lab", category: "Laboratory", unitPrice: 30.00 },
+            { id: "L-003", name: "Liver Function Test", type: "lab", category: "Laboratory", unitPrice: 35.00 },
+            { id: "L-004", name: "Urinalysis", type: "lab", category: "Laboratory", unitPrice: 15.00 },
+            { id: "L-005", name: "Blood Sugar Fasting", type: "lab", category: "Laboratory", unitPrice: 10.00 }
+        ]
 
-                const formattedLabs: CatalogItem[] = (labs || []).map(l => ({
-                    id: l.id,
-                    name: l.name,
-                    type: 'lab',
-                    category: 'Laboratory',
-                    unitPrice: l.cost
-                }))
+        // Mock Services for POS
+        const mockServices: CatalogItem[] = [
+            { id: "S-001", name: "General Consultation", type: "service", category: "Clinical", unitPrice: 20.00 },
+            { id: "S-002", name: "Specialist Consultation", type: "service", category: "Clinical", unitPrice: 50.00 },
+            { id: "S-003", name: "Emergency Visit", type: "service", category: "Clinical", unitPrice: 100.00 },
+            { id: "S-004", name: "Nursing Care (Daily)", type: "service", category: "IPD", unitPrice: 40.00 },
+            { id: "S-005", name: "Ward Bed (Standard)", type: "service", category: "IPD", unitPrice: 80.00 }
+        ]
 
-                setCatalog([...formattedMeds, ...formattedLabs])
-                setPatients(pats || [])
-                setEmployees(emps || [])
-                
-                // Load Hospital Settings
-                try {
-                    const settings = await settingsApi.get()
-                    setHospitalSettings(settings)
-                } catch (err) {
-                    console.error("Failed to load settings", err)
-                }
-
-                // Load Credit Customers
-                const credits = await creditApi.getCustomers()
-                setCreditCustomers(Array.isArray(credits) ? credits : [])
-            } catch (err) {
-                toast.error("Failed to load catalog data")
-            }
-        }
-        loadData()
+        setCatalog([...formattedMeds, ...mockLabs, ...mockServices])
+        setPatients(pats)
+        setCreditCustomers(customers)
     }, [])
 
     // Filter Catalog
@@ -132,52 +119,17 @@ export function POSTerminal() {
     const filteredPatients = useMemo(() => {
         if (!patientSearch) return [];
         return patients.filter(p =>
-            `${p.firstName} ${p.lastName}`.toLowerCase().includes(patientSearch.toLowerCase()) ||
-            p.patientId?.toLowerCase().includes(patientSearch.toLowerCase()) ||
+            p.name.toLowerCase().includes(patientSearch.toLowerCase()) ||
+            p.id.toLowerCase().includes(patientSearch.toLowerCase()) ||
             p.phone?.includes(patientSearch)
         ).slice(0, 5)
     }, [patients, patientSearch])
 
-
-
-    const handlePatientSelect = async (patient: Patient) => {
+    const handlePatientSelect = (patient: Patient) => {
         setSelectedPatient(patient)
         setPatientSearch("")
-        setIsLoadingPending(true)
-        
-        // Auto-fill insurance if present
-        if (patient.insuranceProvider) {
-            setInsuranceDetails({
-                ...insuranceDetails,
-                company: patient.insuranceProvider,
-                policyNumber: patient.insurancePolicyNumber || ""
-            })
-        }
-
-        try {
-            const [pending, history] = await Promise.all([
-                posApi.getPendingCharges(patient.id),
-                posApi.getHistory(patient.id)
-            ])
-
-            setPatientHistory(history)
-
-            if (pending.items.length > 0) {
-                setCart(pending.items.map(item => ({
-                    ...item,
-                    quantity: item.quantity || 1
-                })))
-                toast.success(`Loaded ${pending.items.length} pending charges automatically`)
-            } else {
-                setCart([])
-            }
-        } catch (err) {
-            toast.error("Failed to load patient charges")
-        } finally {
-            setIsLoadingPending(false)
-        }
+        setSelectedCreditCustomer(null)
     }
-
 
     // Cart Calculations
     const subtotal = cart.reduce((sum, item) => sum + ((item.unitPrice || 0) * (item.quantity || 1)), 0)
@@ -236,29 +188,84 @@ export function POSTerminal() {
         try {
             const parsedDiscount = (typeof discount === 'string' ? parseFloat(discount) : discount) || 0
             const parsedAmountPaid = amountPaid === "" ? total : (parseFloat(amountPaid) || 0)
-
-            // If insurance is specified, pass it
-            const insData = insuranceCoverage > 0 ? {
-                company: insuranceDetails.company,
-                policyNumber: insuranceDetails.policyNumber,
-                claimAmount: insuranceCoverage
-            } : undefined
-
-            const res = await posApi.checkout({
-                patientId: selectedPatient ? selectedPatient.id : null,
-                patientName: selectedPatient ? `${selectedPatient.firstName} ${selectedPatient.lastName}` : (selectedCreditCustomer ? selectedCreditCustomer.full_name : (selectedEmployee ? selectedEmployee.full_name : "Walk-In Patient")),
-                items: cart,
-                discount: parsedDiscount,
-                paymentMethod: paymentMethod,
-                amountPaid: parsedAmountPaid,
-                insuranceInfo: insData,
-                creditCustomerId: paymentMethod === 'credit' ? selectedCreditCustomer?.id : (paymentMethod === 'employee_credit' ? selectedEmployee?.id : undefined)
+            
+            // Build Offline Invoice
+            const now = new Date()
+            const invoices = db.getInvoices()
+            const newInvoiceId = `INV-${now.getFullYear()}-${String(invoices.length + 100).padStart(3, "0")}`
+            
+            const customerName = selectedPatient ? selectedPatient.name : (selectedCreditCustomer ? selectedCreditCustomer.name : "Walk-In Patient")
+            
+            const newInvoice: Invoice = {
+                id: newInvoiceId,
+                patientName: customerName,
+                date: now.toISOString().split("T")[0],
+                amount: total,
+                status: "Paid",
+                method: paymentMethod
+            }
+            
+            db.saveInvoices([newInvoice, ...invoices])
+            
+            // Reduce Medicine Stock in DB
+            const meds = db.getMedications()
+            const updatedMeds = meds.map(m => {
+                const cartItem = cart.find(ci => ci.id === m.id)
+                if (cartItem) {
+                    const newStock = Math.max(0, m.stock - cartItem.quantity)
+                    return { ...m, stock: newStock, status: newStock === 0 ? "Out of Stock" : newStock <= m.minStock ? "Low Stock" : "In Stock" }
+                }
+                return m
             })
+            db.saveMedications(updatedMeds as Medication[])
 
-            setLastInvoice(res)
+            // Handle Credit Loan if method is Credit
+            if (paymentMethod === "Credit" && selectedCreditCustomer) {
+                const loans = db.getLoans()
+                const customers = db.getCustomers()
+                
+                const newLoan: Loan = {
+                    id: `LN-${now.getTime().toString().slice(-6)}`,
+                    customerId: selectedCreditCustomer.id,
+                    customerName: selectedCreditCustomer.name,
+                    amount: total,
+                    paid: 0,
+                    remaining: total,
+                    dueDate: new Date(now.setDate(now.getDate() + 30)).toISOString().split('T')[0],
+                    method: "Credit",
+                    status: "Active",
+                    notes: `Credit Sale from ${newInvoiceId}`,
+                    date: now.toISOString().split('T')[0]
+                }
+                
+                db.saveLoans([newLoan, ...loans])
+                
+                // Update Customer Balance
+                const updatedCustomers = customers.map(c => 
+                    c.id === selectedCreditCustomer.id 
+                    ? { ...c, totalBilled: c.totalBilled + total, creditBalance: c.creditBalance + total }
+                    : c
+                )
+                db.saveCustomers(updatedCustomers as Customer[])
+            }
+
+            // Build Receipt Data
+            const invoiceData = {
+                invoiceId: newInvoiceId,
+                patientName: customerName,
+                userName: "Dr. Sarah Jenkins",
+                items: cart.map(i => ({ description: i.name, quantity: i.quantity, unitPrice: i.unitPrice, total: i.unitPrice * i.quantity })),
+                subtotal: subtotal,
+                tax: 0,
+                discount: parsedDiscount,
+                total: total,
+                paidAmount: parsedAmountPaid
+            }
+
+            setLastInvoice(invoiceData)
             toast.success("Transaction completed successfully! Accounts updated.")
 
-            // Reduce local stock cache
+            // Reduce local state stock cache
             setCatalog(prev => prev.map(c => {
                 const cartItem = cart.find(ci => ci.id === c.id)
                 if (cartItem && c.type === 'medicine' && c.stock !== undefined) {
@@ -267,20 +274,18 @@ export function POSTerminal() {
                 return c;
             }))
 
-            // Reset
+            // Reset Form
             setCart([])
-            if (setSelectedPatient) setSelectedPatient(null)
+            setSelectedPatient(null)
             setDiscount(0)
             setInsuranceCoverage(0)
             setAmountPaid("")
             setPatientSearch("")
-            setSelectedEmployee(null)
             setSelectedCreditCustomer(null)
             setReceiptMode('review')
             setShowReceipt(true)
         } catch (err: any) {
-            console.error("POS Checkout Error:", err)
-            toast.error(err.message || "Checkout failed. Is the backend running?")
+            toast.error(err.message || "Checkout failed.")
         } finally {
             setIsProcessing(false)
         }
@@ -304,38 +309,17 @@ export function POSTerminal() {
                     <title>Receipt</title>
                     <style>
                         @page { size: 58mm auto; margin: 0; }
-                        body { padding: 0; margin: 0; background: #fff; width: 58mm; color: #000; }
-                        .thermal-receipt { 
-                            width: 58mm; 
-                            padding: 2mm 1mm; 
-                            font-family: 'Inter', 'Segoe UI', Arial, sans-serif; 
-                            font-size: 13px; 
-                            line-height: 1.1; 
-                            box-sizing: border-box; 
-                            margin: 0;
-                            text-align: center;
-                        }
-                        .thermal-header { margin-bottom: 5px; }
+                        body { padding: 0; margin: 0; background: #fff; width: 58mm; color: #000; font-family: 'Segoe UI', Arial, sans-serif; font-size: 13px; text-align: center; }
+                        .thermal-receipt { padding: 2mm 1mm; }
                         .thermal-title { font-size: 18px; font-weight: 800; margin-bottom: 2px; }
                         .thermal-subtitle { font-size: 14px; font-weight: 600; margin-bottom: 1px; }
-                        .thermal-payment-codes { font-size: 11px; font-weight: bold; margin-bottom: 5px; border-bottom: 1px dashed #000; padding-bottom: 5px; }
-                        
                         .thermal-info { font-size: 12px; margin-bottom: 5px; text-align: left; padding: 0 2mm; }
-                        .thermal-info div { margin-bottom: 3px; }
-                        .thermal-label { font-weight: bold; }
-                        
                         .thermal-separator { border-top: 1px dashed #000; margin: 5px 0; }
-                        
                         .thermal-table { width: 100%; text-align: left; border-collapse: collapse; font-size: 12px; padding: 0 1mm; }
-                        .thermal-table th { border-top: 1px dashed #000; border-bottom: 1px dashed #000; padding: 4px 0; text-align: left; font-weight: bold; }
+                        .thermal-table th { border-top: 1px dashed #000; border-bottom: 1px dashed #000; padding: 4px 0; font-weight: bold; }
                         .thermal-table td { padding: 4px 0; }
-                        
                         .thermal-totals { border-top: 1px dashed #000; padding: 5px 2mm; text-align: left; }
                         .thermal-row { display: flex; justify-content: space-between; margin-bottom: 3px; font-weight: bold; }
-                        
-                        .thermal-footer { text-align: center; font-size: 13px; padding-top: 5px; font-weight: bold; }
-                        .qr-container { display: flex; justify-content: center; margin: 8px 0; }
-                        .qr-image { width: 140px; height: 140px; }
                     </style>
                 </head>
                 <body>
@@ -348,30 +332,26 @@ export function POSTerminal() {
             setTimeout(() => {
                 iframe.contentWindow?.focus()
                 iframe.contentWindow?.print()
-                setTimeout(() => {
-                    document.body.removeChild(iframe)
-                }, 1000)
+                setTimeout(() => { document.body.removeChild(iframe) }, 1000)
             }, 250)
         }
     }
 
     const PAYMENT_METHODS = [
-        { id: 'zaad', label: 'ZAAD', icon: DollarSign, color: 'text-emerald-500', bg: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
-        { id: 'sahal', label: 'SAHAL', icon: CreditCard, color: 'text-blue-500', bg: 'bg-blue-50 text-blue-700 border-blue-200' },
-        { id: 'edahab', label: 'EDAHAB', icon: Smartphone, color: 'text-purple-500', bg: 'bg-purple-50 text-purple-700 border-purple-200' },
-        { id: 'mycash', label: 'MYCASH', icon: Landmark, color: 'text-indigo-500', bg: 'bg-indigo-50 text-indigo-700 border-indigo-200' },
-        { id: 'insurance', label: 'Insurance', icon: ShieldCheck, color: 'text-cyan-500', bg: 'bg-cyan-50 text-cyan-700 border-cyan-200' },
-        { id: 'credit', label: 'Credit', icon: History, color: 'text-rose-500', bg: 'bg-rose-50 text-rose-700 border-rose-200' },
-        { id: 'employee_credit', label: 'Emp. Credit', icon: User, color: 'text-amber-500', bg: 'bg-amber-50 text-amber-700 border-amber-200' }
+        { id: 'Zaad', label: 'ZAAD', icon: DollarSign, color: 'text-emerald-500', bg: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+        { id: 'Sahal', label: 'SAHAL', icon: CreditCard, color: 'text-blue-500', bg: 'bg-blue-50 text-blue-700 border-blue-200' },
+        { id: 'Edahab', label: 'EDAHAB', icon: Smartphone, color: 'text-purple-500', bg: 'bg-purple-50 text-purple-700 border-purple-200' },
+        { id: 'MyCash', label: 'MYCASH', icon: Landmark, color: 'text-indigo-500', bg: 'bg-indigo-50 text-indigo-700 border-indigo-200' },
+        { id: 'Credit', label: 'CREDIT', icon: History, color: 'text-rose-500', bg: 'bg-rose-50 text-rose-700 border-rose-200' },
     ]
 
     return (
         <div className="flex flex-col h-[calc(100vh-80px)] overflow-hidden bg-slate-100/50 rounded-2xl border border-slate-200 shadow-sm relative">
             
-            {/* TOP HEADER - Premium Glassmorphism */}
+            {/* TOP HEADER */}
             <div className="h-16 px-6 bg-white/80 backdrop-blur-md border-b border-slate-200 flex items-center justify-between shrink-0 z-10 sticky top-0">
                 <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 bg-primary/10 rounded-xl flex items-center justify-center text-primary">
+                    <div className="h-10 w-10 bg-clinical-100 rounded-xl flex items-center justify-center text-clinical-600">
                         <Wallet className="size-5" />
                     </div>
                     <div>
@@ -386,7 +366,7 @@ export function POSTerminal() {
                     </div>
                     <Input
                         placeholder="Scan patient QR or search by name/ID..."
-                        className="pl-10 h-10 bg-white shadow-sm border-slate-200 rounded-xl font-medium focus-visible:ring-primary/20 transition-all"
+                        className="pl-10 h-10 bg-white shadow-sm border-slate-200 rounded-xl font-medium focus-visible:ring-clinical-500/20 transition-all"
                         value={patientSearch}
                         onChange={e => setPatientSearch(e.target.value)}
                     />
@@ -400,14 +380,9 @@ export function POSTerminal() {
                                         onClick={() => handlePatientSelect(p)}
                                     >
                                         <div className="flex justify-between items-center">
-                                            <span className="font-bold text-slate-900 text-sm">{p.firstName} {p.lastName}</span>
-                                            {p.insuranceProvider && (
-                                                <Badge variant="secondary" className="text-[9px] uppercase tracking-wider bg-cyan-50 text-cyan-600 px-1 py-0 h-4">
-                                                    Insured
-                                                </Badge>
-                                            )}
+                                            <span className="font-bold text-slate-900 text-sm">{p.name}</span>
                                         </div>
-                                        <span className="text-xs text-slate-500 font-mono mt-0.5">{p.patientId} • {p.phone || 'No Phone'}</span>
+                                        <span className="text-xs text-slate-500 font-mono mt-0.5">{p.id} • {p.phone || 'No Phone'}</span>
                                     </div>
                                 ))
                             ) : (
@@ -425,8 +400,8 @@ export function POSTerminal() {
                     {selectedPatient ? (
                         <div className="flex items-center gap-3 bg-emerald-50 border border-emerald-100 pl-3 pr-1 py-1 rounded-full animate-in zoom-in-95">
                             <div className="flex flex-col items-end">
-                                <span className="text-xs font-bold text-emerald-900 leading-none">{selectedPatient.firstName} {selectedPatient.lastName}</span>
-                                <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest">{selectedPatient.patientId}</span>
+                                <span className="text-xs font-bold text-emerald-900 leading-none">{selectedPatient.name}</span>
+                                <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest">{selectedPatient.id}</span>
                             </div>
                             <Button variant="ghost" size="icon" className="h-7 w-7 rounded-full bg-emerald-100 hover:bg-emerald-200 text-emerald-700" onClick={() => setSelectedPatient(null)}>
                                 <X className="size-3" />
@@ -435,20 +410,10 @@ export function POSTerminal() {
                     ) : selectedCreditCustomer ? (
                         <div className="flex items-center gap-3 bg-rose-50 border border-rose-100 pl-3 pr-1 py-1 rounded-full animate-in zoom-in-95">
                             <div className="flex flex-col items-end">
-                                <span className="text-xs font-bold text-rose-900 leading-none">{selectedCreditCustomer.full_name}</span>
-                                <span className="text-[10px] font-bold text-rose-600 uppercase tracking-widest">{selectedCreditCustomer.customer_id}</span>
+                                <span className="text-xs font-bold text-rose-900 leading-none">{selectedCreditCustomer.name}</span>
+                                <span className="text-[10px] font-bold text-rose-600 uppercase tracking-widest">{selectedCreditCustomer.id}</span>
                             </div>
                             <Button variant="ghost" size="icon" className="h-7 w-7 rounded-full bg-rose-100 hover:bg-rose-200 text-rose-700" onClick={() => setSelectedCreditCustomer(null)}>
-                                <X className="size-3" />
-                            </Button>
-                        </div>
-                    ) : selectedEmployee ? (
-                        <div className="flex items-center gap-3 bg-amber-50 border border-amber-100 pl-3 pr-1 py-1 rounded-full animate-in zoom-in-95">
-                            <div className="flex flex-col items-end">
-                                <span className="text-xs font-bold text-amber-900 leading-none">{selectedEmployee.full_name}</span>
-                                <span className="text-[10px] font-bold text-amber-600 uppercase tracking-widest">{selectedEmployee.employee_id}</span>
-                            </div>
-                            <Button variant="ghost" size="icon" className="h-7 w-7 rounded-full bg-amber-100 hover:bg-amber-200 text-amber-700" onClick={() => setSelectedEmployee(null)}>
                                 <X className="size-3" />
                             </Button>
                         </div>
@@ -466,8 +431,6 @@ export function POSTerminal() {
                     </Button>
                 </div>
             </div>
-            
-            {/* CREDIT CUSTOMER SELECTION BAR REMOVED FROM HERE */}
 
             <div className="flex flex-1 overflow-hidden relative">
                 
@@ -486,7 +449,7 @@ export function POSTerminal() {
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-slate-400" />
                             <Input
                                 placeholder="Search catalog items..."
-                                className="pl-9 h-10 bg-slate-100 border-transparent rounded-xl text-sm font-medium focus-visible:bg-white transition-colors focus-visible:ring-1 focus-visible:ring-primary/30"
+                                className="pl-9 h-10 bg-slate-100 border-transparent rounded-xl text-sm font-medium focus-visible:bg-white transition-colors focus-visible:ring-1 focus-visible:ring-clinical-500/30"
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
                             />
@@ -499,7 +462,7 @@ export function POSTerminal() {
                                 <div
                                     key={item.id}
                                     onClick={() => handleAddToCart(item)}
-                                    className="group bg-white border border-slate-200 rounded-2xl p-4 cursor-pointer hover:border-primary/50 hover:shadow-md transition-all flex flex-col gap-2 relative overflow-hidden h-[120px] select-none"
+                                    className="group bg-white border border-slate-200 rounded-2xl p-4 cursor-pointer hover:border-clinical-500/50 hover:shadow-md transition-all flex flex-col gap-2 relative overflow-hidden h-[120px] select-none"
                                 >
                                     <div className="flex justify-between items-start">
                                         <div className={cn("text-[10px] uppercase tracking-widest px-2 py-0.5 rounded-md font-bold", 
@@ -519,7 +482,7 @@ export function POSTerminal() {
                                         <h4 className="font-bold text-slate-900 text-sm leading-tight line-clamp-2">{item.name}</h4>
                                         <p className="text-base font-black text-slate-700 mt-1">${item.unitPrice.toLocaleString()}</p>
                                     </div>
-                                    <div className="absolute opacity-0 group-hover:opacity-100 bottom-3 right-3 bg-primary text-white p-1.5 rounded-full transition-all scale-75 group-hover:scale-100 shadow-sm">
+                                    <div className="absolute opacity-0 group-hover:opacity-100 bottom-3 right-3 bg-clinical-600 text-white p-1.5 rounded-full transition-all scale-75 group-hover:scale-100 shadow-sm">
                                         <Plus className="size-4" />
                                     </div>
                                 </div>
@@ -538,12 +501,6 @@ export function POSTerminal() {
                 <div className="w-[55%] flex flex-col bg-white">
                     {/* CART LIST */}
                     <div className="flex-1 flex flex-col overflow-hidden relative">
-                        {isLoadingPending && (
-                            <div className="absolute inset-0 bg-white/80 backdrop-blur-sm z-20 flex flex-col items-center justify-center">
-                                <Loader2 className="size-8 animate-spin text-primary mb-2" />
-                                <p className="text-sm font-medium text-slate-600 animate-pulse">Scanning for pending charges...</p>
-                            </div>
-                        )}
                         <ScrollArea className="flex-1 p-6">
                             <div className="space-y-3">
                                 {cart.length === 0 ? (
@@ -559,9 +516,6 @@ export function POSTerminal() {
                                         <div key={item.id} className="group relative bg-white p-4 rounded-2xl shadow-sm border border-slate-200/60 flex gap-4 items-center hover:border-slate-300 transition-colors animate-in slide-in-from-bottom-2">
                                             <div className="flex-1 min-w-0 pr-4">
                                                 <div className="flex items-center gap-2 mb-1">
-                                                    {item.isFromVisit && <Badge variant="secondary" className="text-[9px] h-4 bg-orange-100 text-orange-700 hover:bg-orange-100">VISIT</Badge>}
-                                                    {item.isFromLab && <Badge variant="secondary" className="text-[9px] h-4 bg-blue-100 text-blue-700 hover:bg-blue-100">LAB</Badge>}
-                                                    {item.isFromPrescription && <Badge variant="secondary" className="text-[9px] h-4 bg-emerald-100 text-emerald-700 hover:bg-emerald-100">RX</Badge>}
                                                     <h5 className="font-bold text-slate-900 truncate text-sm leading-none">{item.name}</h5>
                                                 </div>
                                                 <p className="text-xs font-bold text-slate-400 font-mono">${item.unitPrice.toLocaleString()}</p>
@@ -601,12 +555,12 @@ export function POSTerminal() {
                                 <span className="text-base font-bold text-slate-900">${subtotal.toLocaleString()}</span>
                             </div>
                             <div className="p-3 px-4 flex flex-col relative group">
-                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1 group-hover:text-primary transition-colors cursor-pointer border-b border-dashed border-slate-300 w-fit">Discount</span>
+                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1 group-hover:text-clinical-500 transition-colors cursor-pointer border-b border-dashed border-slate-300 w-fit">Discount</span>
                                 <div className="flex items-center gap-1">
                                     <span className="text-base font-bold text-slate-900">-</span>
                                     <Input 
                                         type="number" 
-                                        className="h-6 w-full px-1 py-0 text-base font-bold bg-transparent border-0 border-b border-transparent focus-visible:border-primary focus-visible:ring-0 rounded-none shadow-none" 
+                                        className="h-6 w-full px-1 py-0 text-base font-bold bg-transparent border-0 border-b border-transparent focus-visible:border-clinical-500 focus-visible:ring-0 rounded-none shadow-none" 
                                         value={discount || ''}
                                         onChange={(e) => setDiscount(parseFloat(e.target.value) || 0)}
                                         placeholder="$0.00"
@@ -625,7 +579,6 @@ export function POSTerminal() {
                                         value={insuranceCoverage || ''}
                                         onChange={(e) => setInsuranceCoverage(parseFloat(e.target.value) || 0)}
                                         placeholder="$0.00"
-                                        disabled={!selectedPatient}
                                     />
                                 </div>
                             </div>
@@ -656,7 +609,7 @@ export function POSTerminal() {
                             </div>
 
                             <div className="flex gap-3">
-                                {paymentMethod === 'cash' && (
+                                {paymentMethod !== 'Credit' && (
                                     <div className="w-1/3 relative">
                                         <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                                             <span className="text-slate-400 font-bold">$</span>
@@ -670,7 +623,7 @@ export function POSTerminal() {
                                     </div>
                                 )}
                                 
-                                {paymentMethod === 'credit' && (
+                                {paymentMethod === 'Credit' && (
                                     <div className="w-full relative">
                                         <div className="flex flex-col gap-2">
                                             <Select 
@@ -678,6 +631,7 @@ export function POSTerminal() {
                                                 onValueChange={(value) => {
                                                     const customer = creditCustomers.find(c => c.id === value);
                                                     setSelectedCreditCustomer(customer || null);
+                                                    setSelectedPatient(null);
                                                 }}
                                             >
                                                 <SelectTrigger className="h-14 bg-white border-slate-200 text-slate-900 font-bold rounded-2xl focus:ring-rose-500 shadow-sm px-4">
@@ -692,14 +646,13 @@ export function POSTerminal() {
                                                             <SelectItem key={c.id} value={c.id} className="p-3 border-b border-slate-50 last:border-0">
                                                                 <div className="flex flex-col text-left">
                                                                     <div className="flex justify-between items-center gap-4">
-                                                                        <span className="font-bold text-slate-900 text-sm">{c.full_name}</span>
+                                                                        <span className="font-bold text-slate-900 text-sm">{c.name}</span>
                                                                         <Badge variant="outline" className="text-[9px] text-rose-600 border-rose-200 bg-rose-50 font-bold shrink-0">
-                                                                            ${parseFloat(c.outstanding_balance).toLocaleString()} Owed
+                                                                            ${c.creditBalance.toLocaleString()} Owed
                                                                         </Badge>
                                                                     </div>
                                                                     <div className="flex items-center gap-2 mt-0.5">
-                                                                        <span className="text-[10px] text-slate-500 font-mono">{c.customer_id}</span>
-                                                                        {c.phone && <span className="text-[10px] text-slate-400">• {c.phone}</span>}
+                                                                        <span className="text-[10px] text-slate-500 font-mono">{c.id}</span>
                                                                     </div>
                                                                 </div>
                                                             </SelectItem>
@@ -707,66 +660,6 @@ export function POSTerminal() {
                                                     ) : (
                                                         <div className="p-4 text-center">
                                                             <p className="text-sm font-medium text-slate-600">No customers found</p>
-                                                        </div>
-                                                    )}
-                                                </SelectContent>
-                                            </Select>
-
-                                            {selectedCreditCustomer && (
-                                                <div className="flex justify-between items-center px-4 py-2 bg-rose-50 border border-rose-100 rounded-xl">
-                                                    <div className="flex flex-col">
-                                                        <span className="text-[10px] font-black text-rose-500 uppercase">Limit Status</span>
-                                                        <span className={cn("text-xs font-black", 
-                                                            (parseFloat(selectedCreditCustomer.credit_limit) - parseFloat(selectedCreditCustomer.outstanding_balance)) < 100 ? "text-rose-600" : "text-emerald-600"
-                                                        )}>
-                                                            ${(parseFloat(selectedCreditCustomer.credit_limit) - parseFloat(selectedCreditCustomer.outstanding_balance)).toLocaleString()} available
-                                                        </span>
-                                                    </div>
-                                                    <Badge variant="secondary" className="bg-rose-100 text-rose-700 font-bold uppercase text-[9px]">
-                                                        {selectedCreditCustomer.customer_id}
-                                                    </Badge>
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
-                                )}
-
-                                {paymentMethod === 'employee_credit' && (
-                                    <div className="w-full relative">
-                                        <div className="flex flex-col gap-2">
-                                            <Select 
-                                                value={selectedEmployee?.id || ""} 
-                                                onValueChange={(value) => {
-                                                    const emp = employees.find(e => e.id === value);
-                                                    setSelectedEmployee(emp || null);
-                                                }}
-                                            >
-                                                <SelectTrigger className="h-14 bg-white border-slate-200 text-slate-900 font-bold rounded-2xl focus:ring-amber-500 shadow-sm px-4">
-                                                    <div className="flex items-center gap-3">
-                                                        <User className="size-4 text-slate-400" />
-                                                        <SelectValue placeholder="Select Employee..." />
-                                                    </div>
-                                                </SelectTrigger>
-                                                <SelectContent className="rounded-2xl max-h-[300px]">
-                                                    {employees.length > 0 ? (
-                                                        employees.map((e) => (
-                                                            <SelectItem key={e.id} value={e.id} className="p-3 border-b border-slate-50 last:border-0">
-                                                                <div className="flex flex-col text-left">
-                                                                    <div className="flex justify-between items-center gap-4">
-                                                                        <span className="font-bold text-slate-900 text-sm">{e.full_name}</span>
-                                                                        <Badge variant="outline" className="text-[9px] text-amber-600 border-amber-200 bg-amber-50 font-bold shrink-0">
-                                                                            ${parseFloat(e.outstanding_balance || '0').toLocaleString()} Owed
-                                                                        </Badge>
-                                                                    </div>
-                                                                    <div className="flex items-center gap-2 mt-0.5">
-                                                                        <span className="text-[10px] text-slate-500 font-mono">{e.employee_id} • {e.department}</span>
-                                                                    </div>
-                                                                </div>
-                                                            </SelectItem>
-                                                        ))
-                                                    ) : (
-                                                        <div className="p-4 text-center">
-                                                            <p className="text-sm font-medium text-slate-600">No employees found</p>
                                                         </div>
                                                     )}
                                                 </SelectContent>
@@ -780,9 +673,7 @@ export function POSTerminal() {
                                     disabled={
                                         cart.length === 0 || 
                                         isProcessing || 
-                                        (total > 0 && paymentMethod === 'cash' && Number(amountPaid) > 0 && Number(amountPaid) < total) ||
-                                        (paymentMethod === 'credit' && !selectedCreditCustomer) ||
-                                        (paymentMethod === 'employee_credit' && !selectedEmployee)
+                                        (paymentMethod === 'Credit' && !selectedCreditCustomer)
                                     }
                                     onClick={handleCheckout}
                                 >
@@ -797,7 +688,6 @@ export function POSTerminal() {
                                 </Button>
                             </div>
                         </div>
-
                     </div>
                 </div>
             </div>
@@ -807,152 +697,18 @@ export function POSTerminal() {
                 <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col p-0 overflow-hidden rounded-3xl border-none shadow-2xl">
                     <DialogHeader className="p-8 border-b bg-slate-900 text-white shrink-0">
                         <DialogTitle className="flex items-center gap-3 text-2xl font-black uppercase tracking-tight">
-                            <History className="size-6 text-primary" />
-                            Financial & Medical History
+                            <History className="size-6 text-clinical-400" />
+                            Financial History
                         </DialogTitle>
                         <DialogDescription className="text-slate-400 font-medium">
-                            Comprehensive record for {selectedPatient?.firstName} {selectedPatient?.lastName}
+                            Records for {selectedPatient?.name}
                         </DialogDescription>
                     </DialogHeader>
-                    
-                    <div className="flex-1 overflow-hidden flex flex-col bg-slate-50">
-                        {patientHistory ? (
-                            <>
-                                {/* Quick Stats */}
-                                <div className="grid grid-cols-3 gap-4 p-6 shrink-0">
-                                    <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
-                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Total Billed</p>
-                                        <p className="text-xl font-black text-slate-900">${(patientHistory.invoices?.reduce((acc: number, inv: any) => acc + (Number(inv.total) || 0), 0) || 0).toLocaleString()}</p>
-                                    </div>
-                                    <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
-                                        <p className="text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-1">Total Paid</p>
-                                        <p className="text-xl font-black text-emerald-600">${(patientHistory.invoices?.reduce((acc: number, inv: any) => acc + (Number(inv.paid_amount) || 0), 0) || 0).toLocaleString()}</p>
-                                    </div>
-                                    <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
-                                        <p className="text-[10px] font-black text-rose-500 uppercase tracking-widest mb-1">Outstanding</p>
-                                        <p className="text-xl font-black text-rose-600">
-                                            ${((patientHistory.invoices?.reduce((acc: number, inv: any) => acc + (Number(inv.total) || 0), 0) || 0) - 
-                                              (patientHistory.invoices?.reduce((acc: number, inv: any) => acc + (Number(inv.paid_amount) || 0), 0) || 0)).toLocaleString()}
-                                        </p>
-                                    </div>
-                                </div>
-
-                                <Tabs defaultValue="invoices" className="flex-1 flex flex-col overflow-hidden px-6 pb-6">
-                                    <TabsList className="bg-slate-200/50 p-1 rounded-xl mb-4 w-fit">
-                                        <TabsTrigger value="invoices" className="rounded-lg px-6 font-bold text-xs uppercase tracking-widest">Invoices</TabsTrigger>
-                                        <TabsTrigger value="prescriptions" className="rounded-lg px-6 font-bold text-xs uppercase tracking-widest">Prescriptions</TabsTrigger>
-                                        <TabsTrigger value="labs" className="rounded-lg px-6 font-bold text-xs uppercase tracking-widest">Lab Tests</TabsTrigger>
-                                    </TabsList>
-
-                                    <div className="flex-1 overflow-hidden bg-white rounded-2xl border border-slate-200 shadow-sm">
-                                        <ScrollArea className="h-full">
-                                            <TabsContent value="invoices" className="m-0 p-4">
-                                                <div className="space-y-3">
-                                                    {patientHistory.invoices?.length > 0 ? (
-                                                        patientHistory.invoices.map((inv: any) => (
-                                                            <div key={inv.id} className="group flex items-center justify-between p-4 border border-slate-100 rounded-xl hover:bg-slate-50 transition-colors">
-                                                                <div className="flex items-center gap-4">
-                                                                    <div className="size-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-500">
-                                                                        <Receipt className="size-5" />
-                                                                    </div>
-                                                                    <div>
-                                                                        <p className="font-bold text-sm text-slate-900">{inv.invoice_id}</p>
-                                                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{format(new Date(inv.date), "MMM d, yyyy")}</p>
-                                                                    </div>
-                                                                </div>
-                                                                <div className="text-right flex items-center gap-4">
-                                                                    <div>
-                                                                        <p className="font-black text-slate-900">${Number(inv.total).toLocaleString()}</p>
-                                                                        <Badge variant="outline" className={cn("text-[9px] uppercase tracking-widest font-black", 
-                                                                            inv.status === 'paid' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-amber-50 text-amber-600 border-amber-100'
-                                                                        )}>{inv.status}</Badge>
-                                                                    </div>
-                                                                </div>
-                                                            </div>
-                                                        ))
-                                                    ) : (
-                                                        <div className="py-20 text-center text-slate-400">
-                                                            <Receipt className="size-12 mx-auto mb-3 opacity-20" />
-                                                            <p className="font-bold uppercase tracking-widest text-xs">No invoices found</p>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            </TabsContent>
-
-                                            <TabsContent value="prescriptions" className="m-0 p-4">
-                                                <div className="space-y-3">
-                                                    {patientHistory.prescriptions?.length > 0 ? (
-                                                        patientHistory.prescriptions.map((rx: any) => (
-                                                            <div key={rx.id} className="p-4 border border-slate-100 rounded-xl hover:bg-slate-50 transition-colors">
-                                                                <div className="flex justify-between items-start mb-3">
-                                                                    <div className="flex items-center gap-3">
-                                                                        <div className="size-10 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center">
-                                                                            <Pill className="size-5" />
-                                                                        </div>
-                                                                        <div>
-                                                                            <p className="font-bold text-sm text-slate-900">Dr. {rx.doctor_name || 'Medical Practitioner'}</p>
-                                                                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{format(new Date(rx.date), "MMM d, yyyy")}</p>
-                                                                        </div>
-                                                                    </div>
-                                                                    <Badge className="bg-emerald-500 text-white border-none uppercase text-[9px] font-black">{rx.status}</Badge>
-                                                                </div>
-                                                                <div className="space-y-2">
-                                                                    {rx.medicines?.map((m: any, idx: number) => (
-                                                                        <div key={idx} className="flex justify-between text-xs bg-slate-50 p-2 rounded-lg">
-                                                                            <span className="font-bold text-slate-700">{m.medicineName}</span>
-                                                                            <span className="font-black text-slate-500">{m.quantity} Units</span>
-                                                                        </div>
-                                                                    ))}
-                                                                </div>
-                                                            </div>
-                                                        ))
-                                                    ) : (
-                                                        <div className="py-20 text-center text-slate-400">
-                                                            <Pill className="size-12 mx-auto mb-3 opacity-20" />
-                                                            <p className="font-bold uppercase tracking-widest text-xs">No prescriptions found</p>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            </TabsContent>
-
-                                            <TabsContent value="labs" className="m-0 p-4">
-                                                <div className="space-y-3">
-                                                    {patientHistory.labTests?.length > 0 ? (
-                                                        patientHistory.labTests.map((lab: any) => (
-                                                            <div key={lab.id} className="flex items-center justify-between p-4 border border-slate-100 rounded-xl hover:bg-slate-50 transition-colors">
-                                                                <div className="flex items-center gap-4">
-                                                                    <div className="size-10 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center">
-                                                                        <Activity className="size-5" />
-                                                                    </div>
-                                                                    <div>
-                                                                        <p className="font-bold text-sm text-slate-900">{lab.test_name}</p>
-                                                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{format(new Date(lab.ordered_at), "MMM d, yyyy")}</p>
-                                                                    </div>
-                                                                </div>
-                                                                <Badge variant="outline" className="uppercase text-[9px] font-black border-blue-200 text-blue-600">{lab.status}</Badge>
-                                                            </div>
-                                                        ))
-                                                    ) : (
-                                                        <div className="py-20 text-center text-slate-400">
-                                                            <Activity className="size-12 mx-auto mb-3 opacity-20" />
-                                                            <p className="font-bold uppercase tracking-widest text-xs">No laboratory records</p>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            </TabsContent>
-                                        </ScrollArea>
-                                    </div>
-                                </Tabs>
-                            </>
-                        ) : (
-                            <div className="h-64 flex flex-col items-center justify-center">
-                                <Loader2 className="size-10 animate-spin text-primary opacity-20" />
-                                <p className="mt-4 text-xs font-black text-slate-400 uppercase tracking-widest">Retrieving Digital Records...</p>
-                            </div>
-                        )}
+                    <div className="flex-1 overflow-hidden p-8 text-center text-slate-500">
+                        Patient historical invoices will load here in the full version.
                     </div>
                 </DialogContent>
-            </Dialog>            
+            </Dialog>
 
              {/* RECEIPT MODAL */}
              <Dialog open={showReceipt} onOpenChange={(open) => { if (!open) setShowReceipt(false) }}>
@@ -1019,23 +775,14 @@ export function POSTerminal() {
                     <div className="hidden">
                         <div id="thermal-receipt-content" className="thermal-receipt">
                             <div className="thermal-header">
-                                {hospitalSettings?.logo && (
-                                    <div style={{ textAlign: 'center', marginBottom: '10px' }}>
-                                        <img src={hospitalSettings.logo} alt="Logo" style={{ maxWidth: '80px', maxHeight: '80px' }} />
-                                    </div>
-                                )}
-                                <div className="thermal-title">{hospitalSettings?.name || 'GarGaar Hospital'}</div>
-                                <div className="thermal-subtitle">{hospitalSettings?.tagline || 'Health & Care Center'}</div>
-                                <div className="thermal-payment-codes">
-                                    {hospitalSettings?.zaad && `ZAAD: ${hospitalSettings.zaad}`} {hospitalSettings?.sahal && `- SAHAL: ${hospitalSettings.sahal}`}<br />
-                                    {hospitalSettings?.edahab && `E-DAHAB: ${hospitalSettings.edahab}`} {hospitalSettings?.mycash && `- MyCash: ${hospitalSettings.mycash}`}
-                                </div>
+                                <div className="thermal-title">Hudi Datel Care Clinic</div>
+                                <div className="thermal-subtitle">Health & Care Center</div>
                             </div>
 
                             <div className="thermal-info">
                                 <div><span className="thermal-label">Receipt Number : </span>{lastInvoice?.invoiceId}</div>
-                                <div><span className="thermal-label">Served By : </span>{lastInvoice?.userName || localStorage.getItem('userName') || 'Cashier'}</div>
-                                <div><span className="thermal-label">Customer : </span>{lastInvoice?.patientName || 'Walking Customer'}</div>
+                                <div><span className="thermal-label">Served By : </span>{lastInvoice?.userName}</div>
+                                <div><span className="thermal-label">Customer : </span>{lastInvoice?.patientName}</div>
                                 <div><span className="thermal-label">Date : </span>{lastInvoice ? format(new Date(), "dd/MM/yyyy HH:mm") : ''}</div>
                             </div>
 
@@ -1064,28 +811,22 @@ export function POSTerminal() {
 
                             <div className="thermal-totals">
                                 <div className="thermal-row">
-                                    <span>Vat @ 5 %</span>
-                                    <span>{(Number(lastInvoice?.total || 0) * 0.05).toFixed(1)}</span>
+                                    <span>Vat @ 0 %</span>
+                                    <span>0.0</span>
                                 </div>
                                 <div className="thermal-row">
                                     <span>Paid Amount</span>
-                                    <span>{Number(lastInvoice?.paidAmount || 0).toFixed(0)}</span>
+                                    <span>{Number(lastInvoice?.paidAmount || lastInvoice?.total || 0).toFixed(0)}</span>
                                 </div>
                                 <div className="thermal-separator"></div>
                                 <div className="thermal-row" style={{ fontWeight: 'bold' }}>
                                     <span>Total : {Number(lastInvoice?.total || 0).toFixed(1)}</span>
-                                </div>
-                                <div className="thermal-row">
-                                    <span>Total L/Currency : 0</span>
                                 </div>
                             </div>
 
                             <div className="thermal-separator"></div>
 
                             <div className="thermal-footer">
-                                <div className="qr-container">
-                                    <img src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${lastInvoice?.invoiceId}`} className="qr-image" alt="QR Code" />
-                                </div>
                                 <div style={{ marginBottom: '5px', textTransform: 'uppercase' }}>Thank you for visiting us</div>
                                 <div style={{ fontSize: '10px' }}>Powered by HUDI-SOFT</div>
                             </div>
@@ -1111,4 +852,4 @@ export function POSTerminal() {
 
         </div>
     )
-} 
+}

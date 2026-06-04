@@ -1,7 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import { Capacitor } from "@capacitor/core"
+import { useState } from "react"
 import { Upload } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -12,7 +11,6 @@ import { PageHeader } from "@/components/shared/page-header"
 import { settingsApi } from "@/lib/api"
 import type { HospitalSettings } from "@/lib/api"
 import { toast } from "sonner"
-import ApkInstaller from "@/lib/plugins/apk-installer"
 
 interface SettingsContentProps {
   settings: HospitalSettings
@@ -22,90 +20,6 @@ export function SettingsContent({ settings }: SettingsContentProps) {
   const [form, setForm] = useState(settings)
   const [isSaving, setIsSaving] = useState(false)
   const [logoPreview, setLogoPreview] = useState<string | null>(settings.logo || null)
-
-  const [apkUrl, setApkUrl] = useState("https://github.com/dandar3/android-test-apk/raw/master/test-apk-1.0.apk")
-  const [progress, setProgress] = useState<number | null>(null)
-  const [status, setStatus] = useState("")
-  const [isPermissionGranted, setIsPermissionGranted] = useState(false)
-  const [isNative, setIsNative] = useState(false)
-
-  useEffect(() => {
-    const native = Capacitor.isNativePlatform()
-    setIsNative(native)
-    if (native) {
-      checkPermission()
-    }
-  }, [])
-
-  const checkPermission = async () => {
-    if (!Capacitor.isNativePlatform()) return
-
-    try {
-      const result = await ApkInstaller.canRequestPackageInstalls()
-      setIsPermissionGranted(result.value)
-    } catch (err) {
-      console.error(err)
-    }
-  }
-
-  const handleGrantPermission = async () => {
-    if (!Capacitor.isNativePlatform()) return
-
-    try {
-      await ApkInstaller.requestPackageInstallsPermission()
-      const onVisible = () => {
-        if (document.visibilityState === "visible") {
-          checkPermission()
-          document.removeEventListener("visibilitychange", onVisible)
-        }
-      }
-      document.addEventListener("visibilitychange", onVisible)
-    } catch (err) {
-      console.error(err)
-    }
-  }
-
-  const handleInstall = async () => {
-    if (isNative && !isPermissionGranted) {
-      toast.error("Package installation permission is required.")
-      return
-    }
-
-    setProgress(0)
-    setStatus("Connecting to host...")
-
-    if (isNative && Capacitor.isNativePlatform()) {
-      let progressListener: { remove: () => void } | null = null
-      try {
-        progressListener = await ApkInstaller.addListener("downloadProgress", (data) => {
-          const pct = Math.round(data.progress * 100)
-          setProgress(pct)
-          setStatus("Downloading update packages...")
-        })
-        await ApkInstaller.downloadAndInstall({ url: apkUrl })
-        toast.success("Download complete. Launching package installer.")
-      } catch (err: any) {
-        toast.error(err.message || "Failed to update package.")
-      } finally {
-        progressListener?.remove()
-        setProgress(null)
-        setStatus("")
-      }
-    } else {
-      let pct = 0;
-      const interval = setInterval(() => {
-        pct += 5;
-        setProgress(pct);
-        setStatus("Downloading mock packages...");
-        if (pct >= 100) {
-          clearInterval(interval);
-          toast.success("Mock update complete!");
-          setProgress(null);
-          setStatus("");
-        }
-      }, 100);
-    }
-  }
 
   const handleLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -351,71 +265,6 @@ export function SettingsContent({ settings }: SettingsContentProps) {
           <Button type="button" onClick={handleSave} disabled={isSaving}>
             {isSaving ? "Saving..." : "Save Changes"}
           </Button>
-        </CardContent>
-      </Card>
-
-      <Card className="w-full md:col-span-3">
-        <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2">
-            <span className="size-2 rounded-full bg-teal-500 animate-pulse"></span>
-            System Updates & Deployment
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <p className="text-xs text-muted-foreground font-medium">
-            Check for system packages and deploy updates directly to this terminal.
-          </p>
-          
-          <div className="grid gap-2">
-            <Label>Package APK Source URL</Label>
-            <div className="flex gap-3">
-              <Input
-                value={apkUrl}
-                onChange={(e) => setApkUrl(e.target.value)}
-                placeholder="https://example.com/app.apk"
-                className="flex-grow"
-              />
-              <Button 
-                onClick={handleInstall} 
-                disabled={progress !== null}
-                className="bg-teal-600 hover:bg-teal-500 text-white font-bold"
-              >
-                {progress !== null ? "Downloading..." : "Deploy Update"}
-              </Button>
-            </div>
-          </div>
-
-          {progress !== null && (
-            <div className="space-y-2 p-4 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-100 dark:border-slate-800">
-              <div className="flex justify-between text-xs font-bold text-muted-foreground">
-                <span>{status}</span>
-                <span>{progress}%</span>
-              </div>
-              <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-2.5 overflow-hidden">
-                <div 
-                  className="bg-teal-600 h-2.5 rounded-full transition-all duration-300" 
-                  style={{ width: `${progress}%` }}
-                ></div>
-              </div>
-            </div>
-          )}
-
-          {isNative && !isPermissionGranted && (
-            <div className="p-4 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/30 rounded-xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-              <div className="space-y-1">
-                <p className="text-xs font-bold text-amber-800 dark:text-amber-400">Package Install Permission Required</p>
-                <p className="text-[11px] text-amber-700 dark:text-amber-500">Allow installation from unknown sources to apply system updates.</p>
-              </div>
-              <Button 
-                variant="outline" 
-                size="sm" 
-                onClick={handleGrantPermission}
-                className="border-amber-200 hover:bg-amber-100 text-amber-800"
-              >
-                Configure Settings
-              </Button>
-            </div>
-          )}
         </CardContent>
       </Card>
       </div>
