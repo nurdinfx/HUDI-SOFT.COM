@@ -18,6 +18,7 @@ const RequestDemo = () => {
     const [submitted, setSubmitted] = useState(false);
     const [loading, setLoading] = useState(false);
     const [trialInfo, setTrialInfo] = useState(null);
+    const [loadingMsg, setLoadingMsg] = useState('Authorizing...');
 
     const handleChange = (e) => {
         const { name, value, type, checked } = e.target;
@@ -31,17 +32,27 @@ const RequestDemo = () => {
         e.preventDefault();
         setLoading(true);
         setError(null);
+        setLoadingMsg('Authorizing...');
+
+        // After 5 s, update the label so users know it's a cold start, not a freeze
+        const wakeTimer = setTimeout(() => {
+            setLoadingMsg('Waking up server, please wait...');
+        }, 5000);
+
         try {
             const { data } = await API.post('/leads', formData);
             if (data.trial) {
                 setTrialInfo(data.trial);
             }
             setSubmitted(true);
-        } catch (error) {
-            console.error('Error submitting demo request:', error);
-            setError(error.response?.data?.message || 'Could not connect to the server. Please ensure the backend is running.');
+        } catch (err) {
+            const msg = err.response?.data?.message
+                || 'Could not connect to the server. Please try again in a moment.';
+            setError(msg);
         } finally {
+            clearTimeout(wakeTimer);
             setLoading(false);
+            setLoadingMsg('Authorizing...');
         }
     };
 
@@ -274,9 +285,16 @@ const RequestDemo = () => {
                             <motion.div 
                                 initial={{ opacity: 0 }}
                                 animate={{ opacity: 1 }}
-                                className="p-4 bg-red-50 text-red-600 rounded-2xl text-[10px] font-black uppercase tracking-widest text-center"
+                                className="p-4 bg-red-50 text-red-600 rounded-2xl text-[10px] font-black uppercase tracking-widest text-center space-y-2"
                             >
-                                {error}
+                                <p>{error}</p>
+                                <button
+                                    type="button"
+                                    onClick={() => setError(null)}
+                                    className="underline text-red-400 hover:text-red-600 transition-colors normal-case tracking-normal text-xs font-bold"
+                                >
+                                    Dismiss and try again
+                                </button>
                             </motion.div>
                         )}
 
@@ -285,10 +303,21 @@ const RequestDemo = () => {
                                 whileHover={{ scale: 1.02 }}
                                 whileTap={{ scale: 0.98 }}
                                 type="submit" disabled={loading}
-                                className="w-full py-6 bg-blue-600 text-white rounded-[2rem] font-black text-sm uppercase tracking-[0.3em] hover:bg-blue-700 transition-all shadow-[0_20px_50px_rgba(37,99,235,0.2)] disabled:opacity-50"
+                                className="w-full py-6 bg-blue-600 text-white rounded-[2rem] font-black text-sm uppercase tracking-[0.3em] hover:bg-blue-700 transition-all shadow-[0_20px_50px_rgba(37,99,235,0.2)] disabled:opacity-50 flex items-center justify-center gap-3"
                             >
-                                {loading ? 'Authorizing...' : 'Claim Free 3-Day Trial'}
+                                {loading && (
+                                    <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+                                    </svg>
+                                )}
+                                {loading ? loadingMsg : 'Claim Free 3-Day Trial'}
                             </motion.button>
+                            {loading && (
+                                <p className="text-center text-[10px] text-slate-400 font-bold mt-3 uppercase tracking-widest">
+                                    This may take up to 20 seconds on first request
+                                </p>
+                            )}
                         </div>
                     </form>
                 </motion.div>

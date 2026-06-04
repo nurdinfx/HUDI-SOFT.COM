@@ -9,12 +9,18 @@
  */
 
 const DEFAULT_ALLOWED_ORIGINS = [
+    // Production custom domain
+    'https://hudisoft.online',
+    'https://www.hudisoft.online',
     // Production Vercel deployments
     'https://hudi-soft-com.vercel.app',
     'https://hudi-soft-com-sz9e.vercel.app',
     'https://hudi-soft-com-2g8v.vercel.app',
     'https://hudi-soft-com-m48c.vercel.app',
     'https://hudi-soft-hms.vercel.app',
+    // Render services (inter-service calls)
+    'https://hudi-soft-com.onrender.com',
+    'https://hudi-hospital.onrender.com',
     // Development
     'http://localhost:3000',
     'http://localhost:3001',
@@ -45,12 +51,14 @@ const ALLOWED_SET = buildAllowedSet();
  * We only allow *.vercel.app URLs that start with our project name.
  */
 const VERCEL_PREVIEW_PATTERN = /^https:\/\/hudi-soft[-a-z0-9]*\.vercel\.app$/;
+const HUDISOFT_DOMAIN_PATTERN = /^https?:\/\/(www\.)?hudisoft\.online$/;
 
 function isOriginAllowed(origin) {
     if (!origin) return true; // server-to-server / non-browser request
     const clean = origin.replace(/\/$/, '');
     if (ALLOWED_SET.has(clean)) return true;
     if (VERCEL_PREVIEW_PATTERN.test(clean)) return true;
+    if (HUDISOFT_DOMAIN_PATTERN.test(clean)) return true;
     return false;
 }
 
