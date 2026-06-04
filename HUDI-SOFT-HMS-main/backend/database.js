@@ -8,34 +8,66 @@ const { v4: uuidv4 } = require('uuid');
 const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '.env') });
 
-const databaseUrl = process.env.DATABASE_URL;
-if (databaseUrl) {
+/**
+ * Parse DATABASE_URL into individual pg connection params.
+ * This avoids the Supabase "tenant/user dot in hostname" DNS bug on Render.
+ */
+function parseConnectionConfig(urlString) {
+  if (!urlString) return null;
+
   try {
-    const parsed = new URL(databaseUrl);
-    console.log('🔌 DB Connection Attempt:', {
-      protocol: parsed.protocol,
-      host: parsed.hostname,
-      port: parsed.port,
-      database: parsed.pathname.split('/')[1]
+    const url = new URL(urlString);
+    const config = {
+      host:     url.hostname,
+      port:     parseInt(url.port, 10) || 5432,
+      database: url.pathname.replace(/^\//, ''),
+      user:     decodeURIComponent(url.username),
+      password: decodeURIComponent(url.password),
+      ssl:      { rejectUnauthorized: false },
+      family:   4,                       // Force IPv4 — fixes ENETUNREACH on Render
+      connectionTimeoutMillis: 15000,
+      max:      3,                       // Supabase free tier: keep pool small
+      idleTimeoutMillis: 10000,
+    };
+
+    console.log('🔌 Using DATABASE_URL:', {
+      host:     config.host,
+      port:     config.port,
+      database: config.database,
+      user:     config.user,
+      ssl:      true,
     });
+
+    return config;
   } catch (e) {
-    console.warn('⚠️ DATABASE_URL is not a valid URL format:', databaseUrl.substring(0, 15) + '...');
+    console.error('❌ DATABASE_URL parse error:', e.message);
+    return null;
   }
-} else {
-  console.error('❌ DATABASE_URL is MISSING in environment variables!');
 }
 
-const pool = new Pool({
-  connectionString: databaseUrl,
-  ssl: {
-    rejectUnauthorized: false
-  },
-  // Force IPv4 to avoid ENETUNREACH errors on environments with poor IPv6 support
-  family: 4,
-  connectionTimeoutMillis: 30000, 
-  max: 3, // Lowered to 3 to be extremely safe for Supabase session mode
-  idleTimeoutMillis: 5000 // Lowered to 5s to release connections almost immediately
-});
+let pool = null;
+const databaseUrl = process.env.DATABASE_URL;
+
+if (databaseUrl) {
+  const config = parseConnectionConfig(databaseUrl);
+  if (config) {
+    pool = new Pool(config);
+  }
+} else {
+  console.log('🔌 Using individual DB credentials (DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME)');
+  pool = new Pool({
+    host: process.env.DB_HOST,
+    port: parseInt(process.env.DB_PORT || 5432, 10),
+    database: process.env.DB_NAME,
+    user: process.env.DB_USER,
+    password: process.env.DB_PASSWORD,
+    ssl: { rejectUnauthorized: false },
+    family: 4,
+    connectionTimeoutMillis: 30000,
+    max: 3,
+    idleTimeoutMillis: 5000
+  });
+}
 
 pool.on('error', (err) => {
   console.error('❌ Unexpected database pool error:', err.message);
