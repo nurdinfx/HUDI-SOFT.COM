@@ -1,0 +1,15 @@
+{
+    "buildCommand": "pnpm run build",
+    "installCommand": "pnpm install",
+    "framework": "nextjs",
+    "rewrites": [
+        {
+            "source": "/license-api/:path*",
+            "destination": "https://hudi-soft-com.onrender.com/api/:path*"
+        },
+        {
+            "source": "/api/:path*",
+            "destination": "https://hudi-soft-hms.onrender.com/api/:path*"
+        }
+    ]
+}
