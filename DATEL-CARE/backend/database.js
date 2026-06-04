@@ -63,8 +63,23 @@ if (databaseUrl) {
     });
   }
 } else {
-  console.error('❌ DATABASE_URL is not set. DB routes will return errors until it is configured.');
-  console.error('   Render dashboard → your service → Environment → Add DATABASE_URL');
+  console.log('🔌 Using individual DB credentials (DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME)');
+  pool = new Pool({
+    host: process.env.DB_HOST,
+    port: parseInt(process.env.DB_PORT || 5432, 10),
+    database: process.env.DB_NAME,
+    user: process.env.DB_USER,
+    password: process.env.DB_PASSWORD,
+    ssl: { rejectUnauthorized: false },
+    family: 4,
+    connectionTimeoutMillis: 30000,
+    max: 3,
+    idleTimeoutMillis: 5000
+  });
+  pool.on('error', (err) => {
+    // Log pool errors but never crash the process
+    console.error('❌ DB pool error:', err.message);
+  });
 }
 
 // ─── SQL compatibility shim (SQLite → PostgreSQL) ─────────────────────────────
