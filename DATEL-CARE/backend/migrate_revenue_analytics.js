@@ -7,7 +7,8 @@ const { v4: uuidv4 } = require('uuid');
 
 async function migrate() {
     try {
-        console.log('🚀 Starting Revenue Analytics Migration...');
+        console.log('🚀 Revenue Analytics Migration v2 starting...');
+        // v2: no process.exit — throws on failure so server.js catch handles it
 
         // 1. Create Departments Table
         await db.exec(`

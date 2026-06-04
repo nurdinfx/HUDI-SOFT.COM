@@ -2,6 +2,10 @@ const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '.env') });
 const express = require('express');
 
+// BUILD: 2026-06-04-v2 — port opens before DB, no process.exit anywhere
+const BUILD_ID = '2026-06-04-v2';
+console.log(`🚀 HUDI HMS Backend ${BUILD_ID} starting...`);
+
 const app = express();
 const PORT = process.env.PORT || 4000;
 
@@ -129,9 +133,10 @@ app.use((err, req, res, next) => {
 // We open the port immediately, THEN connect to the database.
 // This prevents the "No open ports detected" crash loop.
 app.listen(PORT, () => {
-    console.log(`\n🏥 Hospital Management API listening on port ${PORT}`);
+    console.log(`\n✅ BUILD ${BUILD_ID} — HTTP port ${PORT} is OPEN`);
+    console.log(`🏥 Hospital Management API ready`);
     console.log(`   Health: http://localhost:${PORT}/api/health`);
-    // Connect DB after port is open
+    console.log(`   DB connects AFTER this line — port is already open`);
     initDatabase();
 });
 
