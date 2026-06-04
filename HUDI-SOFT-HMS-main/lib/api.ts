@@ -33,7 +33,7 @@ export function getLicenseValidateUrl(): string {
 
 const getBaseUrl = () => `${API_BASE}/api`;
 
-const LICENSE_REQUEST_TIMEOUT_MS = 45000;
+const LICENSE_REQUEST_TIMEOUT_MS = 12000; // 12s — tight enough to fail fast on cold start
 
 async function fetchLicenseValidate(licenseKey: string, machineID: string) {
     const url = getLicenseValidateUrl();
@@ -42,7 +42,7 @@ async function fetchLicenseValidate(licenseKey: string, machineID: string) {
     const timeoutId = setTimeout(() => controller.abort(), LICENSE_REQUEST_TIMEOUT_MS);
 
     if (typeof window !== 'undefined') {
-        console.log('[license] validate →', url.replace(licenseKey, '***'));
+        console.log('[license] validate →', url);
     }
 
     try {
@@ -52,55 +52,62 @@ async function fetchLicenseValidate(licenseKey: string, machineID: string) {
             body,
             signal: controller.signal,
         });
-        const data = await res.json().catch(() => ({}));
+
+        // Safe JSON parse — a cold-start Render 502 returns HTML, not JSON
+        const text = await res.text();
+        let data: Record<string, unknown> = {};
+        try { data = JSON.parse(text); } catch {
+            console.error('[license] non-JSON response:', text.slice(0, 200));
+            throw new Error('License server returned an unexpected response. Please try again in a moment.');
+        }
 
         if (!res.ok) {
-            const payload = data as { message?: string; error?: string; valid?: boolean };
-            throw new Error(
-                payload.message ||
-                    payload.error ||
-                    `License check failed (${res.status})`
-            );
+            const payload = data as { message?: string; error?: string };
+            throw new Error(payload.message || payload.error || `License check failed (${res.status})`);
         }
 
         const result = data as {
             valid?: boolean;
             success?: boolean;
-            message: string;
-            expiryDate: string;
-            isTrial: boolean;
-            daysRemaining: number;
+            message?: string;
+            expiryDate?: string;
+            isTrial?: boolean;
+            daysRemaining?: number;
             companyName?: string;
         };
 
         const isValid = result.valid === true || result.success === true;
         if (!isValid) {
-            throw new Error(result.message || 'Invalid license key');
+            throw new Error(result.message || 'Invalid license key. Please check and try again.');
         }
 
         return {
             valid: true as const,
             message: result.message || 'License is valid',
-            expiryDate: result.expiryDate,
+            expiryDate: result.expiryDate ?? new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
             isTrial: result.isTrial ?? false,
-            daysRemaining: result.daysRemaining ?? 0,
+            daysRemaining: result.daysRemaining ?? 365,
             companyName: result.companyName,
         };
     } catch (err: unknown) {
         if (err instanceof Error) {
             if (err.name === 'AbortError') {
                 throw new Error(
-                    'License server timed out. The server may be waking up — wait 30 seconds and try again.'
+                    'License server timed out. The server is waking up — please wait a moment and try again.'
                 );
             }
-            if (err.message.includes('Failed to fetch') || err.message.includes('NetworkError')) {
+            if (
+                err.message.includes('Failed to fetch') ||
+                err.message.includes('NetworkError') ||
+                err.message.includes('fetch')
+            ) {
                 throw new Error(
-                    'Could not reach the license server. Check your connection or try again in 30 seconds.'
+                    'Cannot reach the license server. Check your internet connection and try again.'
                 );
             }
             throw err;
         }
-        throw new Error('Could not reach the license server.');
+        throw new Error('License server unreachable. Please try again.');
     } finally {
         clearTimeout(timeoutId);
     }

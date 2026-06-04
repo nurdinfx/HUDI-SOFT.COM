@@ -58,6 +58,7 @@ export function LicenseGuard({ children }: { children: React.ReactNode }) {
     const [licenseInput, setLicenseInput] = React.useState('');
     const [activating, setActivating] = React.useState(false);
     const [error, setError] = React.useState('');
+    const [activatingMsg, setActivatingMsg] = React.useState('Activating…');
 
     const runActivation = React.useCallback(async (rawKey: string) => {
         const key = normalizeLicenseKey(rawKey);
@@ -70,6 +71,12 @@ export function LicenseGuard({ children }: { children: React.ReactNode }) {
 
         setActivating(true);
         setError('');
+        setActivatingMsg('Activating…');
+
+        // After 5 s, update message so users know it's a cold start
+        const slowTimer = setTimeout(() => {
+            setActivatingMsg('Server waking up, please wait…');
+        }, 5000);
 
         try {
             const result = await licenseApi.validate(key);
@@ -85,7 +92,9 @@ export function LicenseGuard({ children }: { children: React.ReactNode }) {
             console.error('[license-guard]', message);
             setError(message);
         } finally {
+            clearTimeout(slowTimer);
             setActivating(false);
+            setActivatingMsg('Activating…');
             setChecking(false);
         }
     }, []);
@@ -159,9 +168,18 @@ export function LicenseGuard({ children }: { children: React.ReactNode }) {
                     </div>
 
                     {error ? (
-                        <p className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300">
-                            {error}
-                        </p>
+                        <div className="space-y-2">
+                            <p className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300">
+                                {error}
+                            </p>
+                            <button
+                                type="button"
+                                onClick={() => setError('')}
+                                className="w-full text-xs text-slate-500 hover:text-slate-300 transition-colors underline"
+                            >
+                                Dismiss and try again
+                            </button>
+                        </div>
                     ) : null}
 
                     <button
@@ -174,8 +192,13 @@ export function LicenseGuard({ children }: { children: React.ReactNode }) {
                         ) : (
                             <Zap className="size-5" />
                         )}
-                        {activating ? 'Activating…' : 'Activate system'}
+                        {activatingMsg}
                     </button>
+                    {activating && (
+                        <p className="text-center text-[10px] text-slate-500 uppercase tracking-widest">
+                            May take up to 15 seconds on first request
+                        </p>
+                    )}
                 </form>
 
                 <div className="mt-8 flex justify-center gap-8 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
