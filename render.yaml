@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: hudi-soft-hms-backend
+    runtime: node
+    rootDir: DATEL-CARE/backend
+    buildCommand: npm install
+    startCommand: node server.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 4000
+      # Set these in the Render dashboard — do NOT hardcode secrets here:
+      # DATABASE_URL  — see instructions below
+      # JWT_SECRET
+      # FRONTEND_URL
+    healthCheckPath: /api/health
+    autoDeploy: true
