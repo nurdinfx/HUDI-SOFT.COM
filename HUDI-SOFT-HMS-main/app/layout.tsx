@@ -9,8 +9,8 @@ const appUrl = process.env.NEXT_PUBLIC_APP_URL
 
 export const metadata: Metadata = {
   metadataBase: new URL(appUrl),
-  title: "Hudi Datel Care | Enterprise Clinic Management",
-  description: "Advanced healthcare operations, EHR, and telehealth by Hudi-Soft.",
+  title: "Hudi Soft HMS | Enterprise Hospital Management System",
+  description: "Advanced hospital operations, EHR, and patient management by Hudi-Soft.",
   manifest: "/manifest.json",
   icons: {
     icon: [
@@ -24,8 +24,8 @@ export const metadata: Metadata = {
     shortcut: "/logo.png",
   },
   openGraph: {
-    title: "Hudi Datel Care",
-    description: "Enterprise clinical management system by Hudi-Soft",
+    title: "Hudi Soft HMS",
+    description: "Enterprise hospital management system by Hudi-Soft",
     images: [{ url: "/logo-512.png" }],
   },
 };
