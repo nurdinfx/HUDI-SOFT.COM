@@ -142,6 +142,15 @@ app.listen(PORT, () => {
 
 // ─── 9. DB init + migrations (non-blocking) ───────────────────────────────────
 async function runMigrations() {
+    // First run the base schema
+    const schemaPath = path.join(__dirname, 'schema.sql');
+    const fs = require('fs');
+    const dbModule = require('./database');
+    const schemaSql = fs.readFileSync(schemaPath, 'utf8');
+    console.log('🚀 Running base schema...');
+    await dbModule.exec(schemaSql);
+    console.log('✅ Base schema applied');
+
     const migrations = [
         './migrate_revenue_analytics',
         './migrate_multi_test',

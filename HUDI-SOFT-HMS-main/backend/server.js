@@ -96,9 +96,19 @@ app.get('/api/health', (req, res) => {
 
 // Wait for DB to be ready, then start listening
 const dbModule = require('./database');
+const fs = require('fs');
+const path = require('path');
 dbModule.promise.then(async () => {
     console.log('📦 Running Database Migrations...');
     try {
+        // First run the base schema
+        const schemaPath = path.join(__dirname, 'schema.sql');
+        const schemaSql = fs.readFileSync(schemaPath, 'utf8');
+        console.log('🚀 Running base schema...');
+        await dbModule.exec(schemaSql);
+        console.log('✅ Base schema applied');
+
+        // Now run additional migrations
         await require('./migrate_revenue_analytics')();
         await require('./migrate_multi_test')();
         await require('./migrate_purchase_hub')();
