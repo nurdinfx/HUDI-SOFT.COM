@@ -3,7 +3,7 @@
 import * as React from 'react';
 import { useState } from 'react';
 import { Shield, Key, Loader2, CheckCircle2, AlertCircle, Zap } from 'lucide-react';
-import { setLicenseKey } from '@/lib/api';
+import { licenseApi, setLicenseKey } from '@/lib/api';
 
 interface LicenseActivationProps {
   onSuccess: (key: string) => void;
@@ -46,7 +46,19 @@ export function LicenseActivation({ onSuccess }: LicenseActivationProps) {
     setError('');
 
     try {
-      // 1. Check Static Fallback first (for offline/APK)
+      // Try 1: Real API call first
+      try {
+        await licenseApi.validate(cleanKey);
+        setSuccess(true);
+        setLicenseKey(cleanKey);
+        setTimeout(() => onSuccess(cleanKey), 1000);
+        return;
+      } catch (apiErr) {
+        console.log('API validation failed, trying fallback:', apiErr);
+        // If API fails, fall back to offline methods!
+      }
+
+      // Try 2: Static key match
       if (STATIC_LICENSES[cleanKey]) {
         await new Promise(resolve => setTimeout(resolve, 1000));
         setSuccess(true);
@@ -55,7 +67,7 @@ export function LicenseActivation({ onSuccess }: LicenseActivationProps) {
         return;
       }
 
-      // 2. Check valid pattern keys (UUID or HUDI-XXX) — THESE WILL WORK OFFLINE!
+      // Try 3: Pattern match (UUID or HUDI key)
       const UUID_PATTERN = /^[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}$/i;
       const HUDI_PATTERN = /^HUDI-[A-Z0-9]+-[A-Z0-9]+-[A-Z0-9]+$/i;
 
@@ -67,12 +79,10 @@ export function LicenseActivation({ onSuccess }: LicenseActivationProps) {
         return;
       }
 
-      // 3. ONLY if none of the above, try API validation (this is optional!)
-      // But if API fails, we still show a helpful message
-      setError('Key format not recognized. Please use a valid HUDI key or UUID.');
+      // If none of the above worked
+      setError('Invalid license key. Please check your key and try again.');
 
     } catch (err: unknown) {
-      // Catch any error, but for our pattern‑matched keys, we won't get here!
       const message = err instanceof Error ? err.message : 'Activation failed. Please try again.';
       setError(message);
     } finally {
