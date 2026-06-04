@@ -1,43 +1,73 @@
+/**
+ * cors.js — Production-hardened CORS middleware
+ * Supports:
+ *   - Specific Vercel deployment URLs (exact + pattern)
+ *   - localhost for development
+ *   - Preflight OPTIONS with proper 204 response
+ *   - Credentials (cookies + Authorization headers)
+ *   - Custom X-License-Key header
+ */
+
 const DEFAULT_ALLOWED_ORIGINS = [
-    'https://hudi-soft-com-sz9e.vercel.app',
+    // Production Vercel deployments
     'https://hudi-soft-com.vercel.app',
+    'https://hudi-soft-com-sz9e.vercel.app',
     'https://hudi-soft-com-2g8v.vercel.app',
     'https://hudi-soft-com-m48c.vercel.app',
+    'https://hudi-soft-hms.vercel.app',
+    // Development
     'http://localhost:3000',
+    'http://localhost:3001',
+    'http://localhost:4000',
+    'http://localhost:5000',
     'http://localhost:5173',
     'http://127.0.0.1:3000',
     'http://127.0.0.1:5173',
 ];
 
-function parseAllowedOrigins() {
+/**
+ * Merge env-provided origins (comma-separated CORS_ALLOWED_ORIGINS or CORS_ORIGIN)
+ * with the hardcoded defaults at startup — avoids re-parsing on every request.
+ */
+function buildAllowedSet() {
     const fromEnv = (process.env.CORS_ALLOWED_ORIGINS || process.env.CORS_ORIGIN || '')
         .split(',')
-        .map((o) => o.trim())
+        .map((o) => o.trim().replace(/\/$/, ''))
         .filter(Boolean);
-    return [...new Set([...DEFAULT_ALLOWED_ORIGINS, ...fromEnv])];
+    return new Set([...DEFAULT_ALLOWED_ORIGINS, ...fromEnv]);
 }
 
-const allowedOrigins = parseAllowedOrigins();
-const allowedOriginPatterns = [
-    /^https:\/\/hudi-soft-com[-a-z0-9]*\.vercel\.app$/,
-    /^https:\/\/.*\.vercel\.app$/,
-];
+const ALLOWED_SET = buildAllowedSet();
+
+/**
+ * Vercel preview deploy URLs follow the pattern:
+ *   https://<project>-<hash>-<team>.vercel.app
+ * We only allow *.vercel.app URLs that start with our project name.
+ */
+const VERCEL_PREVIEW_PATTERN = /^https:\/\/hudi-soft[-a-z0-9]*\.vercel\.app$/;
 
 function isOriginAllowed(origin) {
-    if (!origin) return true;
-    if (allowedOrigins.includes(origin)) return true;
-    return allowedOriginPatterns.some((pattern) => pattern.test(origin));
+    if (!origin) return true; // server-to-server / non-browser request
+    const clean = origin.replace(/\/$/, '');
+    if (ALLOWED_SET.has(clean)) return true;
+    if (VERCEL_PREVIEW_PATTERN.test(clean)) return true;
+    return false;
 }
 
 function applyCorsHeaders(req, res) {
     const origin = req.headers.origin;
+
     if (origin && isOriginAllowed(origin)) {
-        res.setHeader('Access-Control-Allow-Origin', origin);
+        // Echo the exact origin — required when credentials: true
+        res.setHeader('Access-Control-Allow-Origin', origin.replace(/\/$/, ''));
         res.setHeader('Vary', 'Origin');
+        res.setHeader('Access-Control-Allow-Credentials', 'true');
     } else if (!origin) {
+        // Non-browser (e.g. mobile app, Render health check, curl)
         res.setHeader('Access-Control-Allow-Origin', '*');
     }
-    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    // else: unknown browser origin — send no CORS header → browser blocks it (correct)
+
     res.setHeader(
         'Access-Control-Allow-Methods',
         'GET, POST, PUT, PATCH, DELETE, OPTIONS'
@@ -46,18 +76,29 @@ function applyCorsHeaders(req, res) {
         'Access-Control-Allow-Headers',
         'Content-Type, Authorization, X-Requested-With, Accept, Origin, X-License-Key'
     );
-    res.setHeader('Access-Control-Max-Age', '86400');
+    res.setHeader('Access-Control-Max-Age', '86400'); // cache preflight 24 h
 }
 
+/**
+ * Express middleware — must be registered BEFORE body-parser and all routes.
+ */
 function corsMiddleware(req, res, next) {
     applyCorsHeaders(req, res);
 
     if (req.method === 'OPTIONS') {
-        console.log(`[CORS] Preflight ${req.path} origin=${req.headers.origin || 'none'}`);
-        return res.sendStatus(204);
+        const logOrigin = req.headers.origin || 'none';
+        console.log(`[CORS] Preflight ${req.method} ${req.path} origin=${logOrigin} allowed=${isOriginAllowed(req.headers.origin)}`);
+        // Use res.status().end() instead of sendStatus() for Express 4/5 compatibility
+        res.status(204).end();
+        return;
     }
 
     return next();
 }
 
-module.exports = { corsMiddleware, applyCorsHeaders, isOriginAllowed, allowedOrigins };
+module.exports = {
+    corsMiddleware,
+    applyCorsHeaders,
+    isOriginAllowed,
+    allowedOrigins: [...ALLOWED_SET],
+};

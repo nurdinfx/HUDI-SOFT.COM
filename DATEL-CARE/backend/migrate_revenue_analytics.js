@@ -76,7 +76,10 @@ async function migrate() {
         console.log('✨ Migration completed successfully!');
     } catch (err) {
         console.error('❌ Migration failed:', err.message);
-        process.exit(1);
+        // Throw so server.js can catch — do NOT call process.exit(1) here.
+        // Killing the process prevents the HTTP server from starting, which
+        // causes Render to report "No open ports detected" and crash-loop.
+        throw err;
     }
 }
 

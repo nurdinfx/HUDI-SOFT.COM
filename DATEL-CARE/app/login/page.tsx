@@ -72,40 +72,74 @@ function LoginContent() {
     }
   }, [licenseKey]);
 
+  // ── Shared license validation core ───────────────────────────────────────
+  async function callValidateApi(key: string, machineID: string): Promise<{ valid: boolean; [k: string]: unknown }> {
+    // Hard client-side timeout: 10 s — prevents infinite spinner even if
+    // the server-side 8 s guard somehow fails (e.g. Vercel function cold start).
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 10_000);
+
+    try {
+      const response = await fetch("/api/licenses/validate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ licenseKey: key, machineID }),
+        signal: controller.signal,
+      });
+      clearTimeout(timer);
+
+      // Guard: parse JSON safely — a 502/504 from Render may return HTML
+      const text = await response.text();
+      let result: { valid: boolean; [k: string]: unknown };
+      try {
+        result = JSON.parse(text);
+      } catch {
+        console.error("[License] Non-JSON response:", text.slice(0, 200));
+        throw new Error("Server returned an unexpected response. Please try again.");
+      }
+
+      if (!response.ok && !result.valid) {
+        throw new Error(String(result.message ?? `Request failed (${response.status})`));
+      }
+
+      return result;
+    } catch (err: unknown) {
+      clearTimeout(timer);
+      if (err instanceof Error && err.name === "AbortError") {
+        throw new Error("Activation timed out. The server may be waking up — please try again in a moment.");
+      }
+      throw err;
+    }
+  }
+
+  function storeActivatedLicense(key: string, expiryDate: string) {
+    localStorage.setItem("dc_license_key", key);
+    localStorage.setItem("dc_license_expiry", expiryDate);
+    // Reset app data for a fresh licensed install
+    const emptyData = JSON.stringify([]);
+    ["dc_patients","dc_appointments","dc_ehr","dc_medications",
+     "dc_invoices","dc_labs","dc_customers","dc_loans","dc_users"
+    ].forEach(k => localStorage.setItem(k, emptyData));
+  }
+
   async function autoActivateUrlKey(key: string) {
     setActivating(true);
     setActivationError("");
     try {
       const machineID = getMachineId();
-      const response = await fetch("/api/licenses/validate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ licenseKey: key, machineID })
-      });
-      const result = await response.json();
+      const result = await callValidateApi(key, machineID);
 
       if (result.valid) {
-        localStorage.setItem("dc_license_key", key);
-        localStorage.setItem("dc_license_expiry", result.expiryDate);
+        storeActivatedLicense(key, String(result.expiryDate ?? ""));
         setIsActivated(true);
         setEmail("detailcare@demo.com");
         setPassword("detailcare123");
-        
-        // Clear mock data if it was auto-generated from landing page trial
-        localStorage.setItem("dc_patients", JSON.stringify([]));
-        localStorage.setItem("dc_appointments", JSON.stringify([]));
-        localStorage.setItem("dc_ehr", JSON.stringify([]));
-        localStorage.setItem("dc_medications", JSON.stringify([]));
-        localStorage.setItem("dc_invoices", JSON.stringify([]));
-        localStorage.setItem("dc_labs", JSON.stringify([]));
-        localStorage.setItem("dc_customers", JSON.stringify([]));
-        localStorage.setItem("dc_loans", JSON.stringify([]));
-        localStorage.setItem("dc_users", JSON.stringify([]));
       } else {
-        setActivationError(result.message || "Failed to validate license key.");
+        setActivationError(String(result.message ?? "Failed to validate license key."));
       }
-    } catch (err) {
-      setActivationError("Network error. Please check your internet connection.");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Network error. Please check your connection.";
+      setActivationError(msg);
     } finally {
       setActivating(false);
     }
@@ -113,7 +147,8 @@ function LoginContent() {
 
   async function handleActivateLicense(e: React.FormEvent) {
     e.preventDefault();
-    if (!activationKey.trim()) return;
+    const key = activationKey.trim();
+    if (!key) return;
 
     setActivating(true);
     setActivationError("");
@@ -121,34 +156,19 @@ function LoginContent() {
 
     try {
       const machineID = getMachineId();
-      const response = await fetch("/api/licenses/validate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ licenseKey: activationKey.trim(), machineID })
-      });
-      const result = await response.json();
+      const result = await callValidateApi(key, machineID);
 
       if (result.valid) {
-        localStorage.setItem("dc_license_key", activationKey.trim());
-        localStorage.setItem("dc_license_expiry", result.expiryDate);
+        storeActivatedLicense(key, String(result.expiryDate ?? ""));
         setIsActivated(true);
-        
-        // Start zero-data for brand new active key
-        localStorage.setItem("dc_patients", JSON.stringify([]));
-        localStorage.setItem("dc_appointments", JSON.stringify([]));
-        localStorage.setItem("dc_ehr", JSON.stringify([]));
-        localStorage.setItem("dc_medications", JSON.stringify([]));
-        localStorage.setItem("dc_invoices", JSON.stringify([]));
-        localStorage.setItem("dc_labs", JSON.stringify([]));
-        localStorage.setItem("dc_customers", JSON.stringify([]));
-        localStorage.setItem("dc_loans", JSON.stringify([]));
-        localStorage.setItem("dc_users", JSON.stringify([]));
       } else {
-        setActivationError(result.message || "Failed to validate license key.");
+        setActivationError(String(result.message ?? "Failed to validate license key."));
       }
-    } catch (err) {
-      setActivationError("Network error. Please check your internet connection and try again.");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Network error. Please check your internet connection and try again.";
+      setActivationError(msg);
     } finally {
+      // Guarantee spinner always clears — even on unhandled exception paths
       setActivating(false);
     }
   }

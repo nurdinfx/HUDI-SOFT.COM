@@ -23,6 +23,13 @@ const nextConfig = {
   ...(!isCapacitorBuild && {
     async rewrites() {
       return [
+        // These paths are handled by Next.js app/api/* route handlers — do NOT proxy them.
+        // (must be listed as negated sources or simply omitted from the proxy list)
+        {
+          source: '/api/licenses/validate',
+          destination: '/api/licenses/validate',
+        },
+        // All other /api/* calls proxy to the HMS backend on Render
         {
           source: '/api/:path*',
           destination: `${process.env.NEXT_PUBLIC_API_URL || 'https://hudi-soft-hms.onrender.com'}/api/:path*`,

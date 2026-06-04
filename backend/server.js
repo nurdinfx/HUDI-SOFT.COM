@@ -102,4 +102,28 @@ const connectMongo = async () => {
 app.listen(PORT, () => {
     console.log(`Server listening on port ${PORT} (${BUILD_TAG})`);
     connectMongo();
+    startKeepAlive();
 });
+
+/**
+ * Keep-alive: prevents Render free-tier from sleeping.
+ * Pings the /api/health endpoint every 10 minutes in production.
+ * This means the preflight OPTIONS request from the browser will never
+ * hit a sleeping container in normal usage.
+ */
+function startKeepAlive() {
+    if (process.env.NODE_ENV !== 'production') return;
+    const RENDER_URL = process.env.RENDER_EXTERNAL_URL || `http://localhost:${PORT}`;
+    const PING_INTERVAL_MS = 10 * 60 * 1000; // 10 minutes
+
+    setInterval(async () => {
+        try {
+            const res = await fetch(`${RENDER_URL}/api/health`, { method: 'GET' });
+            console.log(`[KeepAlive] Ping OK — status=${res.status} uptime=${Math.round(process.uptime())}s`);
+        } catch (err) {
+            console.warn('[KeepAlive] Ping failed:', err.message);
+        }
+    }, PING_INTERVAL_MS);
+
+    console.log(`[KeepAlive] Scheduled ping every ${PING_INTERVAL_MS / 60000} min → ${RENDER_URL}/api/health`);
+}
