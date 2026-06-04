@@ -15,27 +15,25 @@ export function normalizeLicenseKey(key: string): string {
 }
 
 /**
- * Web (Vercel): same-origin /api avoids CORS (Next route or Vercel rewrite).
- * Native/Capacitor: set NEXT_PUBLIC_LICENSE_API_URL to central Render API.
+ * Static export (output: 'export') has no server-side /api routes on Vercel unless
+ * rewrites are configured. Call the central license API directly — CORS is enabled.
  */
 export function getLicenseValidateUrl(): string {
     const fromEnv = process.env.NEXT_PUBLIC_LICENSE_API_URL?.trim().replace(/\/$/, '');
+    let base = CENTRAL_LICENSE_API;
+
     if (fromEnv) {
-        if (fromEnv.includes('hudi-hospital.onrender.com')) {
-            console.warn('[license] hudi-hospital.onrender.com is deprecated; use hudi-soft-com.onrender.com');
-            return fromEnv.replace('hudi-hospital.onrender.com', 'hudi-soft-com.onrender.com');
-        }
-        return `${fromEnv}/licenses/validate`;
+        base = fromEnv.includes('hudi-hospital.onrender.com')
+            ? fromEnv.replace('hudi-hospital.onrender.com', 'hudi-soft-com.onrender.com')
+            : fromEnv;
     }
-    if (typeof window !== 'undefined') {
-        return `${window.location.origin}/api/licenses/validate`;
-    }
-    return `${CENTRAL_LICENSE_API}/licenses/validate`;
+
+    return `${base}/licenses/validate`;
 }
 
 const getBaseUrl = () => `${API_BASE}/api`;
 
-const LICENSE_REQUEST_TIMEOUT_MS = 20000;
+const LICENSE_REQUEST_TIMEOUT_MS = 45000;
 
 async function fetchLicenseValidate(licenseKey: string, machineID: string) {
     const url = getLicenseValidateUrl();

@@ -63,6 +63,8 @@ export function LicenseGuard({ children }: { children: React.ReactNode }) {
         const key = normalizeLicenseKey(rawKey);
         if (!key || key.length < 8) {
             setError('Please enter your full license key from the demo email or request page.');
+            setChecking(false);
+            setActivating(false);
             return;
         }
 
