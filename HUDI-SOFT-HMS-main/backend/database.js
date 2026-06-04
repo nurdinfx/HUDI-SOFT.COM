@@ -3,10 +3,16 @@
  * Connects to a cloud database for persistence on free tiers.
  */
 const { Pool } = require('pg');
+const dns = require('dns');
 const bcrypt = require('bcryptjs');
 const { v4: uuidv4 } = require('uuid');
 const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '.env') });
+
+// Custom DNS lookup that only returns IPv4 addresses
+function ipv4Lookup(hostname, options, callback) {
+  dns.lookup(hostname, { ...options, family: 4 }, callback);
+}
 
 /**
  * Parse DATABASE_URL into individual pg connection params.
@@ -25,6 +31,7 @@ function parseConnectionConfig(urlString) {
       password: decodeURIComponent(url.password),
       ssl:      { rejectUnauthorized: false },
       family:   4,                       // Force IPv4 — fixes ENETUNREACH on Render
+      lookup:   ipv4Lookup,              // Extra layer: custom lookup to force IPv4
       connectionTimeoutMillis: 15000,
       max:      3,                       // Supabase free tier: keep pool small
       idleTimeoutMillis: 10000,
@@ -63,6 +70,7 @@ if (databaseUrl) {
     password: process.env.DB_PASSWORD,
     ssl: { rejectUnauthorized: false },
     family: 4,
+    lookup: ipv4Lookup, // Extra layer: custom lookup to force IPv4
     connectionTimeoutMillis: 30000,
     max: 3,
     idleTimeoutMillis: 5000
