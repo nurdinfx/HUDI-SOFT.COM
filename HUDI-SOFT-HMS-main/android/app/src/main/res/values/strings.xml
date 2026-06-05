@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">Hudi Soft HMS</string>
-    <string name="title_activity_main">Hudi Soft HMS</string>
-    <string name="package_name">com.hudisoft.hms</string>
-    <string name="custom_url_scheme">com.hudisoft.hms</string>
+    <string name="app_name">Hudi Datel Care</string>
+    <string name="title_activity_main">Hudi Datel Care</string>
+    <string name="package_name">com.hudisoft.datelcare</string>
+    <string name="custom_url_scheme">com.hudisoft.datelcare</string>
 </resources>
