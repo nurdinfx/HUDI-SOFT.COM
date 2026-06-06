@@ -18,8 +18,8 @@ export function RouteGuard({ children }: { children: React.ReactNode }) {
     )
   }
 
-  // Dashboard root is accessible to anyone who logs in
-  if (pathname === '/dashboard') {
+  // Dashboard root is accessible to anyone who logs in (trailing slash on static export)
+  if (pathname === '/dashboard' || pathname === '/dashboard/') {
       return <>{children}</>;
   }
 

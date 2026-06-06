@@ -6,8 +6,9 @@ import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { AppSidebar } from "@/components/app-sidebar"
 import { DashboardHeader } from "@/components/dashboard-header"
 import { useAuth } from "@/lib/auth-context"
-import { Loader2 } from "lucide-react"
 import { RouteGuard } from "@/components/with-role-guard"
+import { goToLoginPage } from "@/lib/capacitor-nav"
+import { isNativeCapacitor } from "@/lib/capacitor-platform"
 
 export default function DashboardLayout({
   children,
@@ -22,17 +23,26 @@ export default function DashboardLayout({
     if (isLoading) return
     if (!isAuthenticated) {
       const redirect = `/login?redirect=${encodeURIComponent(pathname || "/dashboard")}`
-      router.replace(redirect)
-      return
+      if (isNativeCapacitor()) {
+        goToLoginPage()
+      } else {
+        router.replace(redirect)
+      }
     }
+  }, [isAuthenticated, isLoading, router, pathname])
 
-    // Role-based route protection handled by RouteGuard component now
-  }, [isAuthenticated, isLoading, router, pathname, user?.role])
-
-  if (isLoading || !isAuthenticated) {
+  if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <Loader2 className="size-8 animate-spin text-muted-foreground" />
+      <div className="min-h-screen flex items-center justify-center bg-slate-950">
+        <div className="h-10 w-10 animate-spin rounded-full border-2 border-teal-500 border-t-transparent" />
+      </div>
+    )
+  }
+
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-950">
+        <div className="h-10 w-10 animate-spin rounded-full border-2 border-teal-500 border-t-transparent" />
       </div>
     )
   }

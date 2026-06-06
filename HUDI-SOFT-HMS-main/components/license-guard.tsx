@@ -140,7 +140,7 @@ export function LicenseGuard({ children }: { children: React.ReactNode }) {
     };
 
     const handleLoginSuccess = () => {
-        setPhase('app');
+        // Navigate first — avoid rendering empty home page (dark screen + trial badge only)
         goToDashboard();
     };
 

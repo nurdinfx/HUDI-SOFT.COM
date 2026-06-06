@@ -23,7 +23,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return { user: null, isAuthenticated: false, isLoading: true }
     }
     const hasToken = Boolean(localStorage.getItem("hms_token"))
-    return { user: null, isAuthenticated: false, isLoading: hasToken }
+    if (!hasToken) {
+      return { user: null, isAuthenticated: false, isLoading: false }
+    }
+    try {
+      const cached = sessionStorage.getItem("hms_user")
+      if (cached) {
+        const user = JSON.parse(cached) as User
+        if (user?.email && user?.role) {
+          return { user, isAuthenticated: true, isLoading: false }
+        }
+      }
+    } catch {
+      // ignore bad cache
+    }
+    return { user: null, isAuthenticated: false, isLoading: true }
   })
 
   const isValidUser = (user: User | null | undefined): user is User =>
@@ -53,12 +67,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setAuth({ user: null, isAuthenticated: false, isLoading: false })
           return
         }
+        if (typeof window !== "undefined") {
+          sessionStorage.setItem("hms_user", JSON.stringify(user))
+        }
         setAuth({ user: user as User, isAuthenticated: true, isLoading: false })
       })
       .catch(() => {
         if (cancelled) return
         clearTimeout(timer)
         clearToken()
+        if (typeof window !== "undefined") {
+          sessionStorage.removeItem("hms_user")
+        }
         setAuth({ user: null, isAuthenticated: false, isLoading: false })
       })
 
@@ -71,11 +91,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = useCallback(async (email: string, password: string) => {
     const { token, user } = await authApi.login(email, password)
     setToken(token)
+    if (typeof window !== "undefined") {
+      sessionStorage.setItem("hms_user", JSON.stringify(user))
+    }
     setAuth({ user: user as unknown as User, isAuthenticated: true, isLoading: false })
   }, [])
 
   const logout = useCallback(() => {
     clearToken()
+    if (typeof window !== "undefined") {
+      sessionStorage.removeItem("hms_user")
+    }
     setAuth({ user: null, isAuthenticated: false, isLoading: false })
   }, [])
 
