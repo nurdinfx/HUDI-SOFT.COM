@@ -39,6 +39,10 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar"
 import { useAuth } from "@/lib/auth-context"
+import { isNativeCapacitor } from "@/lib/capacitor-platform"
+import { navigateTo } from "@/lib/capacitor-nav"
+import { getLicenseMeta } from "@/lib/api"
+import { HudiLogo } from "@/components/hudi-logo"
 
 const navGroups = [
   {
@@ -99,6 +103,8 @@ export function AppSidebar() {
   const pathname = usePathname()
   const { user } = useAuth()
   const { setOpenMobile, isMobile } = useSidebar()
+  const nativeApp = isNativeCapacitor()
+  const companyName = getLicenseMeta()?.companyName
 
   const filteredGroups = navGroups.filter(group => {
     if (group.roles && !group.roles.includes(user?.role || "")) return false
@@ -118,13 +124,22 @@ export function AppSidebar() {
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" asChild className="mb-2 h-auto py-2 hover:bg-transparent">
-              <Link href="/dashboard" onClick={() => isMobile && setOpenMobile(false)} className="justify-center">
-                <div className="flex items-center justify-center w-full">
-                  <img
-                    src="/logo.jpg"
-                    alt="HUDI SOFT Logo"
-                    className="h-16 w-auto object-contain transition-transform hover:scale-105"
-                  />
+              <Link
+                href="/dashboard"
+                onClick={(e) => {
+                  if (nativeApp) {
+                    e.preventDefault()
+                    navigateTo('/dashboard')
+                  }
+                  if (isMobile) setOpenMobile(false)
+                }}
+                className="justify-center"
+              >
+                <div className="flex flex-col items-center justify-center w-full gap-1">
+                  <HudiLogo size="md" className="transition-transform hover:scale-105" />
+                  <span className="text-[10px] font-black uppercase tracking-widest text-sidebar-foreground/80">
+                    {companyName || "HUDI SOFT HMS"}
+                  </span>
                 </div>
               </Link>
             </SidebarMenuButton>
@@ -142,10 +157,24 @@ export function AppSidebar() {
                   return (
                     <SidebarMenuItem key={item.title}>
                       <SidebarMenuButton asChild isActive={isActive} tooltip={item.title}>
-                        <Link href={item.href} onClick={() => isMobile && setOpenMobile(false)}>
-                          <item.icon className="size-4" />
-                          <span>{item.title}</span>
-                        </Link>
+                        {nativeApp ? (
+                          <a
+                            href={`${item.href}/`}
+                            onClick={(e) => {
+                              e.preventDefault()
+                              navigateTo(item.href)
+                              if (isMobile) setOpenMobile(false)
+                            }}
+                          >
+                            <item.icon className="size-4" />
+                            <span>{item.title}</span>
+                          </a>
+                        ) : (
+                          <Link href={item.href} onClick={() => isMobile && setOpenMobile(false)}>
+                            <item.icon className="size-4" />
+                            <span>{item.title}</span>
+                          </Link>
+                        )}
                       </SidebarMenuButton>
                     </SidebarMenuItem>
                   )

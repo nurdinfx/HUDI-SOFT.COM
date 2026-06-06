@@ -5,8 +5,15 @@ function buildHref(path: string): string {
     const qIndex = raw.indexOf('?');
     const pathname = qIndex >= 0 ? raw.slice(0, qIndex) : raw;
     const search = qIndex >= 0 ? raw.slice(qIndex) : '';
+
+    if (isNativeCapacitor()) {
+        // Static export: each route is a folder with index.html
+        const clean = pathname.replace(/\/$/, '') || '/';
+        return clean === '/' ? `/index.html${search}` : `${clean}/index.html${search}`;
+    }
+
     const withSlash = pathname.endsWith('/') ? pathname : `${pathname}/`;
-    return isNativeCapacitor() ? `${withSlash}${search}` : `${pathname}${search}`;
+    return `${withSlash}${search}`;
 }
 
 /** Navigate without adding history entries (no back-button loops on APK). */
@@ -25,10 +32,5 @@ export function goToLoginPage() {
 }
 
 export function goToDashboard() {
-    if (typeof window === 'undefined') return;
-    if (isNativeCapacitor()) {
-        window.location.replace('/dashboard/index.html');
-        return;
-    }
     navigateTo('/dashboard');
 }
