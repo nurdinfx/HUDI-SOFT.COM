@@ -10,6 +10,10 @@ import { RouteGuard } from "@/components/with-role-guard"
 import { goToLoginPage } from "@/lib/capacitor-nav"
 import { isNativeCapacitor } from "@/lib/capacitor-platform"
 
+function hasStoredToken(): boolean {
+  return typeof window !== "undefined" && Boolean(localStorage.getItem("hms_token"))
+}
+
 export default function DashboardLayout({
   children,
 }: {
@@ -17,11 +21,12 @@ export default function DashboardLayout({
 }) {
   const router = useRouter()
   const pathname = usePathname()
-  const { isAuthenticated, isLoading, user } = useAuth()
+  const { isAuthenticated, isLoading } = useAuth()
+  const tokenPresent = hasStoredToken()
 
   useEffect(() => {
     if (isLoading) return
-    if (!isAuthenticated) {
+    if (!isAuthenticated && !tokenPresent) {
       const redirect = `/login?redirect=${encodeURIComponent(pathname || "/dashboard")}`
       if (isNativeCapacitor()) {
         goToLoginPage()
@@ -29,22 +34,10 @@ export default function DashboardLayout({
         router.replace(redirect)
       }
     }
-  }, [isAuthenticated, isLoading, router, pathname])
+  }, [isAuthenticated, isLoading, tokenPresent, router, pathname])
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-950">
-        <div className="h-10 w-10 animate-spin rounded-full border-2 border-teal-500 border-t-transparent" />
-      </div>
-    )
-  }
-
-  if (!isAuthenticated) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-950">
-        <div className="h-10 w-10 animate-spin rounded-full border-2 border-teal-500 border-t-transparent" />
-      </div>
-    )
+  if (!tokenPresent && !isAuthenticated && !isLoading) {
+    return null
   }
 
   return (

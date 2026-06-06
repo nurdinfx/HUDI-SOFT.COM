@@ -228,17 +228,5 @@ export function LicenseGuard({ children }: { children: React.ReactNode }) {
         );
     }
 
-    return (
-        <>
-            {children}
-            {licenseInfo?.isTrial && (
-                <div className="fixed bottom-4 right-4 z-[9999] bg-teal-600/90 backdrop-blur-md text-white px-4 py-2 rounded-full text-[10px] font-black uppercase tracking-[0.1em] shadow-xl border border-white/20 pointer-events-none">
-                    Trial: {licenseInfo.daysRemaining ?? 0} days left
-                    {licenseInfo.expiryDate
-                        ? ` · expires ${new Date(licenseInfo.expiryDate).toLocaleDateString()}`
-                        : ''}
-                </div>
-            )}
-        </>
-    );
+    return <>{children}</>;
 }

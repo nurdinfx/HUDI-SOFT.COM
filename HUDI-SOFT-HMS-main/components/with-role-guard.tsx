@@ -10,12 +10,8 @@ export function RouteGuard({ children }: { children: React.ReactNode }) {
   const { user, isLoading } = useAuth()
   const pathname = usePathname()
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-slate-900"></div>
-      </div>
-    )
+  if (isLoading && !user) {
+    return null
   }
 
   // Dashboard root is accessible to anyone who logs in (trailing slash on static export)

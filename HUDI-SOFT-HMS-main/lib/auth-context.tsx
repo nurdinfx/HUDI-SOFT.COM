@@ -2,6 +2,9 @@
 
 import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from "react"
 import { authApi, setToken, clearToken, type User, type UserRole } from "./api"
+import { HmsApiError } from "./hms-http"
+
+const USER_CACHE_KEY = "hms_user"
 
 interface AuthState {
   user: User | null
@@ -17,25 +20,39 @@ interface AuthContextType extends AuthState {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
+function readCachedUser(): User | null {
+  if (typeof window === "undefined") return null
+  try {
+    const raw = localStorage.getItem(USER_CACHE_KEY)
+    if (!raw) return null
+    const user = JSON.parse(raw) as User
+    return user?.email && user?.role ? user : null
+  } catch {
+    return null
+  }
+}
+
+function writeCachedUser(user: User | null) {
+  if (typeof window === "undefined") return
+  if (user) {
+    localStorage.setItem(USER_CACHE_KEY, JSON.stringify(user))
+  } else {
+    localStorage.removeItem(USER_CACHE_KEY)
+  }
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [auth, setAuth] = useState<AuthState>(() => {
     if (typeof window === "undefined") {
       return { user: null, isAuthenticated: false, isLoading: true }
     }
     const hasToken = Boolean(localStorage.getItem("hms_token"))
+    const cached = readCachedUser()
+    if (hasToken && cached) {
+      return { user: cached, isAuthenticated: true, isLoading: false }
+    }
     if (!hasToken) {
       return { user: null, isAuthenticated: false, isLoading: false }
-    }
-    try {
-      const cached = sessionStorage.getItem("hms_user")
-      if (cached) {
-        const user = JSON.parse(cached) as User
-        if (user?.email && user?.role) {
-          return { user, isAuthenticated: true, isLoading: false }
-        }
-      }
-    } catch {
-      // ignore bad cache
     }
     return { user: null, isAuthenticated: false, isLoading: true }
   })
@@ -43,7 +60,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const isValidUser = (user: User | null | undefined): user is User =>
     Boolean(user?.email && user?.role)
 
-  // On mount, re-validate stored token (with timeout so APK never hangs on white screen)
   useEffect(() => {
     const token = typeof window !== "undefined" ? localStorage.getItem("hms_token") : null
     if (!token) {
@@ -51,57 +67,43 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return
     }
 
-    let cancelled = false
-    const timer = setTimeout(() => {
-      if (cancelled) return
-      clearToken()
-      setAuth({ user: null, isAuthenticated: false, isLoading: false })
-    }, 12000)
+    const cached = readCachedUser()
+    if (cached) {
+      setAuth({ user: cached, isAuthenticated: true, isLoading: false })
+    }
 
+    let cancelled = false
     authApi.me()
       .then((user) => {
         if (cancelled) return
-        clearTimeout(timer)
-        if (!isValidUser(user as User)) {
-          clearToken()
-          setAuth({ user: null, isAuthenticated: false, isLoading: false })
-          return
-        }
-        if (typeof window !== "undefined") {
-          sessionStorage.setItem("hms_user", JSON.stringify(user))
-        }
+        if (!isValidUser(user as User)) return
+        writeCachedUser(user as User)
         setAuth({ user: user as User, isAuthenticated: true, isLoading: false })
       })
-      .catch(() => {
+      .catch((err: unknown) => {
         if (cancelled) return
-        clearTimeout(timer)
-        clearToken()
-        if (typeof window !== "undefined") {
-          sessionStorage.removeItem("hms_user")
+        if (err instanceof HmsApiError && err.status === 401) {
+          clearToken()
+          writeCachedUser(null)
+          setAuth({ user: null, isAuthenticated: false, isLoading: false })
         }
-        setAuth({ user: null, isAuthenticated: false, isLoading: false })
       })
 
     return () => {
       cancelled = true
-      clearTimeout(timer)
     }
   }, [])
 
   const login = useCallback(async (email: string, password: string) => {
     const { token, user } = await authApi.login(email, password)
     setToken(token)
-    if (typeof window !== "undefined") {
-      sessionStorage.setItem("hms_user", JSON.stringify(user))
-    }
+    writeCachedUser(user as unknown as User)
     setAuth({ user: user as unknown as User, isAuthenticated: true, isLoading: false })
   }, [])
 
   const logout = useCallback(() => {
     clearToken()
-    if (typeof window !== "undefined") {
-      sessionStorage.removeItem("hms_user")
-    }
+    writeCachedUser(null)
     setAuth({ user: null, isAuthenticated: false, isLoading: false })
   }, [])
 

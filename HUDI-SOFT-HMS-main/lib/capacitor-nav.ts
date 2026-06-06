@@ -25,5 +25,10 @@ export function goToLoginPage() {
 }
 
 export function goToDashboard() {
+    if (typeof window === 'undefined') return;
+    if (isNativeCapacitor()) {
+        window.location.replace('/dashboard/index.html');
+        return;
+    }
     navigateTo('/dashboard');
 }
