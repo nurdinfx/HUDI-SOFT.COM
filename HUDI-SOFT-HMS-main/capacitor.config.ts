@@ -4,6 +4,7 @@ const config: CapacitorConfig = {
   appId: 'com.hudisoft.hms',
   appName: 'HUDI SOFT HMS',
   webDir: 'out',
+  // Launcher icon + splash: run npm run icons:android (uses public/logo-*.png → resources/)
   server: {
     androidScheme: 'https',
     cleartext: true,

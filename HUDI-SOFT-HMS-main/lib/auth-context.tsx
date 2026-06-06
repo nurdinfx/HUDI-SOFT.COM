@@ -18,24 +18,53 @@ interface AuthContextType extends AuthState {
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [auth, setAuth] = useState<AuthState>({
-    user: null,
-    isAuthenticated: false,
-    isLoading: true,
+  const [auth, setAuth] = useState<AuthState>(() => {
+    if (typeof window === "undefined") {
+      return { user: null, isAuthenticated: false, isLoading: true }
+    }
+    const hasToken = Boolean(localStorage.getItem("hms_token"))
+    return { user: null, isAuthenticated: false, isLoading: hasToken }
   })
 
-  // On mount, re-validate stored token
+  const isValidUser = (user: User | null | undefined): user is User =>
+    Boolean(user?.email && user?.role)
+
+  // On mount, re-validate stored token (with timeout so APK never hangs on white screen)
   useEffect(() => {
     const token = typeof window !== "undefined" ? localStorage.getItem("hms_token") : null
-    if (token) {
-      authApi.me()
-        .then((user) => setAuth({ user: user as unknown as User, isAuthenticated: true, isLoading: false }))
-        .catch(() => {
+    if (!token) {
+      setAuth({ user: null, isAuthenticated: false, isLoading: false })
+      return
+    }
+
+    let cancelled = false
+    const timer = setTimeout(() => {
+      if (cancelled) return
+      clearToken()
+      setAuth({ user: null, isAuthenticated: false, isLoading: false })
+    }, 12000)
+
+    authApi.me()
+      .then((user) => {
+        if (cancelled) return
+        clearTimeout(timer)
+        if (!isValidUser(user as User)) {
           clearToken()
           setAuth({ user: null, isAuthenticated: false, isLoading: false })
-        })
-    } else {
-      setAuth({ user: null, isAuthenticated: false, isLoading: false })
+          return
+        }
+        setAuth({ user: user as User, isAuthenticated: true, isLoading: false })
+      })
+      .catch(() => {
+        if (cancelled) return
+        clearTimeout(timer)
+        clearToken()
+        setAuth({ user: null, isAuthenticated: false, isLoading: false })
+      })
+
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
     }
   }, [])
 

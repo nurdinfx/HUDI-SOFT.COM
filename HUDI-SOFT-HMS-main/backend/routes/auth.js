@@ -10,13 +10,16 @@ const router = express.Router();
 
 // POST /api/auth/login
 router.post('/login', async (req, res) => {
-    const { email, password } = req.body;
+    let { email, password } = req.body;
     if (!email || !password) {
         return res.status(400).json({ error: 'Email and password are required' });
     }
 
+    email = String(email).toLowerCase().trim();
+    if (email === 'admin@hospital') email = 'admin@hospital.com';
+
     try {
-        const user = await db.prepare('SELECT * FROM users WHERE email = ? AND is_active = 1').get(email.toLowerCase().trim());
+        const user = await db.prepare('SELECT * FROM users WHERE email = ? AND (is_active = 1 OR is_active = true)').get(email);
         if (!user) {
             return res.status(401).json({ error: 'Invalid email or password' });
         }

@@ -1,14 +1,15 @@
-"use client"
+'use client';
 
-import { useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect } from 'react';
+import { goToDashboard } from '@/lib/capacitor-nav';
 
-export default function Home() {
-  const router = useRouter();
-  
-  useEffect(() => {
-    router.replace("/login");
-  }, [router]);
-  
-  return null;
+/** Licensed users with token go to dashboard; login is handled inside LicenseGuard. */
+export default function HomePage() {
+    useEffect(() => {
+        if (localStorage.getItem('hms_token')) {
+            goToDashboard();
+        }
+    }, []);
+
+    return null;
 }

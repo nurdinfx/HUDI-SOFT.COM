@@ -5,14 +5,9 @@
  */
 
 import { validateLicenseOnline } from './license-client';
+import { getHmsApiBase, hmsRequest, HmsApiError } from './hms-http';
 
-// Use sanitized /api for Vercel/Production stability
-const API_BASE = (process.env.NEXT_PUBLIC_API_URL || '').trim().replace(/\/$/, ''); 
-
-const getBaseUrl = () => {
-    if (API_BASE) return `${API_BASE}/api`;
-    return '/api';
-};
+const getBaseUrl = () => getHmsApiBase();
 
 console.log(`🚀 HMS Frontend Engine active. API Base: ${getBaseUrl()}`);
 
@@ -109,13 +104,16 @@ async function apiFetch<T>(path: string, options: ApiOptions = {}): Promise<T> {
             : body
     };
 
-    const res = await fetch(`${getBaseUrl()}${path}`, fetchOptions);
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) {
-        if (res.status === 401) clearToken();
-        throw new Error(data.error || data.message || `Request failed: ${res.status}`);
+    try {
+        return await hmsRequest<T>(path, {
+            method: fetchOptions.method,
+            headers: headers as Record<string, string>,
+            body: fetchOptions.body,
+        });
+    } catch (err) {
+        if (err instanceof HmsApiError && err.status === 401) clearToken();
+        throw err;
     }
-    return data as T;
 }
 
 const get = <T>(path: string) => apiFetch<T>(path);
