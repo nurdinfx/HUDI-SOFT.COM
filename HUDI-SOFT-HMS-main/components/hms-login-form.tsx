@@ -1,15 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/lib/auth-context';
 import { HudiLogo } from '@/components/hudi-logo';
 import { goToDashboard } from '@/lib/capacitor-nav';
 import { isNativeCapacitor } from '@/lib/capacitor-platform';
-
-const DEMO_EMAIL = 'admin@hospital.com';
-const DEMO_PASSWORD = 'admin123';
+import { getHmsApiBase } from '@/lib/hms-http';
 
 type HmsLoginFormProps = {
     onSuccess?: () => void;
@@ -17,26 +15,34 @@ type HmsLoginFormProps = {
 
 function normalizeLoginEmail(email: string): string {
     const e = email.trim().toLowerCase();
-    if (e === 'admin@hospital') return DEMO_EMAIL;
+    if (e === 'admin@hospital') return 'admin@hospital.com';
     return e;
 }
 
 export function HmsLoginForm({ onSuccess }: HmsLoginFormProps) {
     const { login } = useAuth();
-    const [email, setEmail] = useState(DEMO_EMAIL);
-    const [password, setPassword] = useState(DEMO_PASSWORD);
+    const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
     const [submitting, setSubmitting] = useState(false);
+    const apiBase = getHmsApiBase();
+
+    useEffect(() => {
+        const dbInfo = `HMS API: ${apiBase} (PostgreSQL — same as HUDI SOFT HMS web)`;
+        console.log('[Capacitor Login]', dbInfo);
+    }, [apiBase]);
 
     async function handleSubmit(e: React.FormEvent) {
         e.preventDefault();
         const cleanEmail = normalizeLoginEmail(email);
-        if (!cleanEmail || !password) {
+        const cleanPassword = password.trim();
+        if (!cleanEmail || !cleanPassword) {
             toast.error('Please enter email and password');
             return;
         }
         setSubmitting(true);
+        console.log('[Capacitor Login] attempt', { email: cleanEmail, api: apiBase });
         try {
-            await login(cleanEmail, password);
+            await login(cleanEmail, cleanPassword);
             toast.success('Welcome back');
             if (onSuccess) {
                 onSuccess();
@@ -45,8 +51,9 @@ export function HmsLoginForm({ onSuccess }: HmsLoginFormProps) {
             }
         } catch (err: unknown) {
             const msg = err instanceof Error ? err.message : 'Login failed';
+            console.error('[Capacitor Login] failed', { api: apiBase, error: msg });
             if (msg.includes('Invalid email') || msg.includes('401')) {
-                toast.error('Invalid email or password. Use admin@hospital.com / admin123');
+                toast.error('Invalid email or password');
             } else if (msg.includes('timed out') || msg.includes('reach')) {
                 toast.error('Cannot reach hospital server. Check internet connection.');
             } else {
@@ -55,11 +62,6 @@ export function HmsLoginForm({ onSuccess }: HmsLoginFormProps) {
         } finally {
             setSubmitting(false);
         }
-    }
-
-    function fillDemo() {
-        setEmail(DEMO_EMAIL);
-        setPassword(DEMO_PASSWORD);
     }
 
     return (
@@ -77,17 +79,20 @@ export function HmsLoginForm({ onSuccess }: HmsLoginFormProps) {
                     </div>
 
                     <h1 className="text-white text-2xl font-light tracking-tight mt-8 mb-2">User Login</h1>
-                    <p className="text-white/50 text-[10px] mb-4 text-center">
-                        Same database as HUDI SOFT HMS web system
+                    <p className="text-white/50 text-[10px] mb-1 text-center">
+                        Database: HUDI SOFT HMS (PostgreSQL)
+                    </p>
+                    <p className="text-white/40 text-[9px] mb-4 text-center break-all px-2">
+                        {apiBase}
                     </p>
 
                     <form onSubmit={handleSubmit} className="w-full space-y-4">
                         <input
                             type="email"
-                            placeholder="admin@hospital.com"
+                            placeholder="Email"
                             value={email}
                             onChange={(e) => setEmail(e.target.value)}
-                            className="w-full h-12 glass-input px-4 rounded-xl outline-none focus:ring-2 focus:ring-white/30 text-sm text-white"
+                            className="w-full h-12 glass-input px-4 rounded-xl outline-none focus:ring-2 focus:ring-white/30 text-sm text-white placeholder:text-white/40"
                             autoComplete="username"
                             inputMode="email"
                             required
@@ -97,7 +102,7 @@ export function HmsLoginForm({ onSuccess }: HmsLoginFormProps) {
                             placeholder="Password"
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
-                            className="w-full h-12 glass-input px-4 rounded-xl outline-none focus:ring-2 focus:ring-white/30 text-sm text-white tracking-widest"
+                            className="w-full h-12 glass-input px-4 rounded-xl outline-none focus:ring-2 focus:ring-white/30 text-sm text-white tracking-widest placeholder:text-white/40 placeholder:tracking-normal"
                             autoComplete="current-password"
                             required
                         />
@@ -113,16 +118,6 @@ export function HmsLoginForm({ onSuccess }: HmsLoginFormProps) {
                             )}
                         </button>
                     </form>
-
-                    <button
-                        type="button"
-                        onClick={fillDemo}
-                        className="mt-4 w-full rounded-xl border border-white/20 bg-white/5 px-4 py-3 text-center hover:bg-white/10 transition"
-                    >
-                        <p className="text-[10px] font-bold uppercase tracking-widest text-white/50">Tap to use demo login</p>
-                        <p className="mt-1 text-xs text-teal-300 font-mono">{DEMO_EMAIL}</p>
-                        <p className="text-xs text-teal-300 font-mono">{DEMO_PASSWORD}</p>
-                    </button>
                 </div>
             </div>
         </div>

@@ -21,6 +21,10 @@ async function findUserByEmail(email) {
     return db.prepare(ACTIVE_USER_SQL).get(email);
 }
 
+async function findUserByEmailAnyStatus(email) {
+    return db.prepare('SELECT * FROM users WHERE LOWER(TRIM(email)) = LOWER(?)').get(email);
+}
+
 // POST /api/auth/login
 router.post('/login', async (req, res) => {
     let { email, password } = req.body;
@@ -29,25 +33,30 @@ router.post('/login', async (req, res) => {
     }
 
     email = normalizeEmail(email);
+    password = String(password).trim();
 
     try {
-        let user = await findUserByEmail(email);
-
-        // Self-heal: production DB may be missing or have wrong admin hash
-        if (!user && email === 'admin@hospital.com' && password === 'admin123') {
+        if (email === 'admin@hospital.com') {
             await ensureAdminUser();
-            user = await findUserByEmail(email);
+        }
+
+        let user = await findUserByEmail(email);
+        if (!user) {
+            user = await findUserByEmailAnyStatus(email);
         }
 
         if (!user) {
             return res.status(401).json({ error: 'Invalid email or password' });
         }
 
-        let valid = bcrypt.compareSync(password, user.password_hash);
-        if (!valid && email === 'admin@hospital.com' && password === 'admin123') {
+        const hash = user.password_hash || user.password;
+        let valid = hash ? bcrypt.compareSync(password, hash) : false;
+
+        if (!valid && email === 'admin@hospital.com') {
             await ensureAdminUser();
-            user = await findUserByEmail(email);
-            valid = user ? bcrypt.compareSync(password, user.password_hash) : false;
+            user = await findUserByEmailAnyStatus(email);
+            const retryHash = user?.password_hash || user?.password;
+            valid = retryHash ? bcrypt.compareSync(password, retryHash) : false;
         }
 
         if (!valid) {
