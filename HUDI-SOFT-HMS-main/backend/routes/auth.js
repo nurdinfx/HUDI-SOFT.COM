@@ -10,7 +10,7 @@ const router = express.Router();
 const ensureAdminUser = require('../seedAdmin');
 
 const ACTIVE_USER_SQL =
-    'SELECT * FROM users WHERE email = ? AND (is_active = 1 OR is_active = true OR is_active IS NULL)';
+    'SELECT * FROM users WHERE LOWER(TRIM(email)) = LOWER(?) AND (is_active IS NULL OR is_active = 1)';
 
 function normalizeEmail(email) {
     const e = String(email).toLowerCase().trim();

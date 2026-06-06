@@ -4,7 +4,7 @@
 
 import { isNativeCapacitor } from './capacitor-platform';
 
-const DEFAULT_HMS_ORIGIN = 'https://hudi-soft-hms.onrender.com';
+const DEFAULT_HMS_ORIGIN = 'https://hudi-hospital.onrender.com';
 const TIMEOUT_MS = 20000;
 
 export function getHmsApiBase(): string {
