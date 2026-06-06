@@ -1,7 +1,7 @@
 'use client';
 
 import * as React from 'react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import {
     licenseApi,
     normalizeLicenseKey,
@@ -9,8 +9,11 @@ import {
     getLicenseMeta,
     isLicenseExpired,
 } from '@/lib/api';
+import { navigateTo } from '@/lib/capacitor-nav';
 import { ShieldCheck, Lock, Zap, Building2, AlertTriangle, Key } from 'lucide-react';
 import { motion } from 'framer-motion';
+
+const REVALIDATE_MS = 6 * 60 * 60 * 1000; // 6 hours
 
 function getKeyFromUrl(): string | null {
     if (typeof window === 'undefined') return null;
@@ -18,6 +21,18 @@ function getKeyFromUrl(): string | null {
     const raw =
         params.get('key') || params.get('licenseKey') || params.get('activation');
     return raw ? normalizeLicenseKey(raw) : null;
+}
+
+function isOnLoginPage(): boolean {
+    if (typeof window === 'undefined') return false;
+    return window.location.pathname.includes('/login');
+}
+
+function canTrustCachedLicense(storedKey: string, meta: ReturnType<typeof getLicenseMeta>): boolean {
+    if (!storedKey || !meta?.expiryDate || isLicenseExpired(meta)) return false;
+    if (!meta.activatedAt) return false;
+    const age = Date.now() - new Date(meta.activatedAt).getTime();
+    return age < REVALIDATE_MS;
 }
 
 export function LicenseGuard({ children }: { children: React.ReactNode }) {
@@ -31,42 +46,69 @@ export function LicenseGuard({ children }: { children: React.ReactNode }) {
         daysRemaining?: number;
         companyName?: string;
     } | null>(null);
+    const validatingRef = useRef(false);
 
-    const activateKey = async (rawKey: string) => {
-        const cleanKey = normalizeLicenseKey(rawKey);
-        if (!cleanKey) return;
+    const applyValidLicense = useCallback(
+        (data: {
+            expiryDate?: string;
+            isTrial?: boolean;
+            daysRemaining?: number;
+            companyName?: string;
+        }) => {
+            setIsValid(true);
+            setLicenseInfo(data);
+            setError(null);
+        },
+        []
+    );
 
-        setLoading(true);
-        setError(null);
+    const activateKey = useCallback(
+        async (rawKey: string, options?: { silent?: boolean; skipRedirect?: boolean }) => {
+            const cleanKey = normalizeLicenseKey(rawKey);
+            if (!cleanKey || validatingRef.current) return;
 
-        try {
-            const data = await licenseApi.validate(cleanKey);
-            if (data.valid) {
-                setLicenseKey(cleanKey);
-                setIsValid(true);
-                setLicenseInfo(data);
+            validatingRef.current = true;
+            if (!options?.silent) {
+                setLoading(true);
+            }
+            setError(null);
 
-                if (typeof window !== 'undefined' && window.location.search.includes('key=')) {
-                    const url = new URL(window.location.href);
-                    url.searchParams.delete('key');
-                    url.searchParams.delete('licenseKey');
-                    url.searchParams.delete('activation');
-                    window.history.replaceState({}, '', url.pathname + url.search);
+            try {
+                const data = await licenseApi.validate(cleanKey);
+                if (data.valid) {
+                    setLicenseKey(cleanKey);
+                    applyValidLicense(data);
+
+                    const hasSession =
+                        typeof window !== 'undefined' && Boolean(localStorage.getItem('hms_token'));
+
+                    if (
+                        !options?.skipRedirect &&
+                        !hasSession &&
+                        !isOnLoginPage()
+                    ) {
+                        navigateTo('/login?redirect=/dashboard');
+                        return;
+                    }
+                } else {
+                    setIsValid(false);
+                    setError(data.message || 'Invalid license key');
                 }
-            } else {
-                setError(data.message || 'Invalid license key');
+            } catch (err: unknown) {
+                setIsValid(false);
+                let message = err instanceof Error ? err.message : 'Activation failed';
+                if (message.includes('Failed to fetch') || message.includes('Network')) {
+                    message =
+                        'Cannot reach license server. Enable Wi‑Fi/mobile data — keys from hudisoft.online need internet.';
+                }
+                setError(message);
+            } finally {
+                validatingRef.current = false;
+                setLoading(false);
             }
-        } catch (err: unknown) {
-            let message = err instanceof Error ? err.message : 'Activation failed';
-            if (message.includes('Failed to fetch') || message.includes('Network')) {
-                message =
-                    'Cannot reach license server online. Enable Wi‑Fi/mobile data — keys from hudisoft.online require internet.';
-            }
-            setError(message);
-        } finally {
-            setLoading(false);
-        }
-    };
+        },
+        [applyValidLicense]
+    );
 
     useEffect(() => {
         const urlKey = getKeyFromUrl();
@@ -102,8 +144,23 @@ export function LicenseGuard({ children }: { children: React.ReactNode }) {
             });
         }
 
-        void activateKey(storedKey);
-    }, []);
+        // Trust recent validation — unlock immediately (fixes infinite reload spinner)
+        if (canTrustCachedLicense(storedKey, meta)) {
+            applyValidLicense({
+                expiryDate: meta!.expiryDate,
+                isTrial: meta!.isTrial,
+                daysRemaining: meta!.daysRemaining,
+                companyName: meta!.companyName,
+            });
+            setLoading(false);
+
+            // Refresh in background without blocking UI or redirecting
+            void activateKey(storedKey, { silent: true, skipRedirect: true });
+            return;
+        }
+
+        void activateKey(storedKey, { skipRedirect: isOnLoginPage() });
+    }, [activateKey, applyValidLicense]);
 
     const handleActivate = (e: React.FormEvent) => {
         e.preventDefault();
@@ -116,6 +173,9 @@ export function LicenseGuard({ children }: { children: React.ReactNode }) {
                 <div className="flex flex-col items-center gap-4">
                     <div className="w-12 h-12 border-4 border-teal-500 border-t-transparent rounded-full animate-spin" />
                     <p className="text-teal-500 font-black text-xs uppercase tracking-[0.2em]">Verifying License...</p>
+                    <p className="text-slate-500 text-[10px] max-w-xs text-center">
+                        Connecting to license server… (max 20 seconds)
+                    </p>
                 </div>
             </div>
         );
@@ -198,7 +258,7 @@ export function LicenseGuard({ children }: { children: React.ReactNode }) {
                             </div>
                             <div>
                                 <p className="text-[10px] font-black text-white uppercase tracking-wider">Multi-Terminal</p>
-                                <p className="text-[9px] text-slate-500 font-bold uppercase">Up to 2 Devices</p>
+                                <p className="text-[9px] text-slate-500 font-bold uppercase">Up to 10 Devices</p>
                             </div>
                         </div>
                     </div>

@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { DEFAULT_MAX_DEVICES } = require('../config/license');
 
 const licenseSchema = new mongoose.Schema({
     userId: {
@@ -51,7 +52,7 @@ const licenseSchema = new mongoose.Schema({
     }],
     maxDevices: {
         type: Number,
-        default: 2 // Default to 2 devices as requested
+        default: DEFAULT_MAX_DEVICES,
     },
     licenseKey: {
         type: String,

@@ -109,6 +109,7 @@ const verifyOrder = async (req, res) => {
 
             const licenseKey = crypto.randomUUID().toUpperCase();
 
+            const { DEFAULT_MAX_DEVICES } = require('../config/license');
             license = await License.create({
                 userId: order.userId,
                 companyName: order.companyName,
@@ -118,7 +119,8 @@ const verifyOrder = async (req, res) => {
                 activationDate,
                 expiryDate,
                 status: 'Active',
-                licenseKey
+                licenseKey,
+                maxDevices: DEFAULT_MAX_DEVICES,
             });
         }
 
@@ -168,7 +170,12 @@ const updateLicense = async (req, res) => {
             license.status = status;
         }
         if (subscriptionType) license.subscriptionType = subscriptionType;
-        if (req.body.maxDevices) license.maxDevices = req.body.maxDevices;
+        if (req.body.maxDevices !== undefined && req.body.maxDevices !== null) {
+            const limit = Number(req.body.maxDevices);
+            if (!Number.isNaN(limit) && limit >= 1 && limit <= 100) {
+                license.maxDevices = limit;
+            }
+        }
 
         // Reset devices if requested
         if (req.body.resetDevices) {

@@ -42,6 +42,7 @@ router.post('/', async (req, res) => {
             const expiryDate = new Date();
             expiryDate.setDate(expiryDate.getDate() + 5);
 
+            const { DEFAULT_MAX_DEVICES } = require('../config/license');
             const trialLicense = await License.create({
                 companyName: companyName || name,
                 productType: productType,
@@ -51,7 +52,8 @@ router.post('/', async (req, res) => {
                 status: 'Active',
                 isTrial: true,
                 leadId: lead._id,
-                licenseKey
+                licenseKey,
+                maxDevices: DEFAULT_MAX_DEVICES,
             });
 
             lead.trialLicenseKey = licenseKey;

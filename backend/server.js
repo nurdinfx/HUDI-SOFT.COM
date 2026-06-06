@@ -9,7 +9,7 @@ mongoose.set('strictQuery', false);
 const app = express();
 app.set('trust proxy', 1);
 const PORT = process.env.PORT || 5000;
-const BUILD_TAG = 'v1.4.1-cors-fix';
+const BUILD_TAG = 'v1.5.0-max-devices-10';
 console.log(`🚀 HUDI SOFT Backend ${BUILD_TAG}`);
 
 // 1. CORS first — must answer OPTIONS before any route or body parser
@@ -90,6 +90,16 @@ const connectMongo = async () => {
             bufferCommands: true,
         });
         console.log('✅ MongoDB connected');
+
+        const License = require('./models/License');
+        const { DEFAULT_MAX_DEVICES } = require('./config/license');
+        const migration = await License.updateMany(
+            { $or: [{ maxDevices: { $lt: DEFAULT_MAX_DEVICES } }, { maxDevices: { $exists: false } }] },
+            { $set: { maxDevices: DEFAULT_MAX_DEVICES } }
+        );
+        if (migration.modifiedCount > 0) {
+            console.log(`[License] Migrated ${migration.modifiedCount} license(s) to maxDevices=${DEFAULT_MAX_DEVICES}`);
+        }
     } catch (error) {
         console.error('❌ MongoDB connection error:', error.name, error.message);
         if (error.name === 'MongooseServerSelectionError' || error.message.includes('querySrv ENOTFOUND')) {
