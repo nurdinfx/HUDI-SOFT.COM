@@ -4,6 +4,8 @@
  * Base URL: http://localhost:4000/api
  */
 
+import { Capacitor, CapacitorHttp } from '@capacitor/core';
+
 // Use sanitized /api for Vercel/Production stability
 const API_BASE = (process.env.NEXT_PUBLIC_API_URL || '').trim().replace(/\/$/, ''); 
 
@@ -31,6 +33,15 @@ export function clearToken() {
 // ─── License management (central server — required for Capacitor / static export) ─
 const CENTRAL_LICENSE_API = 'https://hudi-soft-com.onrender.com/api';
 const LICENSE_REQUEST_TIMEOUT_MS = 45000;
+const LICENSE_META_KEY = 'hms_license_meta';
+
+export type LicenseMeta = {
+    expiryDate?: string;
+    isTrial?: boolean;
+    daysRemaining?: number;
+    companyName?: string;
+    activatedAt?: string;
+};
 
 export function normalizeLicenseKey(key: string): string {
     return key.trim().toUpperCase().replace(/\s+/g, '');
@@ -53,6 +64,27 @@ export function setLicenseKey(key: string) {
     if (typeof window !== 'undefined') localStorage.setItem('hms_license_key', normalizeLicenseKey(key));
 }
 
+export function getLicenseMeta(): LicenseMeta | null {
+    if (typeof window === 'undefined') return null;
+    try {
+        const raw = localStorage.getItem(LICENSE_META_KEY);
+        return raw ? (JSON.parse(raw) as LicenseMeta) : null;
+    } catch {
+        return null;
+    }
+}
+
+export function setLicenseMeta(meta: LicenseMeta) {
+    if (typeof window !== 'undefined') {
+        localStorage.setItem(LICENSE_META_KEY, JSON.stringify(meta));
+    }
+}
+
+export function isLicenseExpired(meta: LicenseMeta | null): boolean {
+    if (!meta?.expiryDate) return false;
+    return new Date(meta.expiryDate) < new Date();
+}
+
 export function getMachineId(): string {
     if (typeof window === 'undefined') return 'server';
     let id = localStorage.getItem('hms_machine_id');
@@ -63,8 +95,84 @@ export function getMachineId(): string {
     return id;
 }
 
-async function fetchLicenseValidate(licenseKey: string, machineID: string) {
-    const url = getLicenseValidateUrl();
+function parseLicenseNetworkError(err: unknown): Error {
+    if (err instanceof Error) {
+        if (err.name === 'AbortError') {
+            return new Error('License server timed out. Wait 30 seconds and try again.');
+        }
+        if (
+            err.message.includes('Failed to fetch') ||
+            err.message.includes('NetworkError') ||
+            err.message.includes('Network request failed')
+        ) {
+            return new Error('Could not reach the license server. Check your internet connection.');
+        }
+        return err;
+    }
+    return new Error('Could not reach the license server.');
+}
+
+function parseLicenseResponse(data: Record<string, unknown>) {
+    const result = data as {
+        valid?: boolean;
+        success?: boolean;
+        message?: string;
+        expiryDate?: string;
+        isTrial?: boolean;
+        daysRemaining?: number;
+        companyName?: string;
+    };
+
+    if (result.valid !== true && result.success !== true) {
+        throw new Error(result.message || 'Invalid license key');
+    }
+
+    const payload = {
+        valid: true as const,
+        message: result.message || 'License is valid',
+        expiryDate: result.expiryDate || '',
+        isTrial: result.isTrial ?? false,
+        daysRemaining: result.daysRemaining ?? 0,
+        companyName: result.companyName,
+    };
+
+    setLicenseMeta({
+        expiryDate: payload.expiryDate,
+        isTrial: payload.isTrial,
+        daysRemaining: payload.daysRemaining,
+        companyName: payload.companyName,
+        activatedAt: new Date().toISOString(),
+    });
+
+    return payload;
+}
+
+/** Native Capacitor WebView uses https://localhost — browser fetch is blocked by CORS. */
+async function postLicenseValidate(url: string, licenseKey: string, machineID: string) {
+    const body = { licenseKey, machineID };
+
+    if (Capacitor.isNativePlatform()) {
+        const response = await CapacitorHttp.post({
+            url,
+            headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+            data: body,
+            connectTimeout: LICENSE_REQUEST_TIMEOUT_MS,
+            readTimeout: LICENSE_REQUEST_TIMEOUT_MS,
+        });
+
+        const data =
+            typeof response.data === 'string'
+                ? (JSON.parse(response.data) as Record<string, unknown>)
+                : (response.data as Record<string, unknown>);
+
+        if (response.status < 200 || response.status >= 300) {
+            const payload = data as { message?: string; error?: string };
+            throw new Error(payload.message || payload.error || `License check failed (${response.status})`);
+        }
+
+        return parseLicenseResponse(data);
+    }
+
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), LICENSE_REQUEST_TIMEOUT_MS);
 
@@ -72,51 +180,30 @@ async function fetchLicenseValidate(licenseKey: string, machineID: string) {
         const res = await fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ licenseKey, machineID }),
+            body: JSON.stringify(body),
             signal: controller.signal,
         });
-        const data = await res.json().catch(() => ({}));
+        const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
 
         if (!res.ok) {
             const payload = data as { message?: string; error?: string };
             throw new Error(payload.message || payload.error || `License check failed (${res.status})`);
         }
 
-        const result = data as {
-            valid?: boolean;
-            success?: boolean;
-            message: string;
-            expiryDate: string;
-            isTrial: boolean;
-            daysRemaining: number;
-            companyName?: string;
-        };
-
-        if (result.valid !== true && result.success !== true) {
-            throw new Error(result.message || 'Invalid license key');
-        }
-
-        return {
-            valid: true as const,
-            message: result.message || 'License is valid',
-            expiryDate: result.expiryDate,
-            isTrial: result.isTrial ?? false,
-            daysRemaining: result.daysRemaining ?? 0,
-            companyName: result.companyName,
-        };
+        return parseLicenseResponse(data);
     } catch (err: unknown) {
-        if (err instanceof Error) {
-            if (err.name === 'AbortError') {
-                throw new Error('License server timed out. Wait 30 seconds and try again.');
-            }
-            if (err.message.includes('Failed to fetch') || err.message.includes('NetworkError')) {
-                throw new Error('Could not reach the license server. Check your internet connection.');
-            }
-            throw err;
-        }
-        throw new Error('Could not reach the license server.');
+        throw parseLicenseNetworkError(err);
     } finally {
         clearTimeout(timeoutId);
+    }
+}
+
+async function fetchLicenseValidate(licenseKey: string, machineID: string) {
+    const url = getLicenseValidateUrl();
+    try {
+        return await postLicenseValidate(url, licenseKey, machineID);
+    } catch (err: unknown) {
+        throw parseLicenseNetworkError(err);
     }
 }
 

@@ -2,8 +2,27 @@ import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
   appId: 'com.hudisoft.hms',
-  appName: 'Hudi Soft HMS',
-  webDir: 'out'
+  appName: 'HUDI SOFT HMS',
+  webDir: 'out',
+  server: {
+    androidScheme: 'https',
+    cleartext: true,
+    allowNavigation: [
+      'hudi-soft-hms.onrender.com',
+      'hudi-soft-com.onrender.com',
+      '*.onrender.com',
+      'hudisoft.online',
+      'localhost',
+    ],
+  },
+  android: {
+    allowMixedContent: true,
+  },
+  plugins: {
+    CapacitorHttp: {
+      enabled: true,
+    },
+  },
 };
 
 export default config;

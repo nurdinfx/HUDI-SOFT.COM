@@ -29,6 +29,11 @@ const DEFAULT_ALLOWED_ORIGINS = [
     'http://localhost:5173',
     'http://127.0.0.1:3000',
     'http://127.0.0.1:5173',
+    // Capacitor Android/iOS WebView (androidScheme: https)
+    'https://localhost',
+    'http://localhost',
+    'capacitor://localhost',
+    'ionic://localhost',
 ];
 
 /**
