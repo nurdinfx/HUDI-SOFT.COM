@@ -99,17 +99,26 @@ app.get('/api/health', (req, res) => {
 const dbModule = require('./database');
 dbModule.promise.then(async () => {
     console.log('📦 Running Database Migrations...');
+    const migrations = [
+        './migrate_revenue_analytics',
+        './migrate_multi_test',
+        './migrate_purchase_hub',
+        './migrate_push_subscriptions',
+        './migrate_procedures',
+        './migrate_pharmacy_accounts',
+        './migrate_vitals',
+    ];
+    for (const m of migrations) {
+        try {
+            await require(m)();
+        } catch (err) {
+            console.error(`⚠️ Migration warning [${m}]:`, err.message);
+        }
+    }
     try {
-        await require('./migrate_revenue_analytics')();
-        await require('./migrate_multi_test')();
-        await require('./migrate_purchase_hub')();
-        await require('./migrate_push_subscriptions')();
-        await require('./migrate_procedures')();
-        await require('./migrate_pharmacy_accounts')();
-        await require('./migrate_vitals')();
         await require('./seedAdmin')();
     } catch (err) {
-        console.error('⚠️ Migration warning:', err.message);
+        console.error('⚠️ Admin seed warning:', err.message);
     }
 
 

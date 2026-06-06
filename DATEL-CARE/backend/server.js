@@ -190,6 +190,12 @@ async function initDatabase() {
         console.log('📦 Running database migrations...');
         await runMigrations();
         console.log('✅ All migrations complete');
+
+        try {
+            await require('./seedAdmin')();
+        } catch (err) {
+            console.error('⚠️ Admin seed warning:', err.message);
+        }
     } catch (err) {
         dbError = err.message;
         console.error('❌ Database connection failed:', err.message);

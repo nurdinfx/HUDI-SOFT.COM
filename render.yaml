@@ -2,7 +2,7 @@ services:
   - type: web
     name: hudi-soft-hms-backend
     runtime: node
-    rootDir: DATEL-CARE/backend
+    rootDir: HUDI-SOFT-HMS-main/backend
     buildCommand: npm install
     startCommand: node server.js
     envVars:
