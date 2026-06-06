@@ -4,7 +4,7 @@
  * Base URL: http://localhost:4000/api
  */
 
-import { Capacitor, CapacitorHttp } from '@capacitor/core';
+import { validateLicenseOnline } from './license-client';
 
 // Use sanitized /api for Vercel/Production stability
 const API_BASE = (process.env.NEXT_PUBLIC_API_URL || '').trim().replace(/\/$/, ''); 
@@ -30,9 +30,7 @@ export function clearToken() {
     if (typeof window !== 'undefined') localStorage.removeItem('hms_token');
 }
 
-// ─── License management (central server — required for Capacitor / static export) ─
-const CENTRAL_LICENSE_API = 'https://hudi-soft-com.onrender.com/api';
-const LICENSE_REQUEST_TIMEOUT_MS = 45000;
+// ─── License management (online — central server, same keys as hudisoft.online) ─
 const LICENSE_META_KEY = 'hms_license_meta';
 
 export type LicenseMeta = {
@@ -45,14 +43,6 @@ export type LicenseMeta = {
 
 export function normalizeLicenseKey(key: string): string {
     return key.trim().toUpperCase().replace(/\s+/g, '');
-}
-
-function getLicenseValidateUrl(): string {
-    const fromEnv = process.env.NEXT_PUBLIC_LICENSE_API_URL?.trim().replace(/\/$/, '');
-    const base = fromEnv
-        ? fromEnv.replace('hudi-hospital.onrender.com', 'hudi-soft-com.onrender.com')
-        : CENTRAL_LICENSE_API;
-    return `${base}/licenses/validate`;
 }
 
 function getLicenseKey(): string | null {
@@ -93,118 +83,6 @@ export function getMachineId(): string {
         localStorage.setItem('hms_machine_id', id);
     }
     return id;
-}
-
-function parseLicenseNetworkError(err: unknown): Error {
-    if (err instanceof Error) {
-        if (err.name === 'AbortError') {
-            return new Error('License server timed out. Wait 30 seconds and try again.');
-        }
-        if (
-            err.message.includes('Failed to fetch') ||
-            err.message.includes('NetworkError') ||
-            err.message.includes('Network request failed')
-        ) {
-            return new Error('Could not reach the license server. Check your internet connection.');
-        }
-        return err;
-    }
-    return new Error('Could not reach the license server.');
-}
-
-function parseLicenseResponse(data: Record<string, unknown>) {
-    const result = data as {
-        valid?: boolean;
-        success?: boolean;
-        message?: string;
-        expiryDate?: string;
-        isTrial?: boolean;
-        daysRemaining?: number;
-        companyName?: string;
-    };
-
-    if (result.valid !== true && result.success !== true) {
-        throw new Error(result.message || 'Invalid license key');
-    }
-
-    const payload = {
-        valid: true as const,
-        message: result.message || 'License is valid',
-        expiryDate: result.expiryDate || '',
-        isTrial: result.isTrial ?? false,
-        daysRemaining: result.daysRemaining ?? 0,
-        companyName: result.companyName,
-    };
-
-    setLicenseMeta({
-        expiryDate: payload.expiryDate,
-        isTrial: payload.isTrial,
-        daysRemaining: payload.daysRemaining,
-        companyName: payload.companyName,
-        activatedAt: new Date().toISOString(),
-    });
-
-    return payload;
-}
-
-/** Native Capacitor WebView uses https://localhost — browser fetch is blocked by CORS. */
-async function postLicenseValidate(url: string, licenseKey: string, machineID: string) {
-    const body = { licenseKey, machineID };
-
-    if (Capacitor.isNativePlatform()) {
-        const response = await CapacitorHttp.post({
-            url,
-            headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-            data: body,
-            connectTimeout: LICENSE_REQUEST_TIMEOUT_MS,
-            readTimeout: LICENSE_REQUEST_TIMEOUT_MS,
-        });
-
-        const data =
-            typeof response.data === 'string'
-                ? (JSON.parse(response.data) as Record<string, unknown>)
-                : (response.data as Record<string, unknown>);
-
-        if (response.status < 200 || response.status >= 300) {
-            const payload = data as { message?: string; error?: string };
-            throw new Error(payload.message || payload.error || `License check failed (${response.status})`);
-        }
-
-        return parseLicenseResponse(data);
-    }
-
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), LICENSE_REQUEST_TIMEOUT_MS);
-
-    try {
-        const res = await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body),
-            signal: controller.signal,
-        });
-        const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
-
-        if (!res.ok) {
-            const payload = data as { message?: string; error?: string };
-            throw new Error(payload.message || payload.error || `License check failed (${res.status})`);
-        }
-
-        return parseLicenseResponse(data);
-    } catch (err: unknown) {
-        throw parseLicenseNetworkError(err);
-    } finally {
-        clearTimeout(timeoutId);
-    }
-}
-
-async function fetchLicenseValidate(licenseKey: string, machineID: string) {
-    const url = getLicenseValidateUrl();
-    try {
-        return await postLicenseValidate(url, licenseKey, machineID);
-    } catch (err: unknown) {
-        throw parseLicenseNetworkError(err);
-    }
 }
 
 // ─── Core fetch wrapper ──────────────────────────────────────────
@@ -254,12 +132,17 @@ export const authApi = {
 
 // ─── Licenses ────────────────────────────────────────────────────
 export const licenseApi = {
-    validate: (key: string) => {
+    validate: async (key: string) => {
         const licenseKey = normalizeLicenseKey(key);
-        if (!licenseKey || licenseKey.length < 8) {
-            return Promise.reject(new Error('Please enter your full license key.'));
-        }
-        return fetchLicenseValidate(licenseKey, getMachineId());
+        const result = await validateLicenseOnline(licenseKey, getMachineId());
+        setLicenseMeta({
+            expiryDate: result.expiryDate,
+            isTrial: result.isTrial,
+            daysRemaining: result.daysRemaining,
+            companyName: result.companyName,
+            activatedAt: new Date().toISOString(),
+        });
+        return result;
     },
 };
 

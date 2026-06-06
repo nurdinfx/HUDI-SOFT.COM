@@ -57,13 +57,12 @@ export function LicenseGuard({ children }: { children: React.ReactNode }) {
                 setError(data.message || 'Invalid license key');
             }
         } catch (err: unknown) {
-            const message =
-                err instanceof Error ? err.message : 'Activation failed';
-            setError(
-                message.includes('Failed to fetch')
-                    ? 'Could not reach the license server. Check your internet connection.'
-                    : message
-            );
+            let message = err instanceof Error ? err.message : 'Activation failed';
+            if (message.includes('Failed to fetch') || message.includes('Network')) {
+                message =
+                    'Cannot reach license server online. Enable Wi‑Fi/mobile data — keys from hudisoft.online require internet.';
+            }
+            setError(message);
         } finally {
             setLoading(false);
         }

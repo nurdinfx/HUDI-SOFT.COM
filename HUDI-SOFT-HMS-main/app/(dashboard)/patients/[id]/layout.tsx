@@ -1,11 +1,8 @@
+/** Required for `output: 'export'` — patient IDs load client-side at runtime. */
 export function generateStaticParams() {
-  return [{ id: '_' }]
+    return [{ id: '_' }];
 }
 
-export default function PatientDetailLayout({
-  children,
-}: {
-  children: React.ReactNode
-}) {
-  return children
+export default function PatientIdLayout({ children }: { children: React.ReactNode }) {
+    return children;
 }
