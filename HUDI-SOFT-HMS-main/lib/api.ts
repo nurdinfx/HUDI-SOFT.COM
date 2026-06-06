@@ -28,14 +28,29 @@ export function clearToken() {
     if (typeof window !== 'undefined') localStorage.removeItem('hms_token');
 }
 
-// ─── License management ──────────────────────────────────────────
+// ─── License management (central server — required for Capacitor / static export) ─
+const CENTRAL_LICENSE_API = 'https://hudi-soft-com.onrender.com/api';
+const LICENSE_REQUEST_TIMEOUT_MS = 45000;
+
+export function normalizeLicenseKey(key: string): string {
+    return key.trim().toUpperCase().replace(/\s+/g, '');
+}
+
+function getLicenseValidateUrl(): string {
+    const fromEnv = process.env.NEXT_PUBLIC_LICENSE_API_URL?.trim().replace(/\/$/, '');
+    const base = fromEnv
+        ? fromEnv.replace('hudi-hospital.onrender.com', 'hudi-soft-com.onrender.com')
+        : CENTRAL_LICENSE_API;
+    return `${base}/licenses/validate`;
+}
+
 function getLicenseKey(): string | null {
     if (typeof window === 'undefined') return null;
     return localStorage.getItem('hms_license_key');
 }
 
 export function setLicenseKey(key: string) {
-    if (typeof window !== 'undefined') localStorage.setItem('hms_license_key', key);
+    if (typeof window !== 'undefined') localStorage.setItem('hms_license_key', normalizeLicenseKey(key));
 }
 
 export function getMachineId(): string {
@@ -46,6 +61,63 @@ export function getMachineId(): string {
         localStorage.setItem('hms_machine_id', id);
     }
     return id;
+}
+
+async function fetchLicenseValidate(licenseKey: string, machineID: string) {
+    const url = getLicenseValidateUrl();
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), LICENSE_REQUEST_TIMEOUT_MS);
+
+    try {
+        const res = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ licenseKey, machineID }),
+            signal: controller.signal,
+        });
+        const data = await res.json().catch(() => ({}));
+
+        if (!res.ok) {
+            const payload = data as { message?: string; error?: string };
+            throw new Error(payload.message || payload.error || `License check failed (${res.status})`);
+        }
+
+        const result = data as {
+            valid?: boolean;
+            success?: boolean;
+            message: string;
+            expiryDate: string;
+            isTrial: boolean;
+            daysRemaining: number;
+            companyName?: string;
+        };
+
+        if (result.valid !== true && result.success !== true) {
+            throw new Error(result.message || 'Invalid license key');
+        }
+
+        return {
+            valid: true as const,
+            message: result.message || 'License is valid',
+            expiryDate: result.expiryDate,
+            isTrial: result.isTrial ?? false,
+            daysRemaining: result.daysRemaining ?? 0,
+            companyName: result.companyName,
+        };
+    } catch (err: unknown) {
+        if (err instanceof Error) {
+            if (err.name === 'AbortError') {
+                throw new Error('License server timed out. Wait 30 seconds and try again.');
+            }
+            if (err.message.includes('Failed to fetch') || err.message.includes('NetworkError')) {
+                throw new Error('Could not reach the license server. Check your internet connection.');
+            }
+            throw err;
+        }
+        throw new Error('Could not reach the license server.');
+    } finally {
+        clearTimeout(timeoutId);
+    }
 }
 
 // ─── Core fetch wrapper ──────────────────────────────────────────
@@ -95,7 +167,13 @@ export const authApi = {
 
 // ─── Licenses ────────────────────────────────────────────────────
 export const licenseApi = {
-    validate: (key: string) => post<{ valid: boolean; message: string; expiryDate: string; isTrial: boolean; daysRemaining: number }>('/licenses/validate', { licenseKey: key, machineID: getMachineId() }),
+    validate: (key: string) => {
+        const licenseKey = normalizeLicenseKey(key);
+        if (!licenseKey || licenseKey.length < 8) {
+            return Promise.reject(new Error('Please enter your full license key.'));
+        }
+        return fetchLicenseValidate(licenseKey, getMachineId());
+    },
 };
 
 // ─── Dashboard ───────────────────────────────────────────────────
