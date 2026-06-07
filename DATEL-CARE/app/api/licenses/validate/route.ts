@@ -1,79 +1,34 @@
 import { NextResponse } from 'next/server';
 
-// ─── Hardcoded demo/trial licenses (always available, no network needed) ────
-const STATIC_LICENSES: Record<string, {
-  valid: boolean;
-  expiryDate: string;
-  isTrial: boolean;
-  daysRemaining: number;
-  type: string;
-  message: string;
-}> = {
-  'HUDI-DEMO-2025-SUCCESS': {
-    valid: true,
-    expiryDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-    isTrial: true,
-    daysRemaining: 30,
-    type: 'demo',
-    message: 'Demo license activated successfully!',
-  },
-  'HUDI-PRO-ENTERPRISE-2025': {
-    valid: true,
-    expiryDate: new Date(Date.now() + 365 * 5 * 24 * 60 * 60 * 1000).toISOString(),
-    isTrial: false,
-    daysRemaining: 1825,
-    type: 'enterprise',
-    message: 'Enterprise license activated successfully!',
-  },
-  'HUDI-STD-2025-LICENSE': {
-    valid: true,
-    expiryDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
-    isTrial: false,
-    daysRemaining: 365,
-    type: 'standard',
-    message: 'Standard license activated successfully!',
-  },
-};
+const LICENSE_SERVER =
+  process.env.LICENSING_API_URL || 'https://hudi-soft-com.onrender.com/api';
 
-// ─── Fetch against the real licensing backend with a hard timeout ────────────
 async function validateAgainstBackend(
   licenseKey: string,
   machineID: string,
-  timeoutMs = 8000
-): Promise<{ valid: boolean; [key: string]: unknown } | null> {
-  const LICENSING_API =
-    process.env.LICENSING_API_URL ||
-    'https://hudi-hospital.onrender.com/api';
-
+  timeoutMs = 12000
+): Promise<Record<string, unknown>> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
-    const res = await fetch(`${LICENSING_API}/licenses/validate`, {
+    const res = await fetch(`${LICENSE_SERVER}/licenses/validate`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
       body: JSON.stringify({ licenseKey, machineID }),
       signal: controller.signal,
     });
 
-    clearTimeout(timer);
+    const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
 
     if (!res.ok) {
-      console.warn(`[License API] upstream status ${res.status}`);
-      return null;
+      const msg = (data.message as string) || (data.error as string) || `License server error (${res.status})`;
+      throw new Error(msg);
     }
 
-    const data = await res.json();
     return data;
-  } catch (err: unknown) {
+  } finally {
     clearTimeout(timer);
-    const name = (err instanceof Error) ? err.name : 'UnknownError';
-    if (name === 'AbortError') {
-      console.warn('[License API] upstream timed out after', timeoutMs, 'ms');
-    } else {
-      console.error('[License API] upstream fetch error:', err);
-    }
-    return null;
   }
 }
 
@@ -93,70 +48,43 @@ export async function POST(request: Request) {
     }
 
     const cleanKey = String(licenseKey).toUpperCase().trim().replace(/\s+/g, '');
+    const upstream = await validateAgainstBackend(cleanKey, machineID);
 
-    console.log(
-      `[License Validate] key=${cleanKey.substring(0, 10)}… machine=${machineID}`
-    );
-
-    // 1. Check static/demo licenses first (instant, no network)
-    if (STATIC_LICENSES[cleanKey]) {
-      console.log(`[License Validate] static match: ${cleanKey}`);
-      return NextResponse.json(STATIC_LICENSES[cleanKey]);
-    }
-
-    // 2. Try the real licensing backend with timeout protection
-    const upstream = await validateAgainstBackend(cleanKey, machineID, 8000);
-
-    if (upstream !== null) {
-      // Normalise: upstream may return { success: true } or { valid: true }
-      const isValid = upstream.valid === true || (upstream as any).success === true;
+    const isValid = upstream.valid === true || upstream.success === true;
+    if (!isValid) {
       return NextResponse.json({
-        valid: isValid,
-        expiryDate: upstream.expiryDate ?? new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
-        isTrial: upstream.isTrial ?? false,
-        daysRemaining: upstream.daysRemaining ?? 365,
-        companyName: upstream.companyName,
-        productType: upstream.productType,
-        type: upstream.type ?? 'professional',
-        message: upstream.message ?? (isValid ? 'License activated successfully!' : 'Invalid license key.'),
+        valid: false,
+        message: (upstream.message as string) || 'Invalid license key.',
       });
     }
 
-    // 3. Fallback for properly-formatted keys when backend is unreachable
-    //    Accept keys matching pattern: XXXX-XXXX-XXXX-XXXX (36-char UUID style)
-    const UUID_PATTERN =
-      /^[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}$/;
-    const HUDI_PATTERN = /^HUDI-[A-Z0-9]+-[A-Z0-9]+-[A-Z0-9]+$/;
-
-    if (UUID_PATTERN.test(cleanKey) || HUDI_PATTERN.test(cleanKey)) {
-      console.warn(
-        '[License Validate] backend unreachable, accepting formatted key as provisional'
+    if (!upstream.expiryDate) {
+      return NextResponse.json(
+        { valid: false, message: 'License server did not return an expiry date.' },
+        { status: 502 }
       );
-      return NextResponse.json({
-        valid: true,
-        expiryDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
-        isTrial: false,
-        daysRemaining: 365,
-        type: 'professional',
-        message: 'License activated (offline mode). Full validation will resume when service reconnects.',
-      });
     }
 
-    // 4. Reject
+    const expiry = new Date(upstream.expiryDate as string);
+    const daysRemaining =
+      (upstream.daysRemaining as number) ??
+      Math.max(0, Math.ceil((expiry.getTime() - Date.now()) / (1000 * 60 * 60 * 24)));
+
     return NextResponse.json({
-      valid: false,
-      message: 'Invalid license key. Please check and try again.',
+      valid: true,
+      expiryDate: expiry.toISOString(),
+      isTrial: upstream.isTrial ?? false,
+      daysRemaining,
+      companyName: upstream.companyName,
+      productType: upstream.productType,
+      message: (upstream.message as string) || 'License is valid.',
     });
-  } catch (error) {
-    console.error('[License Validate] handler error:', error);
-    return NextResponse.json(
-      { valid: false, message: 'Server error during validation. Please try again.' },
-      { status: 500 }
-    );
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : 'Validation failed';
+    return NextResponse.json({ valid: false, message: msg }, { status: 502 });
   }
 }
 
-// Support OPTIONS preflight (Vercel handles it, but be explicit)
 export async function OPTIONS() {
   return new NextResponse(null, {
     status: 204,

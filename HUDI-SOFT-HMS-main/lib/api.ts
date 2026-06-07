@@ -66,11 +66,14 @@ export function clearLicense() {
 export function getLicenseMeta(): LicenseMeta | null {
     if (typeof window === 'undefined') return null;
     try {
+        const currentKey = getLicenseKey();
+        if (!currentKey) return null;
+
         const raw = localStorage.getItem(LICENSE_META_KEY);
         if (!raw) return null;
+
         const meta = JSON.parse(raw) as LicenseMeta;
-        const currentKey = getLicenseKey();
-        if (currentKey && meta.licenseKey && meta.licenseKey !== currentKey) {
+        if (!meta.licenseKey || normalizeLicenseKey(meta.licenseKey) !== currentKey) {
             return null;
         }
         return meta;
@@ -183,15 +186,9 @@ export const licenseApi = {
     sync: async (): Promise<LicenseMeta | null> => {
         const licenseKey = getLicenseKey();
         if (!licenseKey) return null;
-        try {
-            const result = await validateLicenseOnline(licenseKey, getMachineId());
-            applyServerLicenseMeta(licenseKey, result);
-            return getLicenseMeta();
-        } catch {
-            const cached = getLicenseMeta();
-            if (cached && !isLicenseExpired(cached)) return cached;
-            return null;
-        }
+        const result = await validateLicenseOnline(licenseKey, getMachineId());
+        applyServerLicenseMeta(licenseKey, result);
+        return getLicenseMeta();
     },
 };
 

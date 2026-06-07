@@ -38,7 +38,7 @@ function readStoredLicense(): {
         clearLicense();
         return null;
     }
-    return { key, meta };
+    return { key, meta: meta ?? null };
 }
 
 function hasAuthToken(): boolean {
@@ -90,6 +90,11 @@ export function LicenseGuard({ children }: { children: React.ReactNode }) {
         setActivating(true);
         setError(null);
 
+        const previous = localStorage.getItem('hms_license_key');
+        if (previous && normalizeLicenseKey(previous) !== cleanKey) {
+            clearLicense();
+        }
+
         try {
             const data = await licenseApi.validate(cleanKey);
             if (!data.valid) {
@@ -124,20 +129,27 @@ export function LicenseGuard({ children }: { children: React.ReactNode }) {
             setKey(stored.key);
             setPhase(hasAuthToken() ? 'app' : 'login');
 
-            void licenseApi.sync().then((meta) => {
-                if (!meta) return;
-                applyLicenseMeta(meta);
-                setLicenseInfo({
-                    expiryDate: meta.expiryDate,
-                    isTrial: meta.isTrial,
-                    daysRemaining: meta.daysRemaining,
-                    companyName: meta.companyName,
+            void licenseApi.sync()
+                .then((meta) => {
+                    if (!meta) return;
+                    applyLicenseMeta(meta);
+                    setLicenseInfo({
+                        expiryDate: meta.expiryDate,
+                        isTrial: meta.isTrial,
+                        daysRemaining: meta.daysRemaining,
+                        companyName: meta.companyName,
+                    });
+                    if (isLicenseExpired(meta)) {
+                        clearLicense();
+                        setPhase('activate');
+                    }
+                })
+                .catch(() => {
+                    if (!stored.meta) {
+                        clearLicense();
+                        setPhase('activate');
+                    }
                 });
-                if (isLicenseExpired(meta)) {
-                    clearLicense();
-                    setPhase('activate');
-                }
-            });
             return;
         }
 

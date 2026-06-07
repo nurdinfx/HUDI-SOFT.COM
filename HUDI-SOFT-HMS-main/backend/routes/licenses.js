@@ -1,107 +1,33 @@
 const express = require('express');
 const router = express.Router();
-const crypto = require('crypto');
 
-// Real-world license validation system matching the POS one
-// and the Next.js API route
+const LICENSE_SERVER =
+    process.env.LICENSING_API_URL || 'https://hudi-soft-com.onrender.com/api';
 
-// Validate license endpoint
+/** Proxy to central license server — each key gets its own expiryDate from MongoDB. */
 router.post('/validate', async (req, res) => {
     try {
-        const { licenseKey, machineId } = req.body;
-        
-        console.log('🔑 License validation request:', { 
-            key: licenseKey ? licenseKey.substring(0, 10) + '...' : 'missing',
-            machineId: machineId ? machineId.substring(0, 10) + '...' : 'missing'
-        });
+        const licenseKey = req.body?.licenseKey || req.body?.key;
+        const machineID = req.body?.machineID || req.body?.machineId || 'UNKNOWN';
 
         if (!licenseKey) {
-            return res.status(400).json({
-                valid: false,
-                message: 'License key is required'
-            });
+            return res.status(400).json({ valid: false, message: 'License key is required' });
         }
 
-        const cleanKey = licenseKey.toUpperCase().trim();
-
-        // Pre-defined valid licenses (matching the Next.js API)
-        const validLicenses = {
-            'HUDI-DEMO-2025-SUCCESS': {
-                valid: true,
-                expiryDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-                isTrial: true,
-                daysRemaining: 30,
-                type: 'demo',
-                message: 'Demo license activated successfully!'
-            },
-            'HUDI-PRO-ENTERPRISE-2025': {
-                valid: true,
-                expiryDate: new Date(Date.now() + 365 * 5 * 24 * 60 * 60 * 1000).toISOString(),
-                isTrial: false,
-                daysRemaining: 1825,
-                type: 'enterprise',
-                message: 'Enterprise license activated successfully!'
-            },
-            'HUDI-STD-2025-LICENSE': {
-                valid: true,
-                expiryDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
-                isTrial: false,
-                daysRemaining: 365,
-                type: 'standard',
-                message: 'Standard license activated successfully!'
-            }
-        };
-
-        // Check known valid licenses
-        if (validLicenses[cleanKey]) {
-            return res.json(validLicenses[cleanKey]);
-        }
-
-        // Also accept any properly formatted key
-        if (cleanKey.length >= 12 && cleanKey.includes('-')) {
-            return res.json({
-                valid: true,
-                expiryDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
-                isTrial: false,
-                daysRemaining: 365,
-                type: 'professional',
-                message: 'License activated successfully!'
-            });
-        }
-
-        // Invalid license
-        return res.json({
-            valid: false,
-            message: 'Invalid license key. Please check and try again.'
+        const upstream = await fetch(`${LICENSE_SERVER}/licenses/validate`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+            body: JSON.stringify({ licenseKey, machineID }),
         });
 
+        const data = await upstream.json().catch(() => ({}));
+        return res.status(upstream.status).json(data);
     } catch (error) {
-        console.error('❌ License validation error:', error);
-        res.status(500).json({
+        console.error('❌ License proxy error:', error.message);
+        res.status(502).json({
             valid: false,
-            message: 'Server error during license validation'
+            message: 'Cannot reach license server. Please try again.',
         });
-    }
-});
-
-// Generate license key (admin endpoint)
-router.post('/generate', (req, res) => {
-    try {
-        const { type = 'professional', duration = 365 } = req.body;
-        
-        const key = `HUDI-${type.toUpperCase()}-${Date.now().toString(36).toUpperCase()}-${crypto.randomBytes(4).toString('hex').toUpperCase()}`;
-        
-        const expiryDate = new Date(Date.now() + duration * 24 * 60 * 60 * 1000);
-
-        res.json({
-            success: true,
-            licenseKey: key,
-            expiryDate: expiryDate.toISOString(),
-            daysRemaining: duration
-        });
-    } catch (error) {
-        console.error('❌ License generation error:', error);
-        res.status(500).json({ success: false, message: 'Failed to generate license' });
     }
 });
 
