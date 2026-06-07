@@ -8,6 +8,7 @@ import {
     setLicenseKey,
     getLicenseMeta,
     isLicenseExpired,
+    clearLicense,
 } from '@/lib/api';
 import { goToDashboard } from '@/lib/capacitor-nav';
 import { ShieldCheck, Zap, Building2, AlertTriangle, Key } from 'lucide-react';
@@ -34,7 +35,7 @@ function readStoredLicense(): {
     if (!key) return null;
     const meta = getLicenseMeta();
     if (meta?.expiryDate && isLicenseExpired(meta)) {
-        localStorage.removeItem('hms_license_key');
+        clearLicense();
         return null;
     }
     return { key, meta };
@@ -96,7 +97,6 @@ export function LicenseGuard({ children }: { children: React.ReactNode }) {
                 return;
             }
 
-            setLicenseKey(cleanKey);
             setLicenseInfo({
                 expiryDate: data.expiryDate,
                 isTrial: data.isTrial,
@@ -104,7 +104,6 @@ export function LicenseGuard({ children }: { children: React.ReactNode }) {
                 companyName: data.companyName,
             });
 
-            // Show login immediately — no page reload, no blank screen
             setPhase('login');
         } catch (err: unknown) {
             let message = err instanceof Error ? err.message : 'Activation failed';
@@ -124,6 +123,21 @@ export function LicenseGuard({ children }: { children: React.ReactNode }) {
             applyLicenseMeta(stored.meta);
             setKey(stored.key);
             setPhase(hasAuthToken() ? 'app' : 'login');
+
+            void licenseApi.sync().then((meta) => {
+                if (!meta) return;
+                applyLicenseMeta(meta);
+                setLicenseInfo({
+                    expiryDate: meta.expiryDate,
+                    isTrial: meta.isTrial,
+                    daysRemaining: meta.daysRemaining,
+                    companyName: meta.companyName,
+                });
+                if (isLicenseExpired(meta)) {
+                    clearLicense();
+                    setPhase('activate');
+                }
+            });
             return;
         }
 

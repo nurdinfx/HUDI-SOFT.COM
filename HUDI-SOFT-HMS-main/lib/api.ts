@@ -29,11 +29,13 @@ export function clearToken() {
 const LICENSE_META_KEY = 'hms_license_meta';
 
 export type LicenseMeta = {
+    licenseKey?: string;
     expiryDate?: string;
     isTrial?: boolean;
     daysRemaining?: number;
     companyName?: string;
     activatedAt?: string;
+    syncedAt?: string;
 };
 
 export function normalizeLicenseKey(key: string): string {
@@ -46,14 +48,32 @@ function getLicenseKey(): string | null {
 }
 
 export function setLicenseKey(key: string) {
-    if (typeof window !== 'undefined') localStorage.setItem('hms_license_key', normalizeLicenseKey(key));
+    if (typeof window === 'undefined') return;
+    const normalized = normalizeLicenseKey(key);
+    const current = getLicenseKey();
+    if (current && current !== normalized) {
+        localStorage.removeItem(LICENSE_META_KEY);
+    }
+    localStorage.setItem('hms_license_key', normalized);
+}
+
+export function clearLicense() {
+    if (typeof window === 'undefined') return;
+    localStorage.removeItem('hms_license_key');
+    localStorage.removeItem(LICENSE_META_KEY);
 }
 
 export function getLicenseMeta(): LicenseMeta | null {
     if (typeof window === 'undefined') return null;
     try {
         const raw = localStorage.getItem(LICENSE_META_KEY);
-        return raw ? (JSON.parse(raw) as LicenseMeta) : null;
+        if (!raw) return null;
+        const meta = JSON.parse(raw) as LicenseMeta;
+        const currentKey = getLicenseKey();
+        if (currentKey && meta.licenseKey && meta.licenseKey !== currentKey) {
+            return null;
+        }
+        return meta;
     } catch {
         return null;
     }
@@ -128,19 +148,50 @@ export const authApi = {
     logout: () => post('/auth/logout', {}),
 };
 
+function applyServerLicenseMeta(licenseKey: string, result: {
+    expiryDate: string;
+    isTrial: boolean;
+    daysRemaining: number;
+    companyName?: string;
+}) {
+    setLicenseMeta({
+        licenseKey,
+        expiryDate: result.expiryDate,
+        isTrial: result.isTrial,
+        daysRemaining: result.daysRemaining,
+        companyName: result.companyName,
+        activatedAt: new Date().toISOString(),
+        syncedAt: new Date().toISOString(),
+    });
+}
+
 // ─── Licenses ────────────────────────────────────────────────────
 export const licenseApi = {
+    /** Activate or re-activate a key — always fetches date from central server. */
     validate: async (key: string) => {
         const licenseKey = normalizeLicenseKey(key);
+        const previous = getLicenseKey();
+        if (previous && previous !== licenseKey) {
+            clearLicense();
+        }
+        setLicenseKey(licenseKey);
         const result = await validateLicenseOnline(licenseKey, getMachineId());
-        setLicenseMeta({
-            expiryDate: result.expiryDate,
-            isTrial: result.isTrial,
-            daysRemaining: result.daysRemaining,
-            companyName: result.companyName,
-            activatedAt: new Date().toISOString(),
-        });
+        applyServerLicenseMeta(licenseKey, result);
         return result;
+    },
+    /** Refresh stored key expiry from server (same key = same date on APK & web). */
+    sync: async (): Promise<LicenseMeta | null> => {
+        const licenseKey = getLicenseKey();
+        if (!licenseKey) return null;
+        try {
+            const result = await validateLicenseOnline(licenseKey, getMachineId());
+            applyServerLicenseMeta(licenseKey, result);
+            return getLicenseMeta();
+        } catch {
+            const cached = getLicenseMeta();
+            if (cached && !isLicenseExpired(cached)) return cached;
+            return null;
+        }
     },
 };
 
