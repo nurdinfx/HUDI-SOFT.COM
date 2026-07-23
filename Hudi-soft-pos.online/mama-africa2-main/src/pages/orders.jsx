@@ -135,11 +135,11 @@ const Orders = () => {
   const { user } = useAuth();
 
 
-  // New state for dropdown data
+  // Dropdown data state
   const [users, setUsers] = useState([]);
   const [tables, setTables] = useState([]);
   const [customers, setCustomers] = useState([]);
-  const [rooms, setRooms] = useState(['Main Hall', 'VIP', 'Garden']); // Example rooms
+  const [rooms, setRooms] = useState([]);
 
   useEffect(() => {
     loadOrders();
@@ -149,15 +149,23 @@ const Orders = () => {
     // Fetch dropdown data
     const loadDropdownData = async () => {
       try {
-        const [usersRes, tablesRes, customersRes] = await Promise.all([
+        const [usersRes, tablesRes, customersRes, hotelRoomsRes] = await Promise.allSettled([
           realApi.getUsers(),
           realApi.getTables(),
-          realApi.getCustomers()
+          realApi.getCustomers(),
+          realApi.hotel.getRooms()
         ]);
 
-        if (usersRes?.success) setUsers(realApi.extractData(usersRes) || []);
-        if (tablesRes?.success) setTables(realApi.extractData(tablesRes) || []);
-        if (customersRes?.success) setCustomers(realApi.extractData(customersRes) || []);
+        if (usersRes?.status === 'fulfilled' && usersRes.value?.success) setUsers(realApi.extractData(usersRes.value) || []);
+        if (tablesRes?.status === 'fulfilled' && tablesRes.value?.success) setTables(realApi.extractData(tablesRes.value) || []);
+        if (customersRes?.status === 'fulfilled' && customersRes.value?.success) setCustomers(realApi.extractData(customersRes.value) || []);
+
+        let loadedRooms = [];
+        if (hotelRoomsRes?.status === 'fulfilled' && hotelRoomsRes.value?.success) {
+          const roomList = realApi.extractData(hotelRoomsRes.value) || [];
+          loadedRooms = roomList.map(r => `Room ${r.roomNumber || r.number || r.room}`);
+        }
+        setRooms(prev => Array.from(new Set([...loadedRooms, ...prev])));
       } catch (err) {
         console.error('Error loading dropdown data', err);
       }
@@ -310,6 +318,12 @@ const Orders = () => {
         const orders = realApi.extractData(response) || [];
         orders.sort((a, b) => new Date(b.createdAt || b.orderDate || 0) - new Date(a.createdAt || a.orderDate || 0));
         setOrders(orders);
+
+        // Collect any room numbers attached to orders
+        const orderRooms = orders.map(o => o.bookedRoom || o.room).filter(Boolean);
+        if (orderRooms.length > 0) {
+          setRooms(prev => Array.from(new Set([...prev, ...orderRooms])));
+        }
       }
     } catch (error) {
       console.error('❌ Failed to load orders:', error);
@@ -427,7 +441,7 @@ const Orders = () => {
 
     if (filters.room) {
       filtered = filtered.filter(order =>
-        order.room?.toLowerCase().includes(filters.room.toLowerCase())
+        (order.bookedRoom || order.room)?.toLowerCase().includes(filters.room.toLowerCase())
       );
     }
 
@@ -1497,8 +1511,14 @@ const Orders = () => {
                         {order.customer?.name || order.customerName || 'Walking'}
                       </div>
                     </td>
-                    <td className="p-2 align-top text-center text-[10px] md:text-xs text-gray-500 hidden xl:table-cell">
-                      {order.room || '-'}
+                    <td className="p-2 align-top text-center text-[10px] md:text-xs font-semibold hidden xl:table-cell">
+                      {(order.bookedRoom || order.room) ? (
+                        <span className="inline-flex items-center gap-1 bg-amber-50 text-amber-800 border border-amber-200 px-2 py-0.5 rounded font-medium text-[10px]" title={order.bookedRoom || order.room}>
+                          🏨 {order.bookedRoom || order.room}
+                        </span>
+                      ) : (
+                        <span className="text-gray-400 font-normal">-</span>
+                      )}
                     </td>
                     <td className="p-2 align-top text-center text-[10px] md:text-xs hidden md:table-cell">
                       <span className={`px-1.5 py-0.5 rounded-full border text-[9px] ${order.paymentStatus === 'paid' ? 'bg-green-50 border-green-200 text-green-700' : 'bg-yellow-50 border-yellow-200 text-yellow-700'}`}>
@@ -1777,6 +1797,14 @@ const OrderModal = ({ order, restaurantSettings, onClose, onPrint, onPayNow, onU
                   <h3 className="text-sm font-medium text-gray-500">Table</h3>
                   <p className="mt-1 text-sm text-gray-900">
                     {order.tableNumber}
+                  </p>
+                </div>
+              )}
+              {(order.bookedRoom || order.room) && (
+                <div>
+                  <h3 className="text-sm font-medium text-gray-500">Hotel Room</h3>
+                  <p className="mt-1 text-sm font-bold text-amber-700">
+                    🏨 {order.bookedRoom || order.room}
                   </p>
                 </div>
               )}
