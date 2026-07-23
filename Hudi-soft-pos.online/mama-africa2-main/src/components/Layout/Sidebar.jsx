@@ -23,7 +23,12 @@ import {
   Briefcase,
   QrCode,
   Bell,
-  CalendarCheck
+  CalendarCheck,
+  Building2,
+  Bed,
+  CalendarDays,
+  ConciergeBell,
+  Brush
 } from 'lucide-react';
 
 const Sidebar = ({ isOpen, setIsOpen }) => {
@@ -66,6 +71,17 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
     { name: 'License Mgmt', href: '/admin/licensing', icon: Shield, roles: ['admin'] },
   ];
 
+  // Hotel management navigation items
+  const hotelNavigation = [
+    { name: 'Hotel Dashboard', href: '/hotel/dashboard', icon: Building2, roles: ['admin', 'manager'] },
+    { name: 'Rooms & Types', href: '/hotel/rooms', icon: Bed, roles: ['admin', 'manager'] },
+    { name: 'Reservations', href: '/hotel/reservations', icon: CalendarDays, roles: ['admin', 'manager', 'cashier'] },
+    { name: 'Front Desk', href: '/hotel/frontdesk', icon: ConciergeBell, roles: ['admin', 'manager', 'cashier'] },
+    { name: 'Housekeeping', href: '/hotel/housekeeping', icon: Brush, roles: ['admin', 'manager'] },
+  ];
+
+  const showHotel = settings?.businessType === 'both' || settings?.businessType === 'hotel';
+
   const filteredNavigation = navigation.filter((item) => {
     // Check role permissions first
     if (!item.roles.includes(user?.role)) return false;
@@ -79,6 +95,8 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
     }
     return true;
   });
+
+  const filteredHotelNav = hotelNavigation.filter(item => item.roles.includes(user?.role));
 
   const handleLogout = async () => {
     try {
@@ -165,6 +183,44 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
             );
           })}
         </ul>
+
+        {/* Hotel Management Section */}
+        {showHotel && filteredHotelNav.length > 0 && (
+          <div className="mt-4 px-3">
+            <div className="flex items-center gap-2 px-3 mb-2">
+              <Building2 size={13} className="text-amber-300" />
+              <span className="text-[10px] font-black uppercase tracking-widest text-amber-300">Hotel Management</span>
+            </div>
+            <ul className="space-y-1">
+              {filteredHotelNav.map((item) => {
+                const active = isCurrentPath(item.href);
+                const Icon = item.icon;
+                return (
+                  <li key={item.name}>
+                    <Link
+                      to={item.href}
+                      onClick={handleItemClick}
+                      className={`flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium transition-all ${active
+                        ? 'bg-amber-400/20 text-amber-200 shadow-md translate-x-1 border border-amber-400/30'
+                        : 'text-blue-100 hover:bg-amber-500/10 hover:text-amber-200 hover:translate-x-1'
+                        }`}
+                    >
+                      <span
+                        className={`h-8 w-8 rounded-lg flex items-center justify-center ${active
+                          ? 'bg-amber-400/30 text-amber-300'
+                          : 'bg-amber-700/20 text-amber-300'
+                          }`}
+                      >
+                        <Icon size={18} />
+                      </span>
+                      <span className="truncate">{item.name}</span>
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        )}
       </nav>
 
       {/* Logout at bottom */}

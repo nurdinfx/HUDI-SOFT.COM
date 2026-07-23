@@ -458,9 +458,9 @@ const GeneralSettings = ({ settings, onChange }) => {
             onChange={(e) => onChange('businessType', e.target.value)}
             className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-white"
           >
-            <option value="restaurant">Restaurant Mode</option>
-            <option value="supermarket">Supermarket Mode</option>
-            <option value="both">Restaurant & Supermarket Mode</option>
+            <option value="restaurant">🍽️ Restaurant / Café Mode</option>
+            <option value="supermarket">🛒 Supermarket / Retail Mode</option>
+            <option value="both">🏨 Hotel & Restaurant Mode</option>
           </select>
         </div>
 

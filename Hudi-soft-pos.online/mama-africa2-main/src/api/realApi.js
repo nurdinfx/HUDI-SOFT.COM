@@ -559,6 +559,37 @@ export const attendanceAPI = {
   pinFallback: (data) => api.post('/attendance/public/pin-fallback', data)
 };
 
+// ========== HOTEL API ==========
+export const hotelAPI = {
+  getRoomTypes: () => api.get('/hotel/room-types'),
+  createRoomType: (data) => api.post('/hotel/room-types', data),
+  updateRoomType: (id, data) => api.put(`/hotel/room-types/${id}`, data),
+  deleteRoomType: (id) => api.delete(`/hotel/room-types/${id}`),
+
+  getRooms: () => api.get('/hotel/rooms'),
+  createRoom: (data) => api.post('/hotel/rooms', data),
+  updateRoom: (id, data) => api.put(`/hotel/rooms/${id}`, data),
+  deleteRoom: (id) => api.delete(`/hotel/rooms/${id}`),
+
+  getReservations: () => api.get('/hotel/reservations'),
+  getCheckedInGuests: () => api.get('/hotel/guests/checked-in'),
+  createReservation: (data) => api.post('/hotel/reservations', data),
+  checkIn: (id) => api.post(`/hotel/reservations/${id}/checkin`),
+  checkOut: (id) => api.post(`/hotel/reservations/${id}/checkout`),
+  addCharge: (id, data) => api.post(`/hotel/reservations/${id}/charges`, data),
+  addPayment: (id, data) => api.post(`/hotel/reservations/${id}/payments`, data),
+
+  getHousekeeping: () => api.get('/hotel/housekeeping'),
+  createHousekeeping: (data) => api.post('/hotel/housekeeping', data),
+  updateHousekeeping: (id, data) => api.put(`/hotel/housekeeping/${id}`, data),
+
+  getMaintenance: () => api.get('/hotel/maintenance'),
+  createMaintenance: (data) => api.post('/hotel/maintenance', data),
+  updateMaintenance: (id, data) => api.put(`/hotel/maintenance/${id}`, data),
+
+  getMetrics: () => api.get('/hotel/metrics')
+};
+
 // ========== MAIN EXPORT ==========
 export const realApi = {
   // Core
@@ -568,6 +599,7 @@ export const realApi = {
 
   // APIs by category
   auth: authAPI,
+  hotel: hotelAPI,
   purchases: purchaseAPI,
   suppliers: supplierAPI,
   products: productAPI,

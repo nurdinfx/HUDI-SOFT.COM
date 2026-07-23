@@ -32,6 +32,14 @@ import QRManagement from './pages/qr-management';
 import Attendance from './pages/attendance';
 import EmployeeAttendance from './pages/employee-attendance';
 
+// Hotel Pages
+import HotelRoute from './components/HotelRoute';
+import HotelDashboard from './pages/hotel-dashboard';
+import HotelRooms from './pages/hotel-rooms';
+import HotelReservations from './pages/hotel-reservations';
+import HotelFrontDesk from './pages/hotel-frontdesk';
+import HotelHousekeeping from './pages/hotel-housekeeping';
+
 import PwaInstallPrompt from './components/PwaInstallPrompt';
 import { Toaster } from 'react-hot-toast';
 
@@ -191,7 +199,35 @@ function App() {
                       } />
                     </Route>
 
+                    {/* Hotel Management Routes */}
+                    <Route path="hotel/dashboard" element={
+                      <HotelRoute>
+                        <HotelDashboard />
+                      </HotelRoute>
+                    } />
+                    <Route path="hotel/rooms" element={
+                      <HotelRoute>
+                        <HotelRooms />
+                      </HotelRoute>
+                    } />
+                    <Route path="hotel/reservations" element={
+                      <HotelRoute>
+                        <HotelReservations />
+                      </HotelRoute>
+                    } />
+                    <Route path="hotel/frontdesk" element={
+                      <HotelRoute>
+                        <HotelFrontDesk />
+                      </HotelRoute>
+                    } />
+                    <Route path="hotel/housekeeping" element={
+                      <HotelRoute>
+                        <HotelHousekeeping />
+                      </HotelRoute>
+                    } />
+
                     <Route path="*" element={<Navigate to="/pos" replace />} />
+
                   </Routes>
                 </LicenseGate>
               } />
