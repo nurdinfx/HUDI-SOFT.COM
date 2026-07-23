@@ -139,7 +139,7 @@ const Orders = () => {
   const [users, setUsers] = useState([]);
   const [tables, setTables] = useState([]);
   const [customers, setCustomers] = useState([]);
-  const [rooms, setRooms] = useState([]);
+  const [rooms, setRooms] = useState(['Room 101', 'Room 102', 'Room 103', 'Room 104', 'Room 105', 'Room 201', 'Room 202', 'VIP Suite']);
 
   useEffect(() => {
     loadOrders();
@@ -163,9 +163,15 @@ const Orders = () => {
         let loadedRooms = [];
         if (hotelRoomsRes?.status === 'fulfilled' && hotelRoomsRes.value?.success) {
           const roomList = realApi.extractData(hotelRoomsRes.value) || [];
-          loadedRooms = roomList.map(r => `Room ${r.roomNumber || r.number || r.room}`);
+          loadedRooms = roomList.map(r => {
+            const num = String(r.number || r.roomNumber || r.room || '');
+            return num.toLowerCase().startsWith('room') ? num : `Room ${num}`;
+          }).filter(r => r !== 'Room ');
         }
-        setRooms(prev => Array.from(new Set([...loadedRooms, ...prev])));
+
+        if (loadedRooms.length > 0) {
+          setRooms(prev => Array.from(new Set([...loadedRooms, ...prev])));
+        }
       } catch (err) {
         console.error('Error loading dropdown data', err);
       }
