@@ -89,12 +89,20 @@ const Settings = () => {
       const response = await realApi.updateSettings(settings);
       if (response.success) {
         setSaved(true);
-        setTimeout(() => setSaved(false), 3000);
+        // Clear caches so other pages fetch latest settings
+        localStorage.removeItem('pos_settings');
+        localStorage.removeItem('pos_activeContext');
         
         const data = realApi.extractData(response);
         if (data) {
           setSettings(prev => ({ ...prev, ...data }));
         }
+        
+        // Trigger a reload to refresh layout/sidebar/POS settings immediately
+        setTimeout(() => {
+          setSaved(false);
+          window.location.reload();
+        }, 1500);
       } else {
         setError(response.message || 'Failed to save settings');
       }

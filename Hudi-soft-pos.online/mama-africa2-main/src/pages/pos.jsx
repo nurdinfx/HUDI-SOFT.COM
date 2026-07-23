@@ -77,11 +77,13 @@ const POS = () => {
 
   const [manualBarcode, setManualBarcode] = useState('');
   const [activeContext, setActiveContext] = useState(() => {
-    const cachedType = getCache('pos_activeContext', '');
-    if (cachedType) return cachedType;
     const settingsCache = getCache('pos_settings', null);
     const type = settingsCache?.businessType || 'both';
-    return type === 'supermarket' ? 'supermarket' : 'restaurant';
+    if (type === 'supermarket') return 'supermarket';
+    if (type === 'restaurant') return 'restaurant';
+    
+    const cachedType = getCache('pos_activeContext', '');
+    return cachedType || 'restaurant';
   });
   const [isCameraScannerOpen, setIsCameraScannerOpen] = useState(false);
 
