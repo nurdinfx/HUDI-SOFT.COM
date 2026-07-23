@@ -3,14 +3,14 @@ import mongoose from 'mongoose';
 const folioChargeSchema = new mongoose.Schema({
   description: { type: String, required: true },
   amount: { type: Number, required: true },
-  type: { type: String, enum: ['room', 'restaurant', 'cafe', 'room_service', 'laundry', 'minibar', 'other'], default: 'other' },
+  type: { type: String, default: 'other' },
   sourceOrder: { type: mongoose.Schema.Types.ObjectId, ref: 'Order' },
   date: { type: Date, default: Date.now }
 });
 
 const folioPaymentSchema = new mongoose.Schema({
   amount: { type: Number, required: true },
-  method: { type: String, enum: ['cash', 'card', 'bank', 'mobile'], default: 'cash' },
+  method: { type: String, default: 'cash' },
   date: { type: Date, default: Date.now }
 });
 

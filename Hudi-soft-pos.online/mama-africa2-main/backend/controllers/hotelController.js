@@ -183,8 +183,15 @@ export const createReservation = async (req, res) => {
     // Update room status
     await Room.findByIdAndUpdate(room, { status: 'reserved' });
 
-    // Record initial deposit in Finance if provided
+    // Record initial deposit in Finance and Folio payments if provided
     if (deposit && Number(deposit) > 0) {
+      reservation.payments.push({
+        amount: Number(deposit),
+        method: req.body.paymentMethod || 'cash',
+        date: new Date()
+      });
+      await reservation.save();
+
       try {
         const financeRecord = new Finance({
           type: 'income',
