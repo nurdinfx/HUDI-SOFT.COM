@@ -4,6 +4,7 @@ import Room from '../models/Room.js';
 import Reservation from '../models/Reservation.js';
 import HousekeepingTask from '../models/HousekeepingTask.js';
 import MaintenanceRequest from '../models/MaintenanceRequest.js';
+import Finance from '../models/Finance.js';
 
 // Helpers
 const getBranchId = (req) => {
@@ -182,6 +183,24 @@ export const createReservation = async (req, res) => {
     // Update room status
     await Room.findByIdAndUpdate(room, { status: 'reserved' });
 
+    // Record initial deposit in Finance if provided
+    if (deposit && Number(deposit) > 0) {
+      try {
+        const financeRecord = new Finance({
+          type: 'income',
+          amount: Number(deposit),
+          description: `Hotel Booking Deposit - Guest: ${guestName}`,
+          category: 'Hotel',
+          paymentMethod: req.body.paymentMethod || 'cash',
+          reference: `RES-${reservation._id}`,
+          branch
+        });
+        await financeRecord.save();
+      } catch (fErr) {
+        console.error('Failed to create finance entry for hotel deposit:', fErr);
+      }
+    }
+
     res.status(201).json({ success: true, data: reservation });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -279,12 +298,30 @@ export const addPayment = async (req, res) => {
     }
 
     reservation.payments.push({
-      amount,
+      amount: Number(amount),
       method: method || 'cash',
       date: new Date()
     });
 
     await reservation.save();
+
+    // Create Finance income record for reports and finance dashboard
+    try {
+      const roomNum = reservation.room?.number || reservation.room || '';
+      const financeRecord = new Finance({
+        type: 'income',
+        amount: Number(amount),
+        description: `Hotel Folio Payment - Guest: ${reservation.guestName}${roomNum ? ` (Room ${roomNum})` : ''}`,
+        category: 'Hotel',
+        paymentMethod: method || 'cash',
+        reference: `FOLIO-${reservation._id}`,
+        branch
+      });
+      await financeRecord.save();
+    } catch (fErr) {
+      console.error('Failed to create finance entry for folio payment:', fErr);
+    }
+
     res.json({ success: true, data: reservation, message: 'Payment recorded in guest folio successfully' });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });

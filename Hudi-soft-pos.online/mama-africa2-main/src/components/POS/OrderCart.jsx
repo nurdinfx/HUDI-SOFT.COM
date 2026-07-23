@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ShoppingCart, Trash2, Plus, Minus, Search, X, AlertCircle, User, CreditCard } from 'lucide-react';
+import { realApi } from '../../api/realApi';
 
 const OrderCart = ({
     cart,
@@ -33,6 +34,7 @@ const OrderCart = ({
     const [remarks, setRemarks] = useState('');
     const [servedBy, setServedBy] = useState('');
     const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split('T')[0]);
+    const [hotelGuests, setHotelGuests] = useState([]);
 
     // Calculate specific totals
     const localCurrencyRate = 12000;
@@ -44,6 +46,23 @@ const OrderCart = ({
             setServedBy(users[0]._id);
         }
     }, [users, servedBy]);
+
+    // Load active checked-in hotel guests if hotel mode active
+    useEffect(() => {
+        const fetchHotelGuests = async () => {
+            if (settings?.enableHotel || settings?.businessType === 'both' || settings?.businessType === 'hotel') {
+                try {
+                    const res = await realApi.hotel.getCheckedInGuests();
+                    if (res.success) {
+                        setHotelGuests(realApi.extractData(res) || []);
+                    }
+                } catch (e) {
+                    console.error('Failed to load hotel guests in POS', e);
+                }
+            }
+        };
+        fetchHotelGuests();
+    }, [settings]);
 
     // Determine if credit is selected with no customer — show warning
     const isCreditMode = paymentMethod === 'credit';
@@ -126,7 +145,7 @@ const OrderCart = ({
             {/* Form Fields Area */}
             <div className="bg-[#f1f3f5] p-2 border-t border-gray-300 space-y-1.5 shrink-0">
                 <div className="grid grid-cols-2 gap-2">
-                    {settings?.enableHotel && (
+                    {(settings?.enableHotel || settings?.businessType === 'both' || settings?.businessType === 'hotel') && (
                         <select
                             className={`w-full h-8 border rounded px-2 text-xs bg-white outline-none focus:border-blue-500 ${
                                 roomNeedsSelection
@@ -138,11 +157,12 @@ const OrderCart = ({
                             value={bookedRoom}
                             onChange={(e) => setBookedRoom(e.target.value)}
                         >
-                            <option value="">{isRoomMode ? '⚠ Select Booked Room' : 'Booked Room (Optional)'}</option>
-                            <option value="Room 101 - John Doe">Room 101 - John Doe</option>
-                            <option value="Room 102 - Alice Smith">Room 102 - Alice Smith</option>
-                            <option value="Room 105 - Bob Johnson">Room 105 - Bob Johnson</option>
-                            <option value="Room 201 - Sarah Lee">Room 201 - Sarah Lee</option>
+                            <option value="">{isRoomMode ? '⚠ Select Guest Room' : 'Hotel Guest / Room (Optional)'}</option>
+                            {hotelGuests.map(g => (
+                                <option key={g._id} value={g._id}>
+                                    Room {g.room?.number || '—'} ({g.guestName})
+                                </option>
+                            ))}
                         </select>
                     )}
 
@@ -205,13 +225,15 @@ const OrderCart = ({
                         onChange={(e) => onPaymentMethodChange(e.target.value)}
                     >
                         <option value="cash">💵 Cash</option>
-                        <option value="card">💳 Card</option>
                         <option value="zaad">📱 ZAAD</option>
                         <option value="sahal">📱 Sahal</option>
                         <option value="edahab">📱 e-Dahab</option>
                         <option value="mycash">📱 MyCash</option>
+                        <option value="card">💳 Card</option>
                         <option value="credit">📋 Customer Credit (Ledger)</option>
-                        {settings?.enableHotel && <option value="room">🏨 Charge to Room</option>}
+                        {(settings?.enableHotel || settings?.businessType === 'both' || settings?.businessType === 'hotel') && (
+                            <option value="room">🏨 Charge to Hotel Room</option>
+                        )}
                     </select>
                 </div>
 

@@ -295,25 +295,45 @@ const HotelReservations = () => {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-3 gap-3">
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-1">Daily Rate ($) *</label>
                   <input
                     type="number"
                     required
+                    step="any"
+                    min="0"
                     value={newRes.dailyRate}
                     onChange={(e) => setNewRes({ ...newRes, dailyRate: e.target.value })}
                     className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-blue-500"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-1">Initial Deposit ($)</label>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">Deposit ($)</label>
                   <input
                     type="number"
+                    step="any"
+                    min="0"
                     value={newRes.deposit}
                     onChange={(e) => setNewRes({ ...newRes, deposit: e.target.value })}
                     className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-blue-500"
                   />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">Payment Method</label>
+                  <select
+                    value={newRes.paymentMethod || 'cash'}
+                    onChange={(e) => setNewRes({ ...newRes, paymentMethod: e.target.value })}
+                    className="w-full border border-gray-300 rounded-lg px-2 py-2 text-sm bg-white focus:ring-blue-500"
+                  >
+                    <option value="cash">💵 Cash</option>
+                    <option value="zaad">📱 ZAAD</option>
+                    <option value="sahal">📱 Sahal</option>
+                    <option value="edahab">📱 eDahab</option>
+                    <option value="mycash">📱 MyCash</option>
+                    <option value="card">💳 Card</option>
+                    <option value="bank">🏦 Bank</option>
+                  </select>
                 </div>
               </div>
 

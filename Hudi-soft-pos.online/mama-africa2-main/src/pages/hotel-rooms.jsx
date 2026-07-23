@@ -273,6 +273,7 @@ const HotelRooms = () => {
                   <input
                     type="number"
                     required
+                    step="any"
                     min="0"
                     placeholder="120"
                     value={newType.baseRate}

@@ -5,6 +5,7 @@ import Table from '../models/Table.js';
 import Customer from '../models/Customer.js';
 import CustomerLedger from '../models/CustomerLedger.js';
 import Branch from '../models/Branch.js';
+import Reservation from '../models/Reservation.js';
 import mongoose from 'mongoose';
 
 // Generate order number
@@ -252,6 +253,43 @@ export const createOrder = async (req, res) => {
     const createdOrder = order[0];
     await session.commitTransaction();
     session.endSession();
+
+    // Auto-post charge to Hotel Guest Folio if room billing is used
+    if (paymentMethod === 'room' || paymentMethod === 'room_charge' || bookedRoom) {
+      try {
+        let resToCharge = null;
+        if (bookedRoom && mongoose.Types.ObjectId.isValid(bookedRoom)) {
+          resToCharge = await Reservation.findOne({ _id: bookedRoom, branch: branchId });
+        }
+        if (!resToCharge && bookedRoom) {
+          // Find guest by name or room number
+          resToCharge = await Reservation.findOne({
+            branch: branchId,
+            status: 'checked_in',
+            $or: [
+              { guestName: { $regex: new RegExp(bookedRoom.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') } }
+            ]
+          });
+        }
+        if (!resToCharge) {
+          // Find any active checked in guest
+          resToCharge = await Reservation.findOne({ branch: branchId, status: 'checked_in' });
+        }
+
+        if (resToCharge) {
+          resToCharge.charges.push({
+            description: `Restaurant Order #${orderNumber}`,
+            amount: finalTotal,
+            type: 'room_service',
+            sourceOrder: createdOrder._id,
+            date: new Date()
+          });
+          await resToCharge.save();
+        }
+      } catch (rErr) {
+        console.error('Error posting room charge to reservation:', rErr);
+      }
+    }
 
     const formattedOrder = formatOrder(createdOrder);
 

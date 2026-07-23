@@ -325,7 +325,8 @@ const HotelFrontDesk = () => {
                 <input
                   type="number"
                   required
-                  min="0"
+                  step="any"
+                  min="0.01"
                   placeholder="15"
                   value={newCharge.amount}
                   onChange={(e) => setNewCharge({ ...newCharge, amount: e.target.value })}
@@ -366,9 +367,12 @@ const HotelFrontDesk = () => {
                   className="w-full border rounded-lg px-3 py-2 text-sm bg-white focus:ring-blue-500"
                 >
                   <option value="cash">💵 Cash Payment</option>
+                  <option value="zaad">📱 ZAAD Service</option>
+                  <option value="sahal">📱 Sahal Service</option>
+                  <option value="edahab">📱 eDahab</option>
+                  <option value="mycash">📱 MyCash</option>
                   <option value="card">💳 Card Terminal</option>
                   <option value="bank">🏦 Bank Transfer</option>
-                  <option value="mobile">📱 Mobile money</option>
                 </select>
               </div>
               <div>
@@ -376,6 +380,7 @@ const HotelFrontDesk = () => {
                 <input
                   type="number"
                   required
+                  step="any"
                   min="0.01"
                   placeholder="50"
                   value={newPayment.amount}
