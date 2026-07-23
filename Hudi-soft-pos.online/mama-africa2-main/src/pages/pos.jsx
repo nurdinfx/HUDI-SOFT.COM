@@ -103,17 +103,50 @@ const POS = () => {
 
   const handleBarcodeSubmit = (code) => {
     if (!code || !code.trim()) return;
-    const cleanCode = code.trim();
+    const cleanCode = code.trim().toLowerCase();
     const foundProduct = products.find(p => 
-      (p.barcode && String(p.barcode).trim() === cleanCode) || 
-      (p.sku && String(p.sku).trim() === cleanCode)
+      (p.barcode && String(p.barcode).trim().toLowerCase() === cleanCode) || 
+      (p.sku && String(p.sku).trim().toLowerCase() === cleanCode) ||
+      (p._id && String(p._id).toLowerCase() === cleanCode) ||
+      (p.name && String(p.name).trim().toLowerCase() === cleanCode)
     );
     if (foundProduct) {
       addToCart(foundProduct);
-      toast.success(`Scanned: ${foundProduct.name}`);
+      toast.success(`Scanned: ${foundProduct.name} ($${(foundProduct.price || 0).toFixed(2)})`);
       setManualBarcode('');
+      setSearchQuery('');
     } else {
-      toast.error(`Barcode "${cleanCode}" not found`);
+      toast.error(`Barcode "${code}" not found`);
+    }
+  };
+
+  const handleSearchKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      if (!searchQuery || !searchQuery.trim()) return;
+      const cleanCode = searchQuery.trim().toLowerCase();
+      
+      const exactProduct = products.find(p => 
+        (p.barcode && String(p.barcode).trim().toLowerCase() === cleanCode) || 
+        (p.sku && String(p.sku).trim().toLowerCase() === cleanCode)
+      );
+
+      if (exactProduct) {
+        addToCart(exactProduct);
+        toast.success(`Scanned: ${exactProduct.name} ($${(exactProduct.price || 0).toFixed(2)})`);
+        setSearchQuery('');
+        e.preventDefault();
+        return;
+      }
+
+      if (filteredProducts.length === 1) {
+        addToCart(filteredProducts[0]);
+        toast.success(`Added: ${filteredProducts[0].name} ($${(filteredProducts[0].price || 0).toFixed(2)})`);
+        setSearchQuery('');
+        e.preventDefault();
+        return;
+      }
+
+      handleBarcodeSubmit(searchQuery);
     }
   };
 
@@ -123,7 +156,10 @@ const POS = () => {
     let lastKeyTime = Date.now();
 
     const handleGlobalKeyDown = (e) => {
-      // Ignore if focus is in an input or textarea
+      // Allow enter on barcode/search input
+      if (e.target.id === 'pos-barcode-search') return;
+
+      // Ignore if typing in text inputs other than search
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
         return;
       }
@@ -138,7 +174,7 @@ const POS = () => {
       lastKeyTime = currentTime;
 
       if (e.key === 'Enter') {
-        if (barcodeBuffer.length >= 3) {
+        if (barcodeBuffer.length >= 2) {
           handleBarcodeSubmit(barcodeBuffer);
           e.preventDefault();
           e.stopPropagation();
@@ -841,17 +877,29 @@ const POS = () => {
         </div>
       </Header>
 
-      {/* POS Search Area (Grey Bar) */}
+      {/* POS Search & Barcode Scanner Area */}
       <div className="bg-[#e9ecef] border-b border-gray-300 px-4 py-2 shrink-0">
-        <div className="relative flex items-center bg-white border border-gray-300 rounded shadow-sm">
+        <div className="relative flex items-center bg-white border border-gray-300 rounded shadow-sm focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-400">
           <Search size={16} className="absolute left-3 text-gray-400" />
           <input
             type="text"
-            placeholder="Search by Name or Barcode"
-            className="w-full pl-10 pr-4 py-2 text-sm outline-none bg-transparent"
+            id="pos-barcode-search"
+            placeholder="🔍 Scan Barcode (USB / Wireless Scanner) or Type Product Name..."
+            className="w-full pl-10 pr-8 py-2 text-sm outline-none bg-transparent font-medium"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
+            onKeyDown={handleSearchKeyDown}
+            autoFocus
           />
+          {searchQuery && (
+            <button 
+              type="button" 
+              onClick={() => setSearchQuery('')}
+              className="absolute right-3 text-gray-400 hover:text-gray-600 font-bold text-xs"
+            >
+              ✕
+            </button>
+          )}
         </div>
       </div>
 

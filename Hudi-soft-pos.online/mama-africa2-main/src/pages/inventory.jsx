@@ -428,7 +428,7 @@ const ProductModal = ({
   onClose, onSave
 }) => {
   const [formData, setFormData] = useState({
-    name: '', description: '', category: '', price: 0, cost: 0,
+    name: '', barcode: '', sku: '', description: '', category: '', price: 0, cost: 0,
     stock: 0, minStock: 10, isAvailable: true, image: ''
   });
   const [uploading, setUploading] = useState(false);
@@ -439,6 +439,8 @@ const ProductModal = ({
     if (product) {
       setFormData({
         name: product.name || '',
+        barcode: product.barcode || '',
+        sku: product.sku || '',
         description: product.description || '',
         category: product.category || '',
         price: product.price || 0,
@@ -607,6 +609,17 @@ const ProductModal = ({
               <div>
                 <label className="text-xs font-semibold text-gray-700 uppercase tracking-wider mb-1 block">Product Name *</label>
                 <input required type="text" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all" placeholder="e.g., Wireless Mouse" disabled={saving} />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs font-semibold text-gray-700 uppercase tracking-wider mb-1 block">Barcode / EAN</label>
+                  <input type="text" value={formData.barcode} onChange={e => setFormData({ ...formData, barcode: e.target.value })} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all" placeholder="Scan or type barcode..." disabled={saving} />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-gray-700 uppercase tracking-wider mb-1 block">SKU Code</label>
+                  <input type="text" value={formData.sku} onChange={e => setFormData({ ...formData, sku: e.target.value })} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all" placeholder="e.g., ITEM-001" disabled={saving} />
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
