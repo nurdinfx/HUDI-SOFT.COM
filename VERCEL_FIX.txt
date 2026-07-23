@@ -1,0 +1,2 @@
+Vercel deployment fixed! Multiple services configured correctly!
+Latest fix: added framework and entrypoint to backend service!

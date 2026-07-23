@@ -1,0 +1,141 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+@layer base {
+  :root {
+    --background: 248 250 252;
+    --foreground: 15 23 42;
+    --card: 255 255 255;
+    --card-foreground: 15 23 42;
+    --border: 226 232 240;
+    --input: 226 232 240;
+    --ring: 37 99 235;
+    --muted: 241 245 249;
+    --muted-foreground: 100 116 139;
+    --accent: 241 245 249;
+    --accent-foreground: 15 23 42;
+    --radius: 12px;
+  }
+
+  .dark {
+    --background: 15 23 42;
+    --foreground: 248 250 252;
+    --card: 30 41 59;
+    --card-foreground: 248 250 252;
+    --border: 51 65 85;
+    --input: 51 65 85;
+    --ring: 59 130 246;
+    --muted: 30 41 59;
+    --muted-foreground: 148 163 184;
+    --accent: 30 41 59;
+    --accent-foreground: 248 250 252;
+  }
+
+  * { @apply border-border; }
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { @apply bg-transparent; }
+  ::-webkit-scrollbar-thumb { @apply bg-slate-300 dark:bg-slate-600 rounded-full; }
+  ::-webkit-scrollbar-thumb:hover { @apply bg-slate-400 dark:bg-slate-500; }
+}
+
+@layer components {
+  /* ── Glassmorphism card ──────────────────────────────────── */
+  .glass-card {
+    @apply bg-white/80 dark:bg-slate-800/80 backdrop-blur-xl border border-white/30 dark:border-slate-700/50 shadow-glass rounded-2xl;
+  }
+
+  .glass-card-dark {
+    @apply bg-slate-900/90 backdrop-blur-xl border border-slate-700/50 shadow-glass-lg rounded-2xl;
+  }
+
+  /* ── KPI card ────────────────────────────────────────────── */
+  .kpi-card {
+    @apply glass-card p-6 hover:shadow-glass-lg transition-all duration-300 hover:-translate-y-0.5;
+  }
+
+  /* ── Gradient backgrounds ───────────────────────────────── */
+  .gradient-primary { background: linear-gradient(135deg, #2563EB 0%, #06B6D4 100%); }
+  .gradient-success { background: linear-gradient(135deg, #22C55E 0%, #16A34A 100%); }
+  .gradient-warning { background: linear-gradient(135deg, #F59E0B 0%, #D97706 100%); }
+  .gradient-danger  { background: linear-gradient(135deg, #EF4444 0%, #DC2626 100%); }
+  .gradient-purple  { background: linear-gradient(135deg, #8B5CF6 0%, #7C3AED 100%); }
+  .gradient-teal    { background: linear-gradient(135deg, #06B6D4 0%, #0891B2 100%); }
+
+  /* ── Sidebar nav link ───────────────────────────────────── */
+  .nav-link {
+    @apply flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium
+           text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800
+           hover:text-slate-900 dark:hover:text-slate-100
+           transition-all duration-200 cursor-pointer;
+  }
+  .nav-link.active {
+    @apply bg-primary/10 text-primary dark:text-primary-400 dark:bg-primary/20
+           font-semibold shadow-sm;
+  }
+
+  /* ── Badge ──────────────────────────────────────────────── */
+  .badge {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold;
+  }
+  .badge-blue   { @apply badge bg-blue-100   text-blue-700   dark:bg-blue-900/40  dark:text-blue-300; }
+  .badge-green  { @apply badge bg-green-100  text-green-700  dark:bg-green-900/40 dark:text-green-300; }
+  .badge-yellow { @apply badge bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-300; }
+  .badge-red    { @apply badge bg-red-100    text-red-700    dark:bg-red-900/40   dark:text-red-300; }
+  .badge-gray   { @apply badge bg-slate-100  text-slate-700  dark:bg-slate-700    dark:text-slate-300; }
+  .badge-teal   { @apply badge bg-teal-100   text-teal-700   dark:bg-teal-900/40  dark:text-teal-300; }
+
+  /* ── Input ──────────────────────────────────────────────── */
+  .dcs-input {
+    @apply w-full px-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700
+           rounded-xl text-sm text-slate-900 dark:text-slate-100
+           placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-primary/50
+           focus:border-primary transition-all duration-200;
+  }
+
+  /* ── Button ─────────────────────────────────────────────── */
+  .btn-primary {
+    @apply inline-flex items-center gap-2 px-5 py-2.5 bg-primary text-white font-semibold
+           text-sm rounded-xl hover:bg-primary-700 active:scale-95 transition-all duration-200
+           shadow-sm hover:shadow-glow-blue disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  .btn-secondary {
+    @apply inline-flex items-center gap-2 px-5 py-2.5 bg-slate-100 dark:bg-slate-800
+           text-slate-700 dark:text-slate-300 font-semibold text-sm rounded-xl
+           hover:bg-slate-200 dark:hover:bg-slate-700 active:scale-95 transition-all duration-200;
+  }
+  .btn-danger {
+    @apply inline-flex items-center gap-2 px-5 py-2.5 bg-red-500 text-white font-semibold
+           text-sm rounded-xl hover:bg-red-600 active:scale-95 transition-all duration-200;
+  }
+  .btn-ghost {
+    @apply inline-flex items-center gap-2 px-4 py-2 text-slate-600 dark:text-slate-400
+           font-medium text-sm rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800
+           active:scale-95 transition-all duration-200;
+  }
+
+  /* ── Page wrapper ───────────────────────────────────────── */
+  .page-wrapper { @apply flex-1 p-6 space-y-6 animate-fade-in; }
+  .page-header  { @apply flex items-center justify-between mb-6; }
+  .page-title   { @apply text-2xl font-bold text-slate-900 dark:text-white; }
+
+  /* ── Modal panel — always visible near top of viewport ── */
+  .modal-panel {
+    position: fixed;
+    top: 5vh;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 100%;
+    z-index: 50;
+    max-height: 90vh;
+    overflow-y: auto;
+    @apply glass-card p-6 shadow-glass-lg;
+  }
+}
