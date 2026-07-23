@@ -56,37 +56,48 @@ const OrderCart = ({
                     realApi.hotel.getRooms()
                 ]);
 
-                let list = [];
+                let optionsList = [];
+
+                // 1. Checked-in guests (e.g. Nuur - Room 101)
                 if (guestRes.status === 'fulfilled' && guestRes.value?.success) {
-                    list = realApi.extractData(guestRes.value) || [];
+                    const checkedIn = realApi.extractData(guestRes.value) || [];
+                    checkedIn.forEach(g => {
+                        const roomNum = g.room?.number || g.roomNumber || g.room || '—';
+                        optionsList.push({
+                            value: `Room ${roomNum} - ${g.guestName}`,
+                            label: `🏨 Room ${roomNum} (${g.guestName})`
+                        });
+                    });
                 }
 
-                let roomOptions = [];
+                // 2. Database rooms from getRooms()
                 if (roomRes.status === 'fulfilled' && roomRes.value?.success) {
                     const roomData = realApi.extractData(roomRes.value) || [];
-                    roomOptions = roomData.map(r => ({
-                        _id: `Room ${r.number}`,
-                        guestName: r.status === 'occupied' ? 'Occupied Guest' : 'Available',
-                        room: { number: r.number }
-                    }));
-                } else if (list.length === 0) {
-                    // Default real hotel room fallback list
-                    roomOptions = ['101', '102', '103', '104', '105', '201', '202'].map(num => ({
-                        _id: `Room ${num}`,
-                        guestName: 'Hotel Guest',
-                        room: { number: num }
-                    }));
+                    roomData.forEach(r => {
+                        const num = String(r.number || r.roomNumber || r.room || '');
+                        if (num) {
+                            const valueStr = `Room ${num}`;
+                            if (!optionsList.some(o => o.value.includes(num))) {
+                                optionsList.push({
+                                    value: valueStr,
+                                    label: `🏨 Room ${num} (${r.status === 'occupied' ? 'Occupied' : 'Available'})`
+                                });
+                            }
+                        }
+                    });
                 }
 
-                // Combine checked-in guests first, then room options
-                const combined = [...list];
-                roomOptions.forEach(ro => {
-                    if (!combined.some(c => c.room?.number === ro.room?.number)) {
-                        combined.push(ro);
-                    }
-                });
+                // 3. Fallback standard room numbers if list is empty
+                if (optionsList.length === 0) {
+                    ['101', '102', '103', '104', '105', '201', '202', '203'].forEach(num => {
+                        optionsList.push({
+                            value: `Room ${num}`,
+                            label: `🏨 Room ${num}`
+                        });
+                    });
+                }
 
-                setHotelGuests(combined);
+                setHotelGuests(optionsList);
             } catch (e) {
                 console.error('Failed to load hotel rooms in POS', e);
             }
@@ -188,9 +199,9 @@ const OrderCart = ({
                             onChange={(e) => setBookedRoom(e.target.value)}
                         >
                             <option value="">{isRoomMode ? '⚠ Select Guest Room' : 'Hotel Guest / Room (Optional)'}</option>
-                            {hotelGuests.map(g => (
-                                <option key={g._id} value={g._id}>
-                                    Room {g.room?.number || '—'} ({g.guestName})
+                            {hotelGuests.map((opt, idx) => (
+                                <option key={idx} value={opt.value}>
+                                    {opt.label}
                                 </option>
                             ))}
                         </select>

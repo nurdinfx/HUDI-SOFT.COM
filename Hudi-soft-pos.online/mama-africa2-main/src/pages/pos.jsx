@@ -807,37 +807,10 @@ const POS = () => {
               </div>
             </button>
 
-            {/* Context Switcher if Both modes are enabled */}
-            {(settings?.businessType === 'both' || !settings?.businessType) ? (
-              <div className="flex bg-[#163a63] p-0.5 rounded border border-[#4a85c5] items-center gap-0.5 shadow-inner">
-                <button
-                  type="button"
-                  onClick={() => setActiveContext('restaurant')}
-                  className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all ${
-                    activeContext === 'restaurant'
-                      ? 'bg-blue-600 text-white shadow-sm'
-                      : 'text-blue-200 hover:text-white'
-                  }`}
-                >
-                  🍽️ Restaurant
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveContext('supermarket')}
-                  className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all ${
-                    activeContext === 'supermarket'
-                      ? 'bg-blue-600 text-white shadow-sm'
-                      : 'text-blue-200 hover:text-white'
-                  }`}
-                >
-                  🛒 Supermarket
-                </button>
-              </div>
-            ) : (
-              <span className="text-white text-[10px] font-bold uppercase tracking-wider bg-blue-900/60 px-2 py-1 rounded border border-[#4a85c5]/30">
-                {settings?.businessType === 'supermarket' ? '🛒 Supermarket Mode' : '🍽️ Restaurant Mode'}
-              </span>
-            )}
+            {/* Mode badge driven strictly by Settings */}
+            <span className="text-white text-[10px] font-bold uppercase tracking-wider bg-blue-900/60 px-2 py-1 rounded border border-[#4a85c5]/30">
+              {settings?.businessType === 'supermarket' ? '🛒 Supermarket Mode' : settings?.businessType === 'both' ? '🏨 Hotel & Restaurant Mode' : '🍽️ Restaurant Mode'}
+            </span>
 
             <div className="flex items-center gap-1">
               <div className="relative group">
