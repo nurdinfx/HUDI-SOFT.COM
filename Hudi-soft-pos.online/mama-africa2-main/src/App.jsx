@@ -192,39 +192,39 @@ function App() {
                         </ProtectedRoute>
                       } />
 
-                      <Route path="admin/licensing" element={
+                       <Route path="admin/licensing" element={
                         <ProtectedRoute requiredRoles={['admin']}>
                           <AdminLicenseDashboard />
                         </ProtectedRoute>
                       } />
-                    </Route>
 
-                    {/* Hotel Management Routes */}
-                    <Route path="hotel/dashboard" element={
-                      <HotelRoute>
-                        <HotelDashboard />
-                      </HotelRoute>
-                    } />
-                    <Route path="hotel/rooms" element={
-                      <HotelRoute>
-                        <HotelRooms />
-                      </HotelRoute>
-                    } />
-                    <Route path="hotel/reservations" element={
-                      <HotelRoute>
-                        <HotelReservations />
-                      </HotelRoute>
-                    } />
-                    <Route path="hotel/frontdesk" element={
-                      <HotelRoute>
-                        <HotelFrontDesk />
-                      </HotelRoute>
-                    } />
-                    <Route path="hotel/housekeeping" element={
-                      <HotelRoute>
-                        <HotelHousekeeping />
-                      </HotelRoute>
-                    } />
+                      {/* ── Hotel Management Routes (inside Layout) ── */}
+                      <Route path="hotel/dashboard" element={
+                        <ProtectedRoute requiredRoles={['admin', 'manager']}>
+                          <HotelDashboard />
+                        </ProtectedRoute>
+                      } />
+                      <Route path="hotel/rooms" element={
+                        <ProtectedRoute requiredRoles={['admin', 'manager']}>
+                          <HotelRooms />
+                        </ProtectedRoute>
+                      } />
+                      <Route path="hotel/reservations" element={
+                        <ProtectedRoute requiredRoles={['admin', 'manager', 'cashier']}>
+                          <HotelReservations />
+                        </ProtectedRoute>
+                      } />
+                      <Route path="hotel/frontdesk" element={
+                        <ProtectedRoute requiredRoles={['admin', 'manager', 'cashier']}>
+                          <HotelFrontDesk />
+                        </ProtectedRoute>
+                      } />
+                      <Route path="hotel/housekeeping" element={
+                        <ProtectedRoute requiredRoles={['admin', 'manager']}>
+                          <HotelHousekeeping />
+                        </ProtectedRoute>
+                      } />
+                    </Route>
 
                     <Route path="*" element={<Navigate to="/pos" replace />} />
 

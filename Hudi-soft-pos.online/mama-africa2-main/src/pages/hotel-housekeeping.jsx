@@ -25,21 +25,30 @@ const HotelHousekeeping = () => {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const taskRes = await realApi.hotel.getHousekeeping();
-      if (taskRes.success) {
-        setTasks(realApi.extractData(taskRes));
+      const [taskRes, maintRes, roomRes] = await Promise.allSettled([
+        realApi.hotel.getHousekeeping(),
+        realApi.hotel.getMaintenance(),
+        realApi.hotel.getRooms()
+      ]);
+
+      if (taskRes.status === 'fulfilled' && taskRes.value?.success) {
+        setTasks(realApi.extractData(taskRes.value));
       }
-      const maintRes = await realApi.hotel.getMaintenance();
-      if (maintRes.success) {
-        setMaintenance(realApi.extractData(maintRes));
+      if (maintRes.status === 'fulfilled' && maintRes.value?.success) {
+        setMaintenance(realApi.extractData(maintRes.value));
       }
-      const roomRes = await realApi.hotel.getRooms();
-      if (roomRes.success) {
-        setRooms(realApi.extractData(roomRes));
+      if (roomRes.status === 'fulfilled' && roomRes.value?.success) {
+        setRooms(realApi.extractData(roomRes.value));
       }
-      const empRes = await realApi.employees.getEmployees();
-      if (empRes.success) {
-        setEmployees(realApi.extractData(empRes));
+
+      // Employees is optional — if it fails we still show the rest
+      try {
+        const empRes = await realApi.employees.getEmployees();
+        if (empRes?.success) {
+          setEmployees(realApi.extractData(empRes));
+        }
+      } catch (_) {
+        // Employees not critical — continue without it
       }
     } catch (error) {
       toast.error('Failed to load housekeeping boards');

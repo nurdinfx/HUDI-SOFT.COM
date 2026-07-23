@@ -31,17 +31,19 @@ const HotelReservations = () => {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const resList = await realApi.hotel.getReservations();
-      if (resList.success) {
-        setReservations(realApi.extractData(resList));
+      const [resList, roomRes, typeRes] = await Promise.allSettled([
+        realApi.hotel.getReservations(),
+        realApi.hotel.getRooms(),
+        realApi.hotel.getRoomTypes()
+      ]);
+      if (resList.status === 'fulfilled' && resList.value?.success) {
+        setReservations(realApi.extractData(resList.value));
       }
-      const roomRes = await realApi.hotel.getRooms();
-      if (roomRes.success) {
-        setRooms(realApi.extractData(roomRes).filter(r => r.status === 'available'));
+      if (roomRes.status === 'fulfilled' && roomRes.value?.success) {
+        setRooms(realApi.extractData(roomRes.value).filter(r => r.status === 'available'));
       }
-      const typeRes = await realApi.hotel.getRoomTypes();
-      if (typeRes.success) {
-        setRoomTypes(realApi.extractData(typeRes));
+      if (typeRes.status === 'fulfilled' && typeRes.value?.success) {
+        setRoomTypes(realApi.extractData(typeRes.value));
       }
     } catch (error) {
       toast.error('Failed to load reservations');
