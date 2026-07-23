@@ -249,13 +249,13 @@ const HotelFrontDesk = () => {
                     {selectedRes.deposit > 0 && (
                       <div className="flex justify-between text-emerald-600 font-medium">
                         <span>Initial Booking Deposit</span>
-                        <span>-${selectedRes.deposit}</span>
+                        <span>${selectedRes.deposit}</span>
                       </div>
                     )}
                     {selectedRes.payments?.map((p, i) => (
                       <div key={i} className="flex justify-between text-emerald-600 font-medium">
                         <span>Folio Payment ({p.method})</span>
-                        <span>-${p.amount}</span>
+                        <span>${p.amount}</span>
                       </div>
                     ))}
                     {selectedRes.deposit === 0 && selectedRes.payments?.length === 0 && (
