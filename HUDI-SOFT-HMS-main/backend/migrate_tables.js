@@ -19,12 +19,14 @@ module.exports = async function migrateTables() {
         position TEXT,
         department TEXT,
         base_salary NUMERIC DEFAULT 0,
+        outstanding_balance NUMERIC DEFAULT 0,
         payment_method TEXT DEFAULT 'cash',
         status TEXT DEFAULT 'active',
         tenant_id TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
+    await db.query(`ALTER TABLE employees ADD COLUMN IF NOT EXISTS outstanding_balance NUMERIC DEFAULT 0;`);
 
     // 2. Employee Expenses
     await db.query(`
@@ -81,12 +83,17 @@ module.exports = async function migrateTables() {
         address TEXT,
         patient_id UUID,
         credit_limit NUMERIC DEFAULT 1000,
-        total_debt NUMERIC DEFAULT 0,
+        outstanding_balance NUMERIC DEFAULT 0,
+        total_credit_taken NUMERIC DEFAULT 0,
+        total_payments_made NUMERIC DEFAULT 0,
         status TEXT DEFAULT 'active',
         tenant_id TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
+    await db.query(`ALTER TABLE credit_customers ADD COLUMN IF NOT EXISTS outstanding_balance NUMERIC DEFAULT 0;`);
+    await db.query(`ALTER TABLE credit_customers ADD COLUMN IF NOT EXISTS total_credit_taken NUMERIC DEFAULT 0;`);
+    await db.query(`ALTER TABLE credit_customers ADD COLUMN IF NOT EXISTS total_payments_made NUMERIC DEFAULT 0;`);
 
     // 6. Credit Ledger
     await db.query(`
@@ -130,7 +137,7 @@ module.exports = async function migrateTables() {
       );
     `);
 
-    console.log('✅ [Migration] All HR and Credit tables verified/created successfully.');
+    console.log('✅ [Migration] All HR & Credit tables & columns (outstanding_balance, etc.) verified/created successfully.');
   } catch (err) {
     console.error('❌ [Migration Error]:', err.message);
   }
