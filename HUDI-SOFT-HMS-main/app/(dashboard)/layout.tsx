@@ -1,6 +1,7 @@
 "use client"
 
-import { useEffect } from "react"
+import React, { useEffect } from "react"
+import type { ReactNode } from "react"
 import { useRouter, usePathname } from "next/navigation"
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar"
 import { AppSidebar } from "@/components/app-sidebar"
@@ -14,7 +15,7 @@ import { LicenseBanner } from "@/components/license-banner"
 export default function DashboardLayout({
   children,
 }: {
-  children: React.ReactNode
+  children: ReactNode
 }) {
   const router = useRouter()
   const pathname = usePathname()
