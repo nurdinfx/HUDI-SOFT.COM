@@ -1,17 +1,19 @@
 -- HMS PostgreSQL Schema for Supabase
 
--- 1. Users
+-- 1. Users (multi-tenant: each user is scoped to a tenant_id)
 CREATE TABLE IF NOT EXISTS users (
     id UUID PRIMARY KEY,
     name TEXT NOT NULL,
-    email TEXT UNIQUE NOT NULL,
+    email TEXT NOT NULL,
     password_hash TEXT NOT NULL,
     role TEXT NOT NULL,
     phone TEXT,
     department TEXT,
     avatar TEXT,
     is_active INTEGER DEFAULT 1,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    tenant_id TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(email, tenant_id)
 );
 
 -- 2. Patients
@@ -380,11 +382,8 @@ CREATE TABLE IF NOT EXISTS insurance_claims (
     policy_id UUID
 );
 
--- Initial Admin Seed
--- Password: admin123
-INSERT INTO users (id, name, email, password_hash, role, is_active, created_at)
-VALUES ('00000000-0000-0000-0000-000000000000', 'Admin', 'admin@hospital.com', '$2a$10$N/9hhUBRWNSwgJDpkCwIH.Saq56rylQ2glQRnmJde5RYLZPG7/GqW', 'admin', 1, CURRENT_TIMESTAMP)
-ON CONFLICT (email) DO UPDATE SET password_hash = EXCLUDED.password_hash;
+-- NOTE: Admin users are created per-hospital during license activation (POST /api/license/activate)
+-- No global admin seed — each hospital gets their own scoped admin user with their own tenant_id
 
 INSERT INTO hospital_settings (id, name, tagline, currency, tax_rate)
 VALUES (1, 'Hudi Hospital', 'Care with Excellence', 'USD', 10)
