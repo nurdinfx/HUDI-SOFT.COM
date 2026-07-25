@@ -17,17 +17,24 @@ const fmt = (a) => ({
 
 router.get('/', async (req, res) => {
     const { search, status, date, doctorId, patientId } = req.query;
-    let q = 'SELECT * FROM appointments WHERE 1=1'; const p = [];
-    
-    if (doctorId) { q += ' AND doctor_id = ?'; p.push(doctorId); }
-    if (search) { q += ` AND (patient_name LIKE ? OR doctor_name LIKE ? OR appointment_id LIKE ?)`; const s = `%${search}%`; p.push(s, s, s); }
-    if (status) { q += ' AND status = ?'; p.push(status); }
-    if (date) { q += ' AND date = ?'; p.push(date); }
-    if (patientId) { q += ' AND patient_id = ?'; p.push(patientId); }
+    const tenantId = req.tenantId;
+    let q = 'SELECT * FROM appointments WHERE tenant_id = $1';
+    const p = [tenantId];
+    let idx = 2;
+
+    if (doctorId) { q += ` AND doctor_id = $${idx++}`; p.push(doctorId); }
+    if (search) {
+        const s = `%${search}%`;
+        q += ` AND (patient_name ILIKE $${idx} OR doctor_name ILIKE $${idx+1} OR appointment_id ILIKE $${idx+2})`;
+        idx += 3; p.push(s, s, s);
+    }
+    if (status) { q += ` AND status = $${idx++}`; p.push(status); }
+    if (date) { q += ` AND date = $${idx++}`; p.push(date); }
+    if (patientId) { q += ` AND patient_id = $${idx++}`; p.push(patientId); }
     q += ' ORDER BY date DESC, time DESC';
     try {
-        const rows = await db.prepare(q).all(...p);
-        res.json(rows.map(fmt));
+        const result = await db.query(q, p);
+        res.json(result.rows.map(fmt));
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -35,7 +42,8 @@ router.get('/', async (req, res) => {
 
 router.get('/:id', async (req, res) => {
     try {
-        const row = await db.prepare('SELECT * FROM appointments WHERE id = ?').get(req.params.id);
+        const result = await db.query('SELECT * FROM appointments WHERE id = $1 AND tenant_id = $2', [req.params.id, req.tenantId]);
+        const row = result.rows[0];
         if (!row) return res.status(404).json({ error: 'Appointment not found' });
         res.json(fmt(row));
     } catch (err) {
@@ -45,72 +53,83 @@ router.get('/:id', async (req, res) => {
 
 router.post('/', async (req, res) => {
     const { patientId, doctorId, date, time, type, notes } = req.body;
+    const tenantId = req.tenantId;
     if (!patientId || !doctorId || !date || !time) return res.status(400).json({ error: 'patientId, doctorId, date, time required' });
     try {
-        const patient = await db.prepare('SELECT * FROM patients WHERE id = ?').get(patientId);
-        const doctor = await db.prepare('SELECT * FROM doctors WHERE id = ?').get(doctorId);
+        const patientRes = await db.query('SELECT * FROM patients WHERE id = $1 AND tenant_id = $2', [patientId, tenantId]);
+        const doctorRes = await db.query('SELECT * FROM doctors WHERE id = $1 AND tenant_id = $2', [doctorId, tenantId]);
+        const patient = patientRes.rows[0];
+        const doctor = doctorRes.rows[0];
         if (!patient) return res.status(404).json({ error: 'Patient not found' });
         if (!doctor) return res.status(404).json({ error: 'Doctor not found' });
-        const maxIdData = await db.prepare('SELECT appointment_id FROM appointments ORDER BY appointment_id DESC LIMIT 1').get();
+
+        const maxIdRes = await db.query('SELECT appointment_id FROM appointments WHERE tenant_id = $1 ORDER BY appointment_id DESC LIMIT 1', [tenantId]);
         let nextNumber = 1;
-        if (maxIdData && maxIdData.appointment_id) {
-            const lastNumber = parseInt(maxIdData.appointment_id.split('-')[1]);
+        if (maxIdRes.rows[0]?.appointment_id) {
+            const lastNumber = parseInt(maxIdRes.rows[0].appointment_id.split('-')[1]);
             if (!isNaN(lastNumber)) nextNumber = lastNumber + 1;
         }
         const apptId = `APT-${String(nextNumber).padStart(4, '0')}`;
-
         const id = uuidv4();
-        await db.prepare(`INSERT INTO appointments (id, appointment_id, patient_id, patient_name, doctor_id, doctor_name, department, date, time, type, status, notes, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-            .run(id, apptId, patientId, `${patient.first_name} ${patient.last_name}`, doctorId, doctor.name, doctor.department, date, time, type || 'consultation', 'scheduled', notes || null, new Date().toISOString());
+
+        await db.query(
+            `INSERT INTO appointments (id, appointment_id, patient_id, patient_name, doctor_id, doctor_name, department, date, time, type, status, notes, created_at, tenant_id)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
+            [id, apptId, patientId, `${patient.first_name} ${patient.last_name}`, doctorId, doctor.name, doctor.department, date, time, type || 'consultation', 'scheduled', notes || null, new Date().toISOString(), tenantId]
+        );
         logAction(req.user.id, req.user.name, req.user.role, 'CREATE', 'Appointments', `Appointment created: ${apptId}`, req.ip);
-        
-        // Trigger social push notification
+
         sendPushNotification({
             title: '📅 New Appointment Booked',
             message: `${patient.first_name} ${patient.last_name} has a new appointment with Dr. ${doctor.name} at ${time}.`,
             url: `/appointments?id=${id}`
         });
 
-        const row = await db.prepare('SELECT * FROM appointments WHERE id = ?').get(id);
-        res.status(201).json(fmt(row));
+        const row = await db.query('SELECT * FROM appointments WHERE id = $1', [id]);
+        res.status(201).json(fmt(row.rows[0]));
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
 });
 
 router.put('/:id', async (req, res) => {
+    const tenantId = req.tenantId;
     try {
-        const row = await db.prepare('SELECT * FROM appointments WHERE id = ?').get(req.params.id);
+        const rowRes = await db.query('SELECT * FROM appointments WHERE id = $1 AND tenant_id = $2', [req.params.id, tenantId]);
+        const row = rowRes.rows[0];
         if (!row) return res.status(404).json({ error: 'Appointment not found' });
         const { date, time, type, status, notes } = req.body;
-        await db.prepare('UPDATE appointments SET date=?, time=?, type=?, status=?, notes=? WHERE id=?')
-            .run(date || row.date, time || row.time, type || row.type, status || row.status, notes ?? row.notes, req.params.id);
+        await db.query('UPDATE appointments SET date=$1, time=$2, type=$3, status=$4, notes=$5 WHERE id=$6 AND tenant_id=$7',
+            [date || row.date, time || row.time, type || row.type, status || row.status, notes ?? row.notes, req.params.id, tenantId]);
         logAction(req.user.id, req.user.name, req.user.role, 'UPDATE', 'Appointments', `Appointment ${row.appointment_id} updated`, req.ip);
-        const updatedRow = await db.prepare('SELECT * FROM appointments WHERE id = ?').get(req.params.id);
-        res.json(fmt(updatedRow));
+        const updatedRow = await db.query('SELECT * FROM appointments WHERE id = $1', [req.params.id]);
+        res.json(fmt(updatedRow.rows[0]));
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
 });
 
 router.put('/:id/view', async (req, res) => {
+    const tenantId = req.tenantId;
     try {
-        const row = await db.prepare('SELECT * FROM appointments WHERE id = ?').get(req.params.id);
+        const rowRes = await db.query('SELECT * FROM appointments WHERE id = $1 AND tenant_id = $2', [req.params.id, tenantId]);
+        const row = rowRes.rows[0];
         if (!row) return res.status(404).json({ error: 'Appointment not found' });
-        await db.prepare('UPDATE appointments SET is_viewed_by_doctor = 1 WHERE id = ?').run(req.params.id);
-        const updatedRow = await db.prepare('SELECT * FROM appointments WHERE id = ?').get(req.params.id);
-        res.json(fmt(updatedRow));
+        await db.query('UPDATE appointments SET is_viewed_by_doctor = true WHERE id = $1 AND tenant_id = $2', [req.params.id, tenantId]);
+        const updatedRow = await db.query('SELECT * FROM appointments WHERE id = $1', [req.params.id]);
+        res.json(fmt(updatedRow.rows[0]));
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
 });
 
 router.delete('/:id', async (req, res) => {
+    const tenantId = req.tenantId;
     try {
-        const row = await db.prepare('SELECT * FROM appointments WHERE id = ?').get(req.params.id);
+        const rowRes = await db.query('SELECT * FROM appointments WHERE id = $1 AND tenant_id = $2', [req.params.id, tenantId]);
+        const row = rowRes.rows[0];
         if (!row) return res.status(404).json({ error: 'Not found' });
-        await db.prepare('DELETE FROM appointments WHERE id = ?').run(req.params.id);
+        await db.query('DELETE FROM appointments WHERE id = $1 AND tenant_id = $2', [req.params.id, tenantId]);
         logAction(req.user.id, req.user.name, req.user.role, 'DELETE', 'Appointments', `Appointment ${row.appointment_id} deleted`, req.ip);
         res.json({ message: 'Deleted' });
     } catch (err) {

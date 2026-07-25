@@ -9,6 +9,9 @@ require('dotenv').config();
 const router = express.Router();
 
 // POST /api/auth/login
+// Login is scoped by license key header (X-License-Key) OR defaults to LIMIT 1
+// for single-instance deploys. In a multi-tenant cloud deploy each hospital
+// sends its license key in the header so we can find the right tenant.
 router.post('/login', async (req, res) => {
     const { email, password } = req.body;
     if (!email || !password) {
@@ -16,11 +19,25 @@ router.post('/login', async (req, res) => {
     }
 
     try {
-        // Get tenant_id for this installation
-        const licenseResult = await db.query(
-            `SELECT tenant_id, status, hospital_name FROM license_info LIMIT 1`
-        );
-        const license = licenseResult.rows[0];
+        // Try to scope tenant by license key header first (multi-tenant cloud)
+        // Fallback: single active/demo license on this instance
+        const licenseKey = req.headers['x-license-key'];
+        let licenseResult;
+        if (licenseKey) {
+            licenseResult = await db.query(
+                `SELECT tenant_id, status, hospital_name FROM license_info WHERE license_key = $1 LIMIT 1`,
+                [licenseKey.trim().toUpperCase()]
+            );
+        }
+        if (!licenseResult || licenseResult.rows.length === 0) {
+            licenseResult = await db.query(
+                `SELECT tenant_id, status, hospital_name FROM license_info WHERE status IN ('active', 'demo') LIMIT 1`
+            );
+        }
+        if (!licenseResult || licenseResult.rows.length === 0) {
+            licenseResult = await db.query(`SELECT tenant_id, status, hospital_name FROM license_info LIMIT 1`);
+        }
+        const license = licenseResult?.rows[0];
 
         // Block login if license expired
         if (license && license.status === 'expired') {
@@ -34,7 +51,7 @@ router.post('/login', async (req, res) => {
 
         // Find user scoped to this tenant
         const userResult = await db.query(
-            `SELECT * FROM users WHERE email = $1 AND is_active = 1 AND (tenant_id = $2 OR tenant_id IS NULL)`,
+            `SELECT * FROM users WHERE email = $1 AND is_active = 1 AND tenant_id = $2`,
             [email.toLowerCase().trim(), tenantId]
         );
         const user = userResult.rows[0];
@@ -66,7 +83,7 @@ router.post('/login', async (req, res) => {
                 role: user.role,
                 department: user.department,
                 phone: user.phone,
-                isActive: user.is_active === 1,
+                isActive: user.is_active === 1 || user.is_active === true,
                 tenantId,
                 hospitalName: license?.hospital_name || 'Hospital',
             },
@@ -96,13 +113,13 @@ router.get('/me', async (req, res) => {
         const tenantId = decoded.tenantId;
 
         const userResult = await db.query(
-            `SELECT id, name, email, role, department, phone, is_active FROM users WHERE id = $1 AND (tenant_id = $2 OR tenant_id IS NULL)`,
+            `SELECT id, name, email, role, department, phone, is_active FROM users WHERE id = $1 AND tenant_id = $2`,
             [decoded.id, tenantId]
         );
         const user = userResult.rows[0];
         if (!user) return res.status(404).json({ error: 'User not found' });
 
-        res.json({ ...user, isActive: user.is_active === 1, tenantId });
+        res.json({ ...user, isActive: user.is_active === 1 || user.is_active === true, tenantId });
     } catch (e) {
         res.status(401).json({ error: 'Invalid token' });
     }

@@ -2,39 +2,15 @@
  * middleware/auth.js
  * Authentication + multi-tenant middleware.
  * Injects req.user and req.tenantId into every authenticated request.
+ *
+ * MULTI-TENANCY: tenantId is read ONLY from the JWT token (set at login).
+ * Each hospital has a unique tenant_id embedded in their JWT at login.
+ * We do NOT use a global cache — that would mix data across hospitals.
  */
 const jwt = require('jsonwebtoken');
 const db = require('../database');
 const { v4: uuidv4 } = require('uuid');
 require('dotenv').config();
-
-// ─── Cache tenant_id in memory to avoid DB hit on every request ──
-let _cachedTenantId = null;
-
-async function getTenantId() {
-  if (_cachedTenantId) return _cachedTenantId;
-  try {
-    const result = await db.query('SELECT tenant_id FROM license_info WHERE status IN ($1, $2) LIMIT 1', ['active', 'demo']);
-    if (result.rows[0]?.tenant_id) {
-      _cachedTenantId = result.rows[0].tenant_id;
-      return _cachedTenantId;
-    }
-    // Fallback: use ANY tenant_id from license_info
-    const fallback = await db.query('SELECT tenant_id FROM license_info LIMIT 1');
-    if (fallback.rows[0]?.tenant_id) {
-      _cachedTenantId = fallback.rows[0].tenant_id;
-      return _cachedTenantId;
-    }
-  } catch (e) {
-    console.warn('⚠️  Could not fetch tenant_id:', e.message);
-  }
-  return null;
-}
-
-// Expose a way to clear cache when license is activated
-function clearTenantCache() {
-  _cachedTenantId = null;
-}
 
 const authenticate = async (req, res, next) => {
   const authHeader = req.headers['authorization'];
@@ -47,20 +23,28 @@ const authenticate = async (req, res, next) => {
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-    // Get tenant_id: prefer from JWT (set at login), fallback to DB lookup
-    const tenantId = decoded.tenantId || await getTenantId();
+    // tenantId MUST come from the JWT — this is what isolates hospital data
+    const tenantId = decoded.tenantId;
+
+    if (!tenantId) {
+      console.warn('⚠️  Auth: No tenantId in JWT token — user must re-login after license activation');
+      return res.status(401).json({
+        error: 'Session expired: your account needs re-login after license activation',
+        code: 'TENANT_MISSING'
+      });
+    }
 
     // Fetch user scoped to the tenant
     const user = await db.query(
       `SELECT id, name, email, role, department
        FROM users
-       WHERE id = $1 AND is_active = 1 AND (tenant_id = $2 OR tenant_id IS NULL)`,
+       WHERE id = $1 AND is_active = 1 AND tenant_id = $2`,
       [decoded.id, tenantId]
     );
 
     const foundUser = user.rows[0];
     if (!foundUser) {
-      console.warn(`🔍 Auth: User not found or inactive for ID: ${decoded.id}`);
+      console.warn(`🔍 Auth: User not found or inactive for ID: ${decoded.id}, tenant: ${tenantId}`);
       return res.status(401).json({ error: 'User not found or inactive' });
     }
 
@@ -85,14 +69,31 @@ const isValidUUID = (str) => typeof str === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4
 const logAction = async (userId, userName, userRole, action, module, details, ip = '127.0.0.1') => {
   try {
     const validUserId = isValidUUID(userId) ? userId : null;
-    const tenantId = await getTenantId();
-    await db.prepare(`INSERT INTO audit_logs (id, user_id, user_name, user_role, action, module, details, timestamp, ip_address, tenant_id)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-      .run(uuidv4(), validUserId, userName, userRole, action, module, details, new Date().toISOString(), ip, tenantId);
+    await db.query(
+      `INSERT INTO audit_logs (id, user_id, user_name, user_role, action, module, details, timestamp, ip_address)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+      [uuidv4(), validUserId, userName, userRole, action, module, details, new Date().toISOString(), ip]
+    );
   } catch (e) {
     console.error('Audit Log Silent Fail:', e.message);
   }
 };
+
+// Helper for backward compat — reads tenant from DB license table for non-JWT contexts (e.g. license routes)
+async function getTenantId() {
+  try {
+    const result = await db.query('SELECT tenant_id FROM license_info WHERE status IN ($1, $2) LIMIT 1', ['active', 'demo']);
+    if (result.rows[0]?.tenant_id) return result.rows[0].tenant_id;
+    const fallback = await db.query('SELECT tenant_id FROM license_info LIMIT 1');
+    return fallback.rows[0]?.tenant_id || null;
+  } catch (e) {
+    console.warn('⚠️  Could not fetch tenant_id:', e.message);
+    return null;
+  }
+}
+
+// No-op for backward compat
+function clearTenantCache() {}
 
 const authorize = (allowedRoles = []) => {
   return (req, res, next) => {
