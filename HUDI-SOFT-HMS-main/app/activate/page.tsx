@@ -1,7 +1,7 @@
 "use client"
 
-import React, { useState, useEffect } from "react"
-import { useRouter } from "next/navigation"
+import React, { useState, useEffect, Suspense } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -9,15 +9,23 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { toast } from "sonner"
 import { ShieldCheck, KeyRound, Building2, Loader2, Clock, CheckCircle2, AlertTriangle, ArrowRight } from "lucide-react"
 
-export default function ActivationPage() {
+function ActivationContent() {
   const router = useRouter()
-  const [licenseKey, setLicenseKey] = useState("")
+  const searchParams = useSearchParams()
+  const keyParam = searchParams ? searchParams.get("key") : null
+  const [licenseKey, setLicenseKey] = useState(keyParam || "")
   const [hospitalName, setHospitalName] = useState("")
   const [customerName, setCustomerName] = useState("")
   const [customerEmail, setCustomerEmail] = useState("")
   const [loading, setLoading] = useState(false)
   const [checkingStatus, setCheckingStatus] = useState(true)
   const [licenseInfo, setLicenseInfo] = useState<any>(null)
+
+  useEffect(() => {
+    if (keyParam) {
+      setLicenseKey(keyParam)
+    }
+  }, [keyParam])
 
   useEffect(() => {
     fetch("/api/license/status")
@@ -177,7 +185,7 @@ export default function ActivationPage() {
                     type="text"
                     placeholder="e.g. City General Hospital"
                     value={hospitalName}
-                    onChange={(e) => setHospitalName(e.target.value)}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setHospitalName(e.target.value)}
                     className="pl-9 bg-slate-950/60 border-slate-800 text-white placeholder:text-slate-600 focus-visible:ring-teal-500"
                     required
                   />
@@ -190,7 +198,7 @@ export default function ActivationPage() {
                   type="text"
                   placeholder="HUDI-XXXX-XXXX-XXXX"
                   value={licenseKey}
-                  onChange={(e) => setLicenseKey(e.target.value)}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setLicenseKey(e.target.value)}
                   className="bg-slate-950/60 border-slate-800 text-white font-mono text-sm tracking-wider uppercase placeholder:text-slate-600 focus-visible:ring-teal-500"
                   required
                 />
@@ -203,7 +211,7 @@ export default function ActivationPage() {
                     type="text"
                     placeholder="John Doe"
                     value={customerName}
-                    onChange={(e) => setCustomerName(e.target.value)}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCustomerName(e.target.value)}
                     className="bg-slate-950/60 border-slate-800 text-white placeholder:text-slate-600 text-xs focus-visible:ring-teal-500"
                   />
                 </div>
@@ -213,7 +221,7 @@ export default function ActivationPage() {
                     type="email"
                     placeholder="admin@hospital.com"
                     value={customerEmail}
-                    onChange={(e) => setCustomerEmail(e.target.value)}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCustomerEmail(e.target.value)}
                     className="bg-slate-950/60 border-slate-800 text-white placeholder:text-slate-600 text-xs focus-visible:ring-teal-500"
                   />
                 </div>
@@ -251,5 +259,17 @@ export default function ActivationPage() {
         </p>
       </div>
     </div>
+  )
+}
+
+export default function ActivationPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-slate-950 text-white">
+        <Loader2 className="size-8 animate-spin text-teal-400" />
+      </div>
+    }>
+      <ActivationContent />
+    </Suspense>
   )
 }

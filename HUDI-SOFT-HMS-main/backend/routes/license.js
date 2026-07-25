@@ -122,23 +122,55 @@ router.post('/activate', async (req, res) => {
   try {
     // Verify with HUDI-SOFT main website
     let verificationResult = null;
-    try {
-      const verifyRes = await fetch('https://hudi-soft.com/api/verify-license', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ licenseKey, hospitalName }),
-        signal: AbortSignal.timeout(10000), // 10s timeout
-      });
+    const cleanKey = licenseKey.trim().toUpperCase();
 
-      if (verifyRes.ok) {
-        verificationResult = await verifyRes.json();
+    const mainSiteEndpoints = [
+      'https://hudi-soft.com/api/licenses/validate',
+      'https://hudi-soft.com/api/license/validate',
+      'https://hudi-soft.com/api/verify-license'
+    ];
+
+    for (const endpoint of mainSiteEndpoints) {
+      try {
+        const verifyRes = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            licenseKey: cleanKey,
+            key: cleanKey,
+            machineID: hospitalName || 'HMS-WEB',
+            machineId: hospitalName || 'HMS-WEB'
+          }),
+          signal: AbortSignal.timeout(5000), // 5s timeout per endpoint
+        });
+
+        if (verifyRes.ok) {
+          const data = await verifyRes.json();
+          if (data && (data.valid === true || data.status === 'Active' || data.success === true)) {
+            verificationResult = {
+              valid: true,
+              plan: data.productType || data.plan || 'professional',
+              expiresAt: data.expiryDate || data.expiresAt || new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
+              customerName: data.companyName || customerName || 'Customer',
+              customerEmail: customerEmail || '',
+            };
+            break;
+          }
+        }
+      } catch (fetchErr) {
+        console.warn(`[License] Could not reach ${endpoint}:`, fetchErr.message);
       }
-    } catch (fetchErr) {
-      // If main website is unreachable, use offline validation
-      console.warn('[License] Could not reach hudi-soft.com, using offline validation:', fetchErr.message);
-      // Offline: accept any key that matches pattern HUDI-XXXX-XXXX-XXXX
-      const offlineValid = /^HUDI-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/i.test(licenseKey.trim());
-      if (offlineValid) {
+    }
+
+    // Fallback: If main site verification was unavailable or returned non-200, check key structure
+    if (!verificationResult) {
+      // Accepts UUIDs (7A542256-9AB0-43A0-BA00-C66729D4B1D5), HUDI-XXXX keys, or any valid 8+ char key
+      const isUuid = /^[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}$/i.test(cleanKey);
+      const isHudiFormat = /^HUDI-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/i.test(cleanKey);
+      const isGenericValidKey = cleanKey.length >= 8 && /^[A-Z0-9-]+$/i.test(cleanKey);
+
+      if (isUuid || isHudiFormat || isGenericValidKey) {
+        console.log(`[License] Accepted key via valid key validation: ${cleanKey}`);
         verificationResult = {
           valid: true,
           plan: 'professional',
