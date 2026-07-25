@@ -121,11 +121,11 @@ export function AppSidebar() {
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" asChild className="mb-2 h-auto py-2 hover:bg-transparent">
               <Link href="/dashboard" onClick={() => isMobile && setOpenMobile(false)} className="justify-center">
-                <div className="flex items-center justify-center w-full">
+                <div className="flex items-center justify-center w-full py-1">
                   <img
                     src="/logo.png"
                     alt="HUDI SOFT Logo"
-                    className="h-16 w-auto object-contain transition-transform hover:scale-105"
+                    className="h-16 w-auto max-w-[160px] object-contain drop-shadow-sm transition-transform hover:scale-105"
                   />
                 </div>
               </Link>
