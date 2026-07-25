@@ -5,9 +5,10 @@ import {
     Search, Plus, Filter, Download, MoreVertical, 
     UserPlus, CreditCard, History, TrendingUp, AlertCircle,
     CheckCircle2, Clock, Landmark, FileText, ArrowUpRight, ArrowDownLeft,
-    Edit, Trash2
+    Edit, Trash2, Smartphone, Banknote, Building2
 } from "lucide-react"
 import { format } from "date-fns"
+import { PAYMENT_METHODS } from "@/lib/payment-methods"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
@@ -57,13 +58,28 @@ export function CreditManagementContent() {
     const [repayment, setRepayment] = useState({
         amount: "",
         paymentMethod: "cash",
-        referenceNotes: ""
+        referenceNotes: "",
+        discountAmount: ""
     })
 
     // Transaction Payment Dialog
     const [showTxnPayment, setShowTxnPayment] = useState(false)
     const [selectedTxn, setSelectedTxn] = useState<any>(null)
     const [txnPaymentAmount, setTxnPaymentAmount] = useState("")
+    const [txnDiscountAmount, setTxnDiscountAmount] = useState("")
+    const [txnPaymentMethod, setTxnPaymentMethod] = useState("cash")
+
+    // Add Credit Dialog
+    const [showAddCredit, setShowAddCredit] = useState(false)
+    const [newCredit, setNewCredit] = useState({
+        amount: "",
+        notes: ""
+    })
+
+    // History Dialog
+    const [showHistory, setShowHistory] = useState(false)
+    const [historyLoading, setHistoryLoading] = useState(false)
+    const [historyData, setHistoryData] = useState<any>(null)
 
     useEffect(() => {
         loadData()
@@ -148,36 +164,99 @@ export function CreditManagementContent() {
     }
 
     const handleRecordRepayment = async () => {
-        if (!repayment.amount || parseFloat(repayment.amount) <= 0) return toast.error("Invalid amount")
+        const amount = parseFloat(repayment.amount) || 0
+        const discountAmount = parseFloat(repayment.discountAmount) || 0
+        const outstanding = parseFloat(selectedCustomer.outstanding_balance)
+
+        if (amount < 0 || discountAmount < 0) {
+            return toast.error("Amounts cannot be negative")
+        }
+        if (amount === 0 && discountAmount === 0) {
+            return toast.error("Please enter a payment or discount amount")
+        }
+        if (amount + discountAmount > outstanding) {
+            return toast.error("Total payment and discount cannot exceed the outstanding balance")
+        }
+        if (amount > 0 && !repayment.paymentMethod) {
+            return toast.error("Please select a payment method")
+        }
+
         try {
             await creditApi.recordPayment({
                 customerId: selectedCustomer.id,
-                amount: parseFloat(repayment.amount),
+                amount,
                 paymentMethod: repayment.paymentMethod,
-                referenceNotes: repayment.referenceNotes
+                referenceNotes: repayment.referenceNotes,
+                discountAmount
             })
             toast.success("Repayment recorded")
             setShowRepayment(false)
             loadData()
-        } catch (err) {
-            toast.error("Failed to record repayment")
+        } catch (err: any) {
+            toast.error(err.message || "Failed to record repayment")
+        }
+    }
+
+    const handleRecordCredit = async () => {
+        if (!newCredit.amount || parseFloat(newCredit.amount) <= 0) return toast.error("Invalid amount")
+        try {
+            await creditApi.addCredit({
+                customerId: selectedCustomer.id,
+                amount: parseFloat(newCredit.amount),
+                notes: newCredit.notes
+            })
+            toast.success("Credit balance added successfully")
+            setShowAddCredit(false)
+            loadData()
+        } catch (err: any) {
+            toast.error(err.message || "Failed to add credit")
         }
     }
 
     const handlePayTransaction = async () => {
         if (!selectedTxn) return;
-        const amount = parseFloat(txnPaymentAmount);
-        if (isNaN(amount) || amount <= 0 || amount > parseFloat(selectedTxn.remaining_balance)) {
-             return toast.error("Please enter a valid amount not exceeding the remaining balance.");
+        const amount = parseFloat(txnPaymentAmount) || 0;
+        const discountAmount = parseFloat(txnDiscountAmount) || 0;
+        const remaining = parseFloat(selectedTxn.remaining_balance);
+
+        if (amount < 0 || discountAmount < 0) {
+            return toast.error("Amounts cannot be negative.");
+        }
+        if (amount === 0 && discountAmount === 0) {
+            return toast.error("Please enter a payment or discount amount.");
+        }
+        if (amount + discountAmount > remaining) {
+            return toast.error("Total payment and discount cannot exceed the remaining balance.");
+        }
+        if (amount > 0 && !txnPaymentMethod) {
+            return toast.error("Please select a payment method.");
         }
 
         try {
-            await creditApi.payTransaction(selectedTxn.id, { paymentMethod: 'cash', amount });
-            toast.success(`Payment of $${amount} applied to transaction.`);
+            await creditApi.payTransaction(selectedTxn.id, { 
+                paymentMethod: txnPaymentMethod, 
+                amount, 
+                discountAmount 
+            });
+            toast.success(`Payment applied successfully.`);
             setShowTxnPayment(false);
             loadData();
+        } catch (err: any) {
+             toast.error(err.message || "Failed to pay transaction");
+        }
+    }
+
+    const handleViewHistory = async (customer: any) => {
+        setSelectedCustomer(customer)
+        setShowHistory(true)
+        setHistoryLoading(true)
+        try {
+            const data = await creditApi.getCustomerDetails(customer.id)
+            setHistoryData(data)
         } catch (err) {
-             toast.error("Failed to pay transaction");
+            toast.error("Failed to load customer history")
+        } finally {
+            setHistoryLoading(false)
         }
     }
 
@@ -342,23 +421,44 @@ export function CreditManagementContent() {
                                         </div>
                                     </div>
 
-                                    <div className="flex items-center justify-between gap-2">
-                                        <Button 
-                                            variant="outline" 
-                                            className="h-9 flex-1 text-xs rounded-xl font-bold border-slate-200"
-                                            onClick={() => {
-                                                setSelectedCustomer(customer)
-                                                setRepayment({ amount: "", paymentMethod: "cash", referenceNotes: "" })
-                                                setShowRepayment(true)
-                                            }}
-                                        >
-                                            Record Payment
-                                        </Button>
-                                        <div className="flex gap-1.5">
+                                    <div className="flex flex-col gap-2">
+                                        <div className="flex gap-2">
+                                            <Button 
+                                                variant="outline" 
+                                                className="h-9 flex-1 text-[11px] rounded-xl font-bold border-slate-200 px-2"
+                                                onClick={() => {
+                                                    setSelectedCustomer(customer)
+                                                    setRepayment({ amount: "", paymentMethod: "cash", referenceNotes: "", discountAmount: "" })
+                                                    setShowRepayment(true)
+                                                }}
+                                            >
+                                                Record Payment
+                                            </Button>
+                                            <Button 
+                                                variant="outline" 
+                                                className="h-9 flex-1 text-[11px] rounded-xl font-bold border-slate-200 px-2"
+                                                onClick={() => {
+                                                    setSelectedCustomer(customer)
+                                                    setNewCredit({ amount: "", notes: "" })
+                                                    setShowAddCredit(true)
+                                                }}
+                                            >
+                                                Add Credit
+                                            </Button>
+                                        </div>
+                                        <div className="flex justify-end gap-1.5">
                                             <Button 
                                                 variant="ghost" 
                                                 size="icon" 
-                                                className="h-9 w-9 rounded-xl text-blue-500 hover:bg-blue-50"
+                                                className="h-8 w-8 rounded-lg text-slate-500 hover:bg-slate-50"
+                                                onClick={() => handleViewHistory(customer)}
+                                            >
+                                                <History className="size-4" />
+                                            </Button>
+                                            <Button 
+                                                variant="ghost" 
+                                                size="icon" 
+                                                className="h-8 w-8 rounded-lg text-blue-500 hover:bg-blue-50"
                                                 onClick={() => {
                                                     setEditingCustomer({...customer})
                                                     setShowEditCustomer(true)
@@ -369,7 +469,7 @@ export function CreditManagementContent() {
                                             <Button 
                                                 variant="ghost" 
                                                 size="icon" 
-                                                className="h-9 w-9 rounded-xl text-rose-500 hover:bg-rose-50"
+                                                className="h-8 w-8 rounded-lg text-rose-500 hover:bg-rose-50"
                                                 onClick={() => setDeleteConfirmId(customer.id)}
                                             >
                                                 <Trash2 className="size-4" />
@@ -451,6 +551,8 @@ export function CreditManagementContent() {
                                                             onClick={() => {
                                                                 setSelectedTxn(txn);
                                                                 setTxnPaymentAmount(txn.remaining_balance);
+                                                                setTxnDiscountAmount("");
+                                                                setTxnPaymentMethod("cash");
                                                                 setShowTxnPayment(true);
                                                             }}
                                                         >
@@ -494,21 +596,106 @@ export function CreditManagementContent() {
                         </div>
 
                         <div className="space-y-2">
-                            <Label>Payment Amount ($)</Label>
-                            <Input 
-                                type="number" 
-                                placeholder="0.00" 
-                                className="h-12 text-lg font-bold"
-                                value={txnPaymentAmount}
-                                onChange={e => setTxnPaymentAmount(e.target.value)}
-                                max={selectedTxn?.remaining_balance}
-                            />
-                            <p className="text-xs text-slate-400">Enter partial amount or full remaining amount.</p>
+                            <Label className="font-bold text-slate-700">Payment Method <span className="text-rose-500">*</span></Label>
+                            <div className="grid grid-cols-2 gap-2">
+                                {PAYMENT_METHODS.map(m => (
+                                    <button
+                                        key={m.value}
+                                        type="button"
+                                        onClick={() => setTxnPaymentMethod(m.value)}
+                                        className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border-2 text-sm font-bold transition-all ${
+                                            txnPaymentMethod === m.value
+                                                ? "border-emerald-500 bg-emerald-50 text-emerald-700"
+                                                : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50"
+                                        }`}
+                                    >
+                                        <span className="text-base">{m.icon}</span>
+                                        <span>{m.label}</span>
+                                    </button>
+                                ))}
+                            </div>
                         </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                                <Label>Payment Amount ($)</Label>
+                                <Input 
+                                    type="number" 
+                                    placeholder="0.00" 
+                                    className="h-12 text-lg font-bold"
+                                    value={txnPaymentAmount}
+                                    onChange={e => setTxnPaymentAmount(e.target.value)}
+                                    max={selectedTxn?.remaining_balance}
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <Label>Discount Amount ($)</Label>
+                                <Input 
+                                    type="number" 
+                                    placeholder="0.00" 
+                                    className="h-12 text-lg font-bold text-amber-600"
+                                    value={txnDiscountAmount}
+                                    onChange={e => setTxnDiscountAmount(e.target.value)}
+                                    max={selectedTxn?.remaining_balance}
+                                />
+                            </div>
+                        </div>
+                        <p className="text-xs text-slate-400">Enter payment amount, discount amount, or both.</p>
+
+                        {((parseFloat(txnPaymentAmount) || 0) + (parseFloat(txnDiscountAmount) || 0) > 0) && (
+                            <div className="p-3 bg-slate-50 rounded-xl flex justify-between text-xs font-bold text-slate-700">
+                                <span>Net Remaining After Payment:</span>
+                                <span>
+                                    ${Math.max(0, parseFloat(selectedTxn?.remaining_balance || 0) - (parseFloat(txnPaymentAmount) || 0) - (parseFloat(txnDiscountAmount) || 0)).toFixed(2)}
+                                </span>
+                            </div>
+                        )}
                     </div>
                     <DialogFooter>
                         <Button variant="outline" className="h-10 rounded-xl" onClick={() => setShowTxnPayment(false)}>Cancel</Button>
                         <Button className="h-10 rounded-xl bg-emerald-600 hover:bg-emerald-700 shadow-lg text-white" onClick={handlePayTransaction}>Apply Payment</Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* ADD CREDIT DIALOG */}
+            <Dialog open={showAddCredit} onOpenChange={setShowAddCredit}>
+                <DialogContent className="max-w-md rounded-2xl">
+                    <DialogHeader>
+                        <DialogTitle className="text-xl font-bold">Add Credit / Loan</DialogTitle>
+                        <DialogDescription>Add new credit balance for <b>{selectedCustomer?.full_name}</b></DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4">
+                        <div className="p-4 bg-slate-50 rounded-2xl flex justify-between items-center mb-2">
+                            <div>
+                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Current Balance</p>
+                                <p className="text-xl font-black text-slate-900">${parseFloat(selectedCustomer?.outstanding_balance || 0).toLocaleString()}</p>
+                            </div>
+                            <div>
+                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest text-right">Credit Limit</p>
+                                <p className="text-xl font-black text-slate-900 text-right">${parseFloat(selectedCustomer?.credit_limit || 0).toLocaleString()}</p>
+                            </div>
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label>Credit Amount ($)</Label>
+                            <Input 
+                                type="number" 
+                                placeholder="0.00" 
+                                className="h-12 text-lg font-bold"
+                                value={newCredit.amount}
+                                onChange={e => setNewCredit({...newCredit, amount: e.target.value})}
+                            />
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label>Description / Notes</Label>
+                            <Input placeholder="Reason for adding credit (e.g. Services, Manual adjustment)" value={newCredit.notes} onChange={e => setNewCredit({...newCredit, notes: e.target.value})} />
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" className="h-10 rounded-xl" onClick={() => setShowAddCredit(false)}>Cancel</Button>
+                        <Button className="h-10 rounded-xl bg-slate-900 shadow-lg text-white" onClick={handleRecordCredit}>Add Credit</Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
@@ -531,29 +718,57 @@ export function CreditManagementContent() {
                             </div>
                         </div>
 
-                        <div className="space-y-2">
-                            <Label>Repayment Amount ($)</Label>
-                            <Input 
-                                type="number" 
-                                placeholder="0.00" 
-                                className="h-12 text-lg font-bold"
-                                value={repayment.amount}
-                                onChange={e => setRepayment({...repayment, amount: e.target.value})}
-                            />
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                                <Label>Repayment Amount ($)</Label>
+                                <Input 
+                                    type="number" 
+                                    placeholder="0.00" 
+                                    className="h-12 text-lg font-bold"
+                                    value={repayment.amount}
+                                    onChange={e => setRepayment({...repayment, amount: e.target.value})}
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <Label>Discount Amount ($)</Label>
+                                <Input 
+                                    type="number" 
+                                    placeholder="0.00" 
+                                    className="h-12 text-lg font-bold text-amber-600"
+                                    value={repayment.discountAmount || ""}
+                                    onChange={e => setRepayment({...repayment, discountAmount: e.target.value})}
+                                />
+                            </div>
                         </div>
 
+                        {((parseFloat(repayment.amount) || 0) + (parseFloat(repayment.discountAmount) || 0) > 0) && (
+                            <div className="p-3 bg-slate-50 rounded-xl flex justify-between text-xs font-bold text-slate-700">
+                                <span>Remaining Balance After Payment:</span>
+                                <span>
+                                    ${Math.max(0, parseFloat(selectedCustomer?.outstanding_balance || 0) - (parseFloat(repayment.amount) || 0) - (parseFloat(repayment.discountAmount) || 0)).toFixed(2)}
+                                </span>
+                            </div>
+                        )}
+
                         <div className="space-y-2">
-                            <Label>Payment Method</Label>
-                            <Select value={repayment.paymentMethod} onValueChange={v => setRepayment({...repayment, paymentMethod: v})}>
-                                <SelectTrigger className="h-11 rounded-xl">
-                                    <SelectValue placeholder="Select Method" />
-                                </SelectTrigger>
-                                <SelectContent className="rounded-xl">
-                                    <SelectItem value="cash">Cash Payment</SelectItem>
-                                    <SelectItem value="bank">Bank Transfer</SelectItem>
-                                    <SelectItem value="mobile">Mobile Money</SelectItem>
-                                </SelectContent>
-                            </Select>
+                            <Label className="font-bold text-slate-700">Payment Method <span className="text-rose-500">*</span></Label>
+                            <div className="grid grid-cols-2 gap-2">
+                                {PAYMENT_METHODS.map(m => (
+                                    <button
+                                        key={m.value}
+                                        type="button"
+                                        onClick={() => setRepayment({...repayment, paymentMethod: m.value})}
+                                        className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border-2 text-sm font-bold transition-all ${
+                                            repayment.paymentMethod === m.value
+                                                ? "border-slate-800 bg-slate-900 text-white"
+                                                : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50"
+                                        }`}
+                                    >
+                                        <span className="text-base">{m.icon}</span>
+                                        <span>{m.label}</span>
+                                    </button>
+                                ))}
+                            </div>
                         </div>
 
                         <div className="space-y-2">
@@ -564,6 +779,99 @@ export function CreditManagementContent() {
                     <DialogFooter>
                         <Button variant="outline" className="h-10 rounded-xl" onClick={() => setShowRepayment(false)}>Cancel</Button>
                         <Button className="h-10 rounded-xl bg-slate-900 shadow-lg text-white" onClick={handleRecordRepayment}>Record Payment</Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* CUSTOMER HISTORY DIALOG */}
+            <Dialog open={showHistory} onOpenChange={setShowHistory}>
+                <DialogContent className="max-w-2xl rounded-2xl">
+                    <DialogHeader>
+                        <DialogTitle className="text-xl font-bold">Customer Ledger History</DialogTitle>
+                        <DialogDescription>
+                            Detailed financial records and statements for <b>{selectedCustomer?.full_name}</b> ({selectedCustomer?.customer_id})
+                        </DialogDescription>
+                    </DialogHeader>
+                    {historyLoading ? (
+                        <div className="flex flex-col items-center justify-center py-12 space-y-4">
+                            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-slate-900" />
+                            <p className="text-xs text-slate-500 font-bold">Loading statement entries...</p>
+                        </div>
+                    ) : (
+                        <div className="space-y-6">
+                            <div className="grid grid-cols-3 gap-4 p-4 bg-slate-50 rounded-2xl">
+                                <div>
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none">Total Credit Taken</p>
+                                    <p className="text-lg font-black text-slate-900 mt-1">${parseFloat(historyData?.customer?.total_credit_taken || 0).toLocaleString()}</p>
+                                </div>
+                                <div>
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none">Total Repayments</p>
+                                    <p className="text-lg font-black text-emerald-600 mt-1">${parseFloat(historyData?.customer?.total_payments_made || 0).toLocaleString()}</p>
+                                </div>
+                                <div>
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none">Outstanding Balance</p>
+                                    <p className="text-lg font-black text-rose-600 mt-1">${parseFloat(historyData?.customer?.outstanding_balance || 0).toLocaleString()}</p>
+                                </div>
+                            </div>
+
+                            <div className="space-y-2">
+                                <h4 className="text-sm font-bold text-slate-900 px-1">Statement Ledger</h4>
+                                <ScrollArea className="h-[280px] rounded-xl border border-slate-100 bg-white">
+                                    <table className="w-full text-left border-collapse">
+                                        <thead className="bg-slate-50 sticky top-0 border-b border-slate-100 z-10">
+                                            <tr>
+                                                <th className="px-4 py-2.5 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Date</th>
+                                                <th className="px-4 py-2.5 text-[10px] font-bold text-slate-400 uppercase tracking-widest">Description</th>
+                                                <th className="px-4 py-2.5 text-[10px] font-bold text-slate-400 uppercase tracking-widest text-right">Debit (+)</th>
+                                                <th className="px-4 py-2.5 text-[10px] font-bold text-slate-400 uppercase tracking-widest text-right">Credit (-)</th>
+                                                <th className="px-4 py-2.5 text-[10px] font-bold text-slate-400 uppercase tracking-widest text-right">Balance</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-50">
+                                            {!historyData?.ledger || historyData.ledger.length === 0 ? (
+                                                <tr>
+                                                    <td colSpan={5} className="text-center py-12 text-xs font-bold text-slate-400">
+                                                        No transaction records found
+                                                    </td>
+                                                </tr>
+                                            ) : (
+                                                historyData.ledger.map((entry: any) => (
+                                                    <tr key={entry.id} className="hover:bg-slate-50/50 transition-colors text-xs">
+                                                        <td className="px-4 py-3 font-medium text-slate-500 whitespace-nowrap">
+                                                            {(() => {
+                                                                try {
+                                                                    return format(new Date(entry.created_at || entry.date || ''), 'dd MMM yyyy');
+                                                                } catch (e) {
+                                                                    return entry.date || entry.created_at || '-';
+                                                                }
+                                                            })()}
+                                                        </td>
+                                                        <td className="px-4 py-3 text-slate-700">
+                                                            <div className="font-semibold">{entry.description}</div>
+                                                            {entry.reference_id && (
+                                                                <div className="text-[9px] font-mono text-slate-400 uppercase tracking-tight mt-0.5">Ref: {entry.reference_id}</div>
+                                                            )}
+                                                        </td>
+                                                        <td className="px-4 py-3 text-right font-semibold text-rose-600">
+                                                            {entry.type === 'debit' ? `$${parseFloat(entry.amount).toFixed(2)}` : '-'}
+                                                        </td>
+                                                        <td className="px-4 py-3 text-right font-semibold text-emerald-600">
+                                                            {entry.type === 'credit' ? `$${parseFloat(entry.amount).toFixed(2)}` : '-'}
+                                                        </td>
+                                                        <td className="px-4 py-3 text-right font-bold text-slate-900">
+                                                            ${parseFloat(entry.running_balance).toFixed(2)}
+                                                        </td>
+                                                    </tr>
+                                                ))
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </ScrollArea>
+                            </div>
+                        </div>
+                    )}
+                    <DialogFooter>
+                        <Button className="h-10 rounded-xl bg-slate-900 text-white" onClick={() => setShowHistory(false)}>Close Statement</Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>

@@ -52,6 +52,19 @@ interface Props {
     onRefresh: () => void
 }
 
+const getNumber = (value: unknown) => {
+    const parsed = Number(value)
+    return Number.isFinite(parsed) ? parsed : 0
+}
+
+const formatCurrency = (value: number) =>
+    new Intl.NumberFormat("en-US", {
+        style: "currency",
+        currency: "USD",
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+    }).format(getNumber(value))
+
 export function InventoryManagement({ medicines, onRefresh }: Props) {
     const [search, setSearch] = useState("")
     const [isAdding, setIsAdding] = useState(false)
@@ -110,6 +123,11 @@ export function InventoryManagement({ medicines, onRefresh }: Props) {
         )
     }, [medicines, search])
 
+    const totalInventoryValue = useMemo(
+        () => medicines.reduce((sum, med) => sum + (getNumber(med.quantity) * getNumber(med.unitPrice)), 0),
+        [medicines]
+    )
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
         try {
@@ -138,14 +156,19 @@ export function InventoryManagement({ medicines, onRefresh }: Props) {
     return (
         <div className="space-y-6">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                <div className="relative flex-1 max-w-sm">
-                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-                    <Input
-                        placeholder="Search inventory (name, batch, generic)..."
-                        className="pl-9"
-                        value={search}
-                        onChange={(e) => setSearch(e.target.value)}
-                    />
+                <div className="flex flex-1 flex-col gap-2">
+                    <div className="relative max-w-sm">
+                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+                        <Input
+                            placeholder="Search inventory (name, batch, generic)..."
+                            className="pl-9"
+                            value={search}
+                            onChange={(e) => setSearch(e.target.value)}
+                        />
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                        {medicines.length} items in stock · Inventory value {formatCurrency(totalInventoryValue)}
+                    </p>
                 </div>
                 <div className="flex items-center gap-2">
                     <Button variant="outline" size="sm" className="gap-2">
@@ -176,13 +199,16 @@ export function InventoryManagement({ medicines, onRefresh }: Props) {
                                 <TableHead>Batch #</TableHead>
                                 <TableHead>Stock</TableHead>
                                 <TableHead>Price (Sell)</TableHead>
+                                <TableHead>Stock Value</TableHead>
                                 <TableHead>Expiry</TableHead>
                                 <TableHead>Status</TableHead>
                                 <TableHead className="text-right">Actions</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
-                            {filtered.map((med) => (
+                            {filtered.map((med) => {
+                                const stockValue = getNumber(med.quantity) * getNumber(med.unitPrice)
+                                return (
                                 <TableRow key={med.id}>
                                     <TableCell>
                                         <div className="flex flex-col">
@@ -201,7 +227,8 @@ export function InventoryManagement({ medicines, onRefresh }: Props) {
                                             )}
                                         </div>
                                     </TableCell>
-                                    <TableCell>${med.sellingPrice}</TableCell>
+                                    <TableCell>{formatCurrency(getNumber(med.sellingPrice))}</TableCell>
+                                    <TableCell className="font-medium">{formatCurrency(stockValue)}</TableCell>
                                     <TableCell>
                                         <div className="flex flex-col">
                                             <span className="text-xs">{med.expiryDate || "N/A"}</span>
@@ -233,10 +260,10 @@ export function InventoryManagement({ medicines, onRefresh }: Props) {
                                         </DropdownMenu>
                                     </TableCell>
                                 </TableRow>
-                            ))}
+                            )})}
                             {filtered.length === 0 && (
                                 <TableRow>
-                                    <TableCell colSpan={7} className="text-center py-12 text-muted-foreground italic">No medicines found in inventory</TableCell>
+                                    <TableCell colSpan={8} className="text-center py-12 text-muted-foreground italic">No medicines found in inventory</TableCell>
                                 </TableRow>
                             )}
                         </TableBody>

@@ -9,6 +9,7 @@ import {
 } from "lucide-react"
 import { format } from "date-fns"
 import { toast } from "sonner"
+import { PAYMENT_METHODS } from "@/lib/payment-methods"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -286,16 +287,25 @@ export function EmployeeManagementContent() {
                                         <Label>Monthly Salary ($)</Label>
                                         <Input type="number" placeholder="500" value={newEmployee.base_salary} onChange={e => setNewEmployee({...newEmployee, base_salary: e.target.value})} />
                                     </div>
-                                    <div className="space-y-2">
-                                        <Label>Payment Method</Label>
-                                        <Select value={newEmployee.payment_method} onValueChange={v => setNewEmployee({...newEmployee, payment_method: v})}>
-                                            <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="cash">Cash</SelectItem>
-                                                <SelectItem value="bank">Bank Transfer</SelectItem>
-                                                <SelectItem value="mobile">Mobile Money</SelectItem>
-                                            </SelectContent>
-                                        </Select>
+                                    <div className="space-y-2 col-span-2">
+                                        <Label>Salary Payment Method</Label>
+                                        <div className="grid grid-cols-2 gap-2">
+                                            {PAYMENT_METHODS.filter(m => m.value !== 'insurance').map(m => (
+                                                <button
+                                                    key={m.value}
+                                                    type="button"
+                                                    onClick={() => setNewEmployee({...newEmployee, payment_method: m.value})}
+                                                    className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border-2 text-sm font-bold transition-all ${
+                                                        newEmployee.payment_method === m.value
+                                                            ? "border-slate-800 bg-slate-900 text-white"
+                                                            : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50"
+                                                    }`}
+                                                >
+                                                    <span>{m.icon}</span>
+                                                    <span>{m.label}</span>
+                                                </button>
+                                            ))}
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -620,17 +630,26 @@ export function EmployeeManagementContent() {
                         </div>
 
                         <div className="grid grid-cols-2 gap-4">
-                            <div className="space-y-2">
-                                <Label>Payment Method</Label>
-                                <Select value={repayment.method} onValueChange={v => setRepayment({...repayment, method: v})}>
-                                    <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="cash">Cash</SelectItem>
-                                        <SelectItem value="bank">Bank Transfer</SelectItem>
-                                        <SelectItem value="mobile">Mobile Money</SelectItem>
-                                    </SelectContent>
-                                </Select>
+                        <div className="space-y-2 col-span-2">
+                            <Label className="font-bold text-slate-700">Payment Method</Label>
+                            <div className="grid grid-cols-2 gap-2">
+                                {PAYMENT_METHODS.map(m => (
+                                    <button
+                                        key={m.value}
+                                        type="button"
+                                        onClick={() => setRepayment({...repayment, method: m.value})}
+                                        className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border-2 text-sm font-bold transition-all ${
+                                            repayment.method === m.value
+                                                ? "border-emerald-500 bg-emerald-50 text-emerald-700"
+                                                : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50"
+                                        }`}
+                                    >
+                                        <span className="text-base">{m.icon}</span>
+                                        <span>{m.label}</span>
+                                    </button>
+                                ))}
                             </div>
+                        </div>
                             <div className="space-y-2">
                                 <Label>Amount ($)</Label>
                                 <Input 
@@ -703,16 +722,25 @@ export function EmployeeManagementContent() {
                                     <Label>Monthly Salary ($)</Label>
                                     <Input type="number" placeholder="500" value={editingEmployee.base_salary} onChange={e => setEditingEmployee({...editingEmployee, base_salary: e.target.value})} />
                                 </div>
-                                <div className="space-y-2">
-                                    <Label>Payment Method</Label>
-                                    <Select value={editingEmployee.payment_method} onValueChange={v => setEditingEmployee({...editingEmployee, payment_method: v})}>
-                                        <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="cash">Cash</SelectItem>
-                                            <SelectItem value="bank">Bank Transfer</SelectItem>
-                                            <SelectItem value="mobile">Mobile Money</SelectItem>
-                                        </SelectContent>
-                                    </Select>
+                                <div className="space-y-2 col-span-2">
+                                    <Label>Salary Payment Method</Label>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        {PAYMENT_METHODS.filter(m => m.value !== 'insurance').map(m => (
+                                            <button
+                                                key={m.value}
+                                                type="button"
+                                                onClick={() => setEditingEmployee({...editingEmployee, payment_method: m.value})}
+                                                className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border-2 text-sm font-bold transition-all ${
+                                                    editingEmployee.payment_method === m.value
+                                                        ? "border-slate-800 bg-slate-900 text-white"
+                                                        : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50"
+                                                }`}
+                                            >
+                                                <span>{m.icon}</span>
+                                                <span>{m.label}</span>
+                                            </button>
+                                        ))}
+                                    </div>
                                 </div>
                             </div>
                             <div className="space-y-2">

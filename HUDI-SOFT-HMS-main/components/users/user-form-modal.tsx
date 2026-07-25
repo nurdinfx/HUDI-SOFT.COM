@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { toast } from "sonner"
+import { UsersCoreRoleType } from "@/lib/api" // wait let me check the exact name, it's UserRole
 import type { User, UserRole } from "@/lib/api"
 import { usersApi } from "@/lib/api"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"

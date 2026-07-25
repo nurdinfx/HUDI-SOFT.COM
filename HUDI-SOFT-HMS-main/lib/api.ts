@@ -7,25 +7,14 @@
 // Use sanitized /api for Vercel/Production stability
 const API_BASE = (process.env.NEXT_PUBLIC_API_URL || '').trim().replace(/\/$/, ''); 
 
-// Detect if running inside Capacitor native at runtime
-function isCapacitorRuntime(): boolean {
-    if (typeof window === 'undefined') return false;
-    return !!(window as any).Capacitor?.isNativePlatform?.() ||
-           window.location.origin === 'http://localhost' ||
-           window.location.origin.startsWith('capacitor://') ||
-           window.location.origin.startsWith('ionic://');
-}
-
-export const getBaseUrl = () => {
-    // Always use the same backend regardless of platform
-    // This ensures Capacitor and PWA use identical API endpoints
+const getBaseUrl = () => {
     if (API_BASE) return `${API_BASE}/api`;
     return '/api';
 };
 
 console.log(`🚀 HMS Frontend Engine active. API Base: ${getBaseUrl()}`);
 
-// ─── Token and Tenant management ────────────────────────────────────────────
+// ─── Token management ────────────────────────────────────────────
 function getToken(): string | null {
     if (typeof window === 'undefined') return null;
     return localStorage.getItem('hms_token');
@@ -39,33 +28,6 @@ export function clearToken() {
     if (typeof window !== 'undefined') localStorage.removeItem('hms_token');
 }
 
-export function getTenantId(): string | null {
-    if (typeof window === 'undefined') return null;
-    return localStorage.getItem('hms_tenant_id');
-}
-
-export function setTenantId(tenantId: string) {
-    if (typeof window !== 'undefined') localStorage.setItem('hms_tenant_id', tenantId);
-}
-
-export function clearTenantId() {
-    if (typeof window !== 'undefined') localStorage.removeItem('hms_tenant_id');
-}
-
-export function getOrCreateMachineId(): string {
-    if (typeof window === 'undefined') return 'UNKNOWN';
-    let machineId = localStorage.getItem('hms_machine_id');
-    if (!machineId) {
-        try {
-            machineId = crypto.randomUUID();
-        } catch (e) {
-            machineId = 'dev-' + Math.random().toString(36).substring(2, 15) + '-' + Date.now().toString(36);
-        }
-        localStorage.setItem('hms_machine_id', machineId);
-    }
-    return machineId;
-}
-
 // ─── Core fetch wrapper ──────────────────────────────────────────
 interface ApiOptions extends Omit<RequestInit, 'body'> {
     body?: any;
@@ -73,17 +35,11 @@ interface ApiOptions extends Omit<RequestInit, 'body'> {
 
 async function apiFetch<T>(path: string, options: ApiOptions = {}): Promise<T> {
     const token = getToken();
-    const tenantId = getTenantId();
     const headers: Record<string, string> = {
         'Content-Type': 'application/json',
-        'X-Machine-ID': getOrCreateMachineId(),
         ...(options.headers as Record<string, string>),
     };
     if (token) headers['Authorization'] = `Bearer ${token}`;
-    // Only set X-Tenant-ID if it's not already set by the caller (allows login to send empty)
-    if (tenantId && !Object.prototype.hasOwnProperty.call(options.headers || {}, 'X-Tenant-ID')) {
-        headers['X-Tenant-ID'] = tenantId;
-    }
 
     const { body, ...rest } = options;
     const fetchOptions: RequestInit = {
@@ -94,75 +50,13 @@ async function apiFetch<T>(path: string, options: ApiOptions = {}): Promise<T> {
             : body
     };
 
-    // Capacitor Android: Render free-tier can take 50-90s to cold-start
-    // Use 65s timeout to survive that, 30s for web/PWA
-    const TIMEOUT_MS = isCapacitorRuntime() ? 65000 : 30000;
-
-    const doFetch = async (): Promise<T> => {
-        const controller = new AbortController()
-        const timer = setTimeout(() => controller.abort(), TIMEOUT_MS)
-
-        try {
-            const res = await fetch(`${getBaseUrl()}${path}`, {
-                ...fetchOptions,
-                signal: controller.signal,
-            })
-            clearTimeout(timer)
-
-            if (!res.ok) {
-                // Only clear token on 401 for auth endpoints, not data endpoints
-                if (res.status === 401) {
-                    const isAuthEndpoint = path.includes('/auth/') || path.includes('/auth/me');
-                    if (isAuthEndpoint) clearToken();
-                }
-                let errMsg = `Request failed: ${res.status}`;
-                try {
-                    const text = await res.text();
-                    try {
-                        const parsed = JSON.parse(text);
-                        errMsg = parsed.message || parsed.error || parsed.detail || parsed.msg || errMsg;
-                    } catch {
-                        errMsg = text.substring(0, 200) || errMsg;
-                    }
-                } catch {}
-                throw new Error(errMsg);
-            }
-
-            const data = await res.json().catch(() => ({}));
-            return data as T;
-
-        } catch (err: any) {
-            clearTimeout(timer)
-            if (err.name === 'AbortError') {
-                throw new Error('Request timed out. Server is slow to respond. Please try again.');
-            }
-            const msg = err.message || 'Request failed';
-            if (msg.toLowerCase().includes('failed to fetch') ||
-                msg.toLowerCase().includes('networkerror') ||
-                msg.toLowerCase().includes('network request failed') ||
-                err.name === 'TypeError') {
-                throw new Error('Cannot connect to server. Please check your internet connection and try again.');
-            }
-            throw err;
-        }
+    const res = await fetch(`${getBaseUrl()}${path}`, fetchOptions);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+        if (res.status === 401) clearToken();
+        throw new Error(data.error || data.message || `Request failed: ${res.status}`);
     }
-
-    // On Capacitor, auto-retry once on timeout/network errors (server may be waking up)
-    if (isCapacitorRuntime()) {
-        try {
-            return await doFetch();
-        } catch (firstErr: any) {
-            const msg = firstErr.message || '';
-            const isRetryable = msg.includes('timed out') || msg.includes('Cannot connect') || msg.includes('NetworkError');
-            if (isRetryable) {
-                console.warn(`[API] First attempt failed (${msg.slice(0, 60)}). Retrying...`);
-                return await doFetch();
-            }
-            throw firstErr;
-        }
-    }
-
-    return doFetch();
+    return data as T;
 }
 
 const get = <T>(path: string) => apiFetch<T>(path);
@@ -172,16 +66,8 @@ const del = <T>(path: string) => apiFetch<T>(path, { method: 'DELETE' });
 
 // ─── Auth ────────────────────────────────────────────────────────
 export const authApi = {
-    // Login: don't send X-Tenant-ID — let server find user across all tenants
-    login: (email: string, password: string) => apiFetch<{ token: string; user: User }>('/auth/login', { 
-        method: 'POST',
-        body: { email, password },
-        headers: { 'X-Tenant-ID': getTenantId() || '' } 
-    }),
-    // me: don't send X-Tenant-ID — server uses tenant from JWT token
-    me: () => apiFetch<User>('/auth/me', {
-        headers: { 'X-Tenant-ID': '' }
-    }),
+    login: (email: string, password: string) => post<{ token: string; user: User }>('/auth/login', { email, password }),
+    me: () => get<User>('/auth/me'),
     logout: () => post('/auth/logout', {}),
 };
 
@@ -242,6 +128,14 @@ export const pharmacyApi = {
     processReturn: (id: string, data: { items: any[], exchangeItems?: any[], paymentMethod?: string }) => post<any>(`/pharmacy/transactions/${id}/return`, data),
     getRevenueStats: () => get<any>('/pharmacy/stats/revenue'),
     getPatientCredits: (patientId: string) => get<{ balance: number }>(`/pharmacy/credits/${patientId}`),
+    getSalesReceipts: (params?: { startDate?: string; endDate?: string; paymentMethod?: string; pendingOnly?: boolean }) =>
+        get<any>(`/pharmacy/sales-receipts${toQuery(params)}`),
+    addManualReceipt: (data: { date: string; amount: number; paymentMethod: string; referenceName?: string; invoiceNumber?: string }) =>
+        post<{ id: string; invoiceId: string; message: string }>('/pharmacy/sales-receipts/manual', data),
+    getPendingTransfers: () => get<any[]>('/pharmacy/sales-receipts/pending-transfers'),
+    transferDailySales: (data: { date: string }) => post<any>('/pharmacy/sales-receipts/transfer', data),
+    adminClearTransactions: () => apiFetch<any>('/pharmacy/admin/clear-transactions', { method: 'DELETE' }),
+    adminClearHospitalRevenue: () => apiFetch<any>('/pharmacy/admin/clear-hospital-revenue', { method: 'DELETE' }),
 };
 
 // ─── Pharmacy Purchase Hub ───────────────────────────────────────
@@ -251,6 +145,7 @@ export const pharmacyPurchaseApi = {
     updateSupplier: (id: string, data: Partial<Supplier>) => put<Supplier>(`/pharmacy/purchase/suppliers/${id}`, data),
     
     getOrders: (params?: QueryParams) => get<PurchaseOrder[]>(`/pharmacy/purchase/orders${toQuery(params)}`),
+    getOrdersBySupplier: (supplierId: string) => get<PurchaseOrder[]>(`/pharmacy/purchase/orders?supplier_id=${supplierId}`),
     getOrder: (id: string) => get<PurchaseOrder & { items: PurchaseItem[] }>(`/pharmacy/purchase/orders/${id}`),
     createOrder: (data: any) => post<{ id: string; poNumber: string }>('/pharmacy/purchase/orders', data),
     updateOrderStatus: (id: string, status: string, receiveData?: any[]) => put<{ message: string }>(`/pharmacy/purchase/orders/${id}/status`, { status, receiveData }),
@@ -259,6 +154,7 @@ export const pharmacyPurchaseApi = {
     refreshBatchStatus: () => post<{ message: string }>('/pharmacy/purchase/batches/refresh-status', {}),
     
     getReturns: () => get<SupplierReturn[]>('/pharmacy/purchase/returns'),
+    getReturnsBySupplier: (supplierId: string) => get<SupplierReturn[]>(`/pharmacy/purchase/returns?supplier_id=${supplierId}`),
     createReturn: (data: any) => post<{ id: string }>('/pharmacy/purchase/returns', data),
     
     getStats: () => get<{
@@ -416,32 +312,7 @@ export const reportsApi = {
 export const settingsApi = {
     get: () => get<HospitalSettings>('/settings'),
     update: (data: Partial<HospitalSettings>) => put<HospitalSettings>('/settings', data),
-};
-
-// ─── License ─────────────────────────────────────────────────────
-export interface LicenseInfo {
-    licenseKey: string;
-    companyName: string;
-    productType: string;
-    startDate: string;
-    expiryDate: string;
-    status: string;
-    isTrial: boolean;
-    daysRemaining: number;
-}
-
-export interface LicenseStatusResponse {
-    isLicensed: boolean;
-    offlineCached?: boolean;
-    syncSuccess?: boolean;
-    message?: string;
-    tenantId?: string;
-    license?: LicenseInfo;
-}
-
-export const licenseApi = {
-    activate: (licenseKey: string) => post<{ success: boolean; message: string; tenantId?: string; license?: LicenseInfo }>('/license/activate', { licenseKey }),
-    status: (sync = false) => get<LicenseStatusResponse>(`/license/status${sync ? '?sync=true' : ''}`),
+    resetFinancialData: () => apiFetch<{ success: boolean; message: string }>('/settings/admin/reset-financial', { method: 'DELETE' }),
 };
 
 // ─── Vitals ──────────────────────────────────────────────────────
@@ -473,6 +344,7 @@ export const creditApi = {
     registerCustomer: (data: any) => apiFetch<any>('/credit/customers', { method: 'POST', body: data }),
     getCustomerDetails: (id: string) => apiFetch<any>(`/credit/customers/${id}`),
     recordPayment: (data: any) => apiFetch<any>('/credit/payments', { method: 'POST', body: data }),
+    addCredit: (data: any) => apiFetch<any>('/credit/transactions', { method: 'POST', body: data }),
     getTransactions: () => apiFetch<any[]>('/credit/transactions'),
     getStats: () => apiFetch<any>('/credit/stats'),
     updateCustomer: (id: string, data: any) => apiFetch<any>(`/credit/customers/${id}`, { method: 'PUT', body: data }),
@@ -509,6 +381,8 @@ export const revenueAnalyticsApi = {
     deleteServiceCategory: (id: string) => del<{ message: string }>(`/revenue-analytics/service-categories/${id}`),
     
     getReport: (params?: { startDate?: string; endDate?: string }) => get<RevenueReport>('/revenue-analytics/report' + toQuery(params)),
+    getLiveReport: (params?: { startDate?: string; endDate?: string; source?: string }) => get<LiveRevenueReport>('/revenue-analytics/live-report' + toQuery(params)),
+    getDiscounts: (params?: { startDate?: string; endDate?: string; source?: string }) => get<DiscountReport>('/revenue-analytics/discounts' + toQuery(params)),
     updateCell: (data: { date: string; department: string; category: string; amount: number | '' }) => post<{ success: boolean }>('/revenue-analytics/report/cell', data),
 };
 
@@ -541,6 +415,41 @@ export interface RevenueReport {
     totalExpenses: number;
     netIncome: number;
     systemValues: Record<string, number>;
+}
+
+export interface LiveRevenueRow {
+    id: string;
+    invoiceId: string;
+    patientName: string;
+    source: string;
+    subtotalAmount: number;
+    discountAmount: number;
+    totalAmount: number;
+    paidAmount: number;
+    outstandingAmount: number;
+    paymentMethod?: string;
+    status?: string;
+    date: string;
+}
+
+export interface LiveRevenueSummary {
+    transactionCount: number;
+    totalRevenue: number;
+    totalDiscount: number;
+    totalPaid: number;
+    totalOutstanding: number;
+    bySource: Record<string, number>;
+    byMethod: Record<string, number>;
+}
+
+export interface LiveRevenueReport {
+    summary: LiveRevenueSummary;
+    rows: LiveRevenueRow[];
+}
+
+export interface DiscountReport {
+    summary: LiveRevenueSummary;
+    rows: LiveRevenueRow[];
 }
 
 export interface Vitals {

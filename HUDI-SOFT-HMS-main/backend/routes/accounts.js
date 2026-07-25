@@ -46,16 +46,16 @@ router.get('/', async (req, res) => {
 router.get('/summary', async (req, res) => {
     try {
         const today = new Date().toISOString().split('T')[0];
-        const month = today.substring(0, 7) + '%';
+        const monthPrefix = today.substring(0, 7); // e.g. "2026-06"
 
         const stats = await db.prepare(`
             SELECT 
                 SUM(CASE WHEN type = 'income' THEN amount ELSE 0 END) as "totalIncome",
                 SUM(CASE WHEN type = 'expense' THEN amount ELSE 0 END) as "totalExpense",
-                SUM(CASE WHEN type = 'income' AND date = ? THEN amount ELSE 0 END) as "incomeToday",
-                SUM(CASE WHEN type = 'income' AND TO_CHAR(date, 'YYYY-MM') LIKE ? THEN amount ELSE 0 END) as "incomeMonth"
+                SUM(CASE WHEN type = 'income' AND date::text = ? THEN amount ELSE 0 END) as "incomeToday",
+                SUM(CASE WHEN type = 'income' AND LEFT(date::text, 7) = ? THEN amount ELSE 0 END) as "incomeMonth"
             FROM account_entries
-        `).get(today, month);
+        `).get(today, monthPrefix);
 
         // Get outstanding invoices total
         const outstanding = await db.prepare("SELECT SUM(total - paid_amount) as total FROM invoices WHERE status != 'paid'").get();
@@ -70,7 +70,7 @@ router.get('/summary', async (req, res) => {
         const todayDeptBreakdown = await db.prepare(`
             SELECT department, SUM(amount) as amount 
             FROM account_entries 
-            WHERE type = 'income' AND date = ?
+            WHERE type = 'income' AND date::text = ?
             GROUP BY department
         `).all(today);
 
@@ -104,18 +104,17 @@ router.get('/summary', async (req, res) => {
 // GET Cash Flow Data (last 6 months)
 router.get('/analytics/cashflow', async (req, res) => {
     try {
-        // PostgreSQL equivalent for strftime: TO_CHAR(date::date, 'YYYY-MM')
         const data = await db.prepare(`
             SELECT 
-                TO_CHAR(date::date, 'YYYY-MM') as month,
+                LEFT(date::text, 7) as month,
                 SUM(CASE WHEN type = 'income' THEN amount ELSE 0 END) as income,
                 SUM(CASE WHEN type = 'expense' THEN amount ELSE 0 END) as expense
             FROM account_entries
-            GROUP BY month
-            ORDER BY month DESC
-            LIMIT 6
+            WHERE date::text >= TO_CHAR(CURRENT_DATE - INTERVAL '6 months', 'YYYY-MM-DD')
+            GROUP BY LEFT(date::text, 7)
+            ORDER BY LEFT(date::text, 7) ASC
         `).all();
-        res.json(data.reverse());
+        res.json(data);
     } catch (err) {
         res.status(500).json({ error: err.message });
     }

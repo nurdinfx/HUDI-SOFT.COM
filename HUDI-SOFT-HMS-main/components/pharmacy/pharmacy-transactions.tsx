@@ -87,9 +87,11 @@ export function PharmacyTransactions({ medicines, onRefresh }: Props) {
   const [exchangeCart, setExchangeCart] = useState<any[]>([])
   const [isExchangeMode, setIsExchangeMode] = useState(false)
   const [exchangeSearch, setExchangeSearch] = useState("")
+  const [returnPaymentMethod, setReturnPaymentMethod] = useState("ZAAD")
   
   // Advanced POS State
   const [activeCategory, setActiveCategory] = useState<'All' | 'Pharmacy' | 'Labs' | 'Services'>('Pharmacy')
+  const [posSearchTerm, setPosSearchTerm] = useState("")
   const [isHistoryOpen, setIsHistoryOpen] = useState(false)
   const [discount, setDiscount] = useState(0)
   const [insuranceInfo, setInsuranceInfo] = useState({ company: '', policyNumber: '', claimAmount: 0 })
@@ -129,6 +131,53 @@ export function PharmacyTransactions({ medicines, onRefresh }: Props) {
     fetchEmployees()
     loadSettings()
   }, [])
+
+  const resetReturnModalState = () => {
+    setSelectedTx(null)
+    setReturnItems([])
+    setExchangeCart([])
+    setIsExchangeMode(false)
+    setExchangeSearch("")
+    setReturnPaymentMethod("ZAAD")
+  }
+
+  const handleReturnDialogChange = (open: boolean) => {
+    setIsReturnModalOpen(open)
+    if (!open && !loading) {
+      resetReturnModalState()
+    }
+  }
+
+  const openReturnModal = async (tx: any) => {
+    try {
+      setSelectedTx(tx)
+      setExchangeCart([])
+      setIsExchangeMode(false)
+      setExchangeSearch("")
+      setReturnPaymentMethod(tx.payment_method || "ZAAD")
+
+      const items = await pharmacyApi.getTransactionItems(tx.id)
+      const normalizedItems = items
+        .map(i => ({
+          ...i,
+          quantity: Number(i.remaining_quantity ?? i.quantity ?? 0),
+          returnQty: 0
+        }))
+        .filter(i => i.quantity > 0)
+
+      if (normalizedItems.length === 0) {
+        toast.info("All items in this transaction were already returned or cancelled.")
+        resetReturnModalState()
+        return
+      }
+
+      setReturnItems(normalizedItems)
+      setIsReturnModalOpen(true)
+    } catch (e: any) {
+      resetReturnModalState()
+      toast.error(e.message || "Failed to load transaction items")
+    }
+  }
 
   const fetchEmployees = async () => {
     try {
@@ -238,16 +287,18 @@ export function PharmacyTransactions({ medicines, onRefresh }: Props) {
     })
   }, [transactions, search, statusFilter, activePaymentMethod, dateFilter])
 
-  const cartTotal = useMemo(() => cart.reduce((sum, item) => sum + item.total, 0), [cart])
+  const cartTotal = useMemo(() => cart.reduce((sum, item) => sum + (Number(item.unitPrice) * Number(item.quantity)), 0), [cart])
 
   const addToCart = (med: Medicine) => {
     const existing = cart.find(c => c.medicineId === med.id && c.type === 'medicine')
+    const price = Number(med.sellingPrice) || 0
     if (existing) {
       if (existing.quantity >= med.quantity) {
         toast.error("Insufficient stock")
         return
       }
-      setCart(cart.map(c => (c.medicineId === med.id && c.type === 'medicine') ? { ...c, quantity: c.quantity + 1, total: (c.quantity + 1) * c.unitPrice } : c))
+      const newQty = existing.quantity + 1
+      setCart(cart.map(c => (c.medicineId === med.id && c.type === 'medicine') ? { ...c, quantity: newQty, total: Number((newQty * Number(c.unitPrice)).toFixed(2)) } : c))
     } else {
       if (med.quantity < 1) {
         toast.error("Out of stock")
@@ -258,8 +309,8 @@ export function PharmacyTransactions({ medicines, onRefresh }: Props) {
         medicineId: med.id, 
         name: med.name, 
         quantity: 1, 
-        unitPrice: med.sellingPrice, 
-        total: med.sellingPrice,
+        unitPrice: price, 
+        total: price,
         type: 'medicine'
       }])
     }
@@ -273,14 +324,28 @@ export function PharmacyTransactions({ medicines, onRefresh }: Props) {
     const totalAfterDiscount = Math.max(0, cartTotal - discount)
     const appliedCreditValue = useCredit ? Math.min(patientCredit, totalAfterDiscount) : 0
     const netPayable = totalAfterDiscount - appliedCreditValue
-    const paid = parseFloat(amountPaid) || 0
+    const normalizedMethod = paymentMethod.toLowerCase()
+    const paid = normalizedMethod === 'credit' || normalizedMethod === 'employee_credit'
+      ? (parseFloat(amountPaid) || 0)
+      : (amountPaid === "" ? netPayable : (parseFloat(amountPaid) || 0))
     const status = paid >= netPayable ? 'Paid' : (paid > 0 ? 'Partial' : 'Credit')
     
     setLoading(true)
     try {
+      const creditCustomer = creditCustomers.find(c => c.id === selectedCreditCustomerId)
+      const employeeData = employees.find(e => e.id === selectedEmployeeId)
+
+      const resolvedPatientName = selectedPatientId
+        ? (patients.find(p => p.id === selectedPatientId)?.firstName + ' ' + patients.find(p => p.id === selectedPatientId)?.lastName)
+        : paymentMethod === 'CREDIT' && creditCustomer
+          ? creditCustomer.full_name
+          : paymentMethod === 'EMPLOYEE_CREDIT' && employeeData
+            ? employeeData.full_name
+            : (walkInName || 'Walk-in Customer')
+
       const payload = {
         patientId: selectedPatientId,
-        patientName: selectedPatientId ? patients.find(p => p.id === selectedPatientId)?.firstName + ' ' + patients.find(p => p.id === selectedPatientId)?.lastName : (walkInName || 'Walk-in Customer'),
+        patientName: resolvedPatientName,
         items: cart.map(c => ({
           id: c.id,
           medicineId: c.medicineId,
@@ -296,9 +361,9 @@ export function PharmacyTransactions({ medicines, onRefresh }: Props) {
         totalAmount: cartTotal,
         paidAmount: paid,
         appliedCredit: appliedCreditValue,
-        paymentMethod,
+        paymentMethod: normalizedMethod,
         discount,
-        creditCustomerId: paymentMethod === 'employee_credit' ? selectedEmployeeId : selectedCreditCustomerId,
+        creditCustomerId: normalizedMethod === 'employee_credit' ? selectedEmployeeId : (normalizedMethod === 'credit' ? selectedCreditCustomerId : null),
         status
       }
       
@@ -307,8 +372,12 @@ export function PharmacyTransactions({ medicines, onRefresh }: Props) {
       setIsSaleModalOpen(false)
       setCart([])
       setAmountPaid("")
+      setDiscount(0)
       setUseCredit(false)
+      setSelectedCreditCustomerId(null)
+      setSelectedEmployeeId(null)
       fetchData()
+      fetchCreditCustomers()
       onRefresh()
     } catch (e: any) {
       toast.error(e.message || "Failed to process sale")
@@ -318,6 +387,7 @@ export function PharmacyTransactions({ medicines, onRefresh }: Props) {
   }
 
   const handleProcessReturn = async () => {
+    if (!selectedTx) return
     const itemsToReturn = returnItems.filter(i => i.returnQty > 0)
     if (itemsToReturn.length === 0 && exchangeCart.length === 0) return
     
@@ -336,12 +406,11 @@ export function PharmacyTransactions({ medicines, onRefresh }: Props) {
           unitPrice: c.unitPrice,
           totalPrice: c.total
         })),
-        paymentMethod: paymentMethod
+        paymentMethod: returnPaymentMethod
       })
       toast.success("Return/Exchange processed successfully")
       setIsReturnModalOpen(false)
-      setExchangeCart([])
-      setIsExchangeMode(false)
+      resetReturnModalState()
       fetchData()
       onRefresh()
     } catch (e: any) {
@@ -350,6 +419,23 @@ export function PharmacyTransactions({ medicines, onRefresh }: Props) {
       setLoading(false)
     }
   }
+
+  const handleClearTransactions = async () => {
+    if (!window.confirm("This will permanently delete ALL pharmacy transactions. Medicines and all other data stay untouched. Continue?")) return
+    setLoading(true)
+    try {
+      await pharmacyApi.adminClearTransactions()
+      toast.success("All transactions cleared.")
+      fetchData()
+      fetchCreditCustomers()
+      onRefresh()
+    } catch (e: any) {
+      toast.error(e.message || "Failed to clear transactions")
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const handleExportCSV = () => {
     if (filteredTransactions.length === 0) return toast.info("No data to export")
     const headers = ["Invoice ID", "Patient", "Medicines", "Total", "Paid", "Due", "Method", "Status", "Date"]
@@ -466,17 +552,33 @@ export function PharmacyTransactions({ medicines, onRefresh }: Props) {
     const totalPaid = transactionsToSum.reduce((sum, t) => sum + (parseFloat(t.paid_amount) || 0), 0)
     const txCount = transactionsToSum.length
     const totalDue = transactionsToSum.reduce((sum, t) => sum + (parseFloat(t.credit_amount) || 0), 0)
+    const totalDiscount = transactionsToSum.reduce((sum, t) => sum + (parseFloat(t.discount_amount) || 0), 0)
     
     return {
       ...revenueStats,
       totalSales: totalSales,
       totalPaid: totalPaid,
       transactionCount: txCount,
-      outstandingCredit: totalDue
+      outstandingCredit: totalDue,
+      totalDiscount
     }
   }, [revenueStats, filteredTransactions, activePaymentMethod, statusFilter, dateFilter, search])
 
   const netRevenue = (statsToDisplay?.totalPaid || statsToDisplay?.totalSales || 0) - (statsToDisplay?.totalReturns || 0)
+  const totalReturnValue = useMemo(
+    () => returnItems.reduce((sum, item) => sum + ((Number(item.returnQty) || 0) * (Number(item.unit_price) || 0)), 0),
+    [returnItems]
+  )
+  const totalExchangeValue = useMemo(
+    () => exchangeCart.reduce((sum, item) => sum + (Number(item.total) || 0), 0),
+    [exchangeCart]
+  )
+  const netReturnDifference = useMemo(
+    () => totalReturnValue - totalExchangeValue,
+    [totalReturnValue, totalExchangeValue]
+  )
+  const absoluteNetReturnDifference = Math.abs(netReturnDifference)
+  const needsDifferencePaymentMethod = exchangeCart.length > 0 && absoluteNetReturnDifference > 0
 
   return (
     <div className="space-y-6">
@@ -585,6 +687,10 @@ export function PharmacyTransactions({ medicines, onRefresh }: Props) {
                 <Download className="size-4 mr-2" />
                 Export Ledger
               </Button>
+              <Button variant="outline" className="h-10 rounded-xl border-rose-200 text-rose-600 hover:bg-rose-50" onClick={handleClearTransactions}>
+                <Trash2 className="size-4 mr-2" />
+                Clear All
+              </Button>
             </div>
           </div>
 
@@ -595,7 +701,9 @@ export function PharmacyTransactions({ medicines, onRefresh }: Props) {
                   <TableHead className="pl-6">Invoice ID</TableHead>
                   <TableHead>Customer / Patient</TableHead>
                   <TableHead>Medicines</TableHead>
-                  <TableHead>Total Amount</TableHead>
+                  <TableHead className="text-right">Subtotal</TableHead>
+                  <TableHead className="text-right">Discount</TableHead>
+                  <TableHead className="text-right">Total Amount</TableHead>
                   <TableHead>Paid</TableHead>
                   <TableHead>Due</TableHead>
                   <TableHead>Method</TableHead>
@@ -617,7 +725,9 @@ export function PharmacyTransactions({ medicines, onRefresh }: Props) {
                       </div>
                     </TableCell>
                     <TableCell className="text-xs text-slate-600 max-w-[200px] truncate" title={tx.items_summary}>{tx.items_summary}</TableCell>
-                    <TableCell className="font-bold text-sm text-slate-900">${Number(tx.total_amount || 0).toLocaleString()}</TableCell>
+                    <TableCell className="text-right font-medium text-sm text-slate-700">${Number(tx.subtotal_amount || tx.total_amount || 0).toLocaleString()}</TableCell>
+                    <TableCell className="text-right font-bold text-sm text-rose-600">{Number(tx.discount_amount || 0) > 0 ? `$${Number(tx.discount_amount || 0).toLocaleString()}` : '—'}</TableCell>
+                    <TableCell className="text-right font-bold text-sm text-slate-900">${Number(tx.total_amount || 0).toLocaleString()}</TableCell>
                     <TableCell className="text-emerald-600 font-medium text-xs">${Number(tx.paid_amount || 0).toLocaleString()}</TableCell>
                     <TableCell className="text-rose-600 font-medium text-xs">${Number(tx.credit_amount || 0).toLocaleString()}</TableCell>
                     <TableCell>
@@ -633,12 +743,7 @@ export function PharmacyTransactions({ medicines, onRefresh }: Props) {
                           variant="ghost" 
                           size="icon" 
                           className="size-8 rounded-lg"
-                          onClick={async () => {
-                             setSelectedTx(tx);
-                             const items = await pharmacyApi.getTransactionItems(tx.id);
-                             setReturnItems(items.map(i => ({ ...i, returnQty: 0 })));
-                             setIsReturnModalOpen(true);
-                          }}
+                          onClick={() => openReturnModal(tx)}
                         >
                           <RotateCcw className="size-3.5 text-amber-600" />
                         </Button>
@@ -661,183 +766,217 @@ export function PharmacyTransactions({ medicines, onRefresh }: Props) {
       </Card>
 
       {/* RETURN MODAL */}
-      <Dialog open={isReturnModalOpen} onOpenChange={setIsReturnModalOpen}>
-        <DialogContent className="max-w-2xl w-[95vw] sm:w-full p-0 overflow-hidden rounded-3xl h-[85vh] sm:h-auto flex flex-col">
-          <DialogHeader className="p-4 sm:p-8 bg-amber-600 text-white shrink-0">
+      <Dialog open={isReturnModalOpen} onOpenChange={handleReturnDialogChange}>
+        <DialogContent className="w-[calc(100vw-0.75rem)] max-w-[calc(100vw-0.75rem)] sm:!max-w-[96vw] lg:!max-w-[94vw] xl:!max-w-[1600px] p-0 overflow-hidden rounded-3xl h-[96vh] max-h-[96vh] flex flex-col">
+          <DialogHeader className="p-4 sm:p-6 lg:p-8 bg-amber-600 text-white shrink-0">
             <DialogTitle className="text-2xl font-black italic tracking-tighter uppercase">Process Item Return</DialogTitle>
             <DialogDescription className="text-amber-100 font-medium">
               Return stock to inventory and credit patient balance (Invoice: {selectedTx?.invoice_id})
             </DialogDescription>
           </DialogHeader>
-          <ScrollArea className="flex-1">
-            <div className="p-4 sm:p-8 space-y-6">
-            <div className="border rounded-2xl overflow-hidden">
-              <Table>
-                <TableHeader className="bg-slate-50">
-                  <TableRow>
-                    <TableHead className="text-[10px] font-black uppercase">Medicine</TableHead>
-                    <TableHead className="text-[10px] font-black uppercase text-center">Purchased</TableHead>
-                    <TableHead className="text-[10px] font-black uppercase text-right">Return Qty</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {returnItems.map((item, idx) => (
-                    <TableRow key={item.id}>
-                      <TableCell className="py-4">
-                        <p className="font-bold text-sm">{item.medicine_name}</p>
-                        <p className="text-[10px] text-slate-400">${item.unit_price} / unit</p>
-                      </TableCell>
-                      <TableCell className="text-center font-bold">{item.quantity}</TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          <Input 
-                            type="number" 
-                            className="w-20 h-9 rounded-lg text-center font-bold"
-                            max={item.quantity}
-                            min={0}
-                            value={item.returnQty}
-                            onChange={e => {
-                              const val = Math.min(item.quantity, Math.max(0, parseInt(e.target.value) || 0))
-                              setReturnItems(returnItems.map((it, i) => i === idx ? { ...it, returnQty: val } : it))
-                            }}
-                          />
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-            
-            <div className="flex flex-col gap-4">
-              <div className="flex items-center justify-between">
-                <p className="text-[10px] font-black uppercase text-slate-400">Inventory Sourcing (Exchange Items)</p>
-                <Button 
-                  variant="outline" 
-                   size="sm"
-                  className={`h-7 rounded-lg text-[9px] font-black uppercase transition-all ${isExchangeMode ? 'bg-amber-600 text-white border-amber-600' : 'text-slate-500'}`}
-                  onClick={() => setIsExchangeMode(!isExchangeMode)}
-                >
-                  {isExchangeMode ? "Close Exchange Hub" : "+ Add Exchange Items"}
-                </Button>
-              </div>
-
-              {isExchangeMode && (
-                <div className="space-y-4 animate-in slide-in-from-top duration-300">
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-slate-400" />
-                    <Input 
-                      placeholder="Search for exchange replacement..." 
-                      className="pl-10 h-10 rounded-xl border-slate-200"
-                      value={exchangeSearch}
-                      onChange={e => setExchangeSearch(e.target.value)}
-                    />
+          <ScrollArea className="flex-1 min-h-0">
+            <div className="p-4 pb-6 sm:p-6 lg:p-8">
+              <div className="grid gap-6 lg:grid-cols-[minmax(0,1.65fr)_minmax(360px,0.95fr)] 2xl:grid-cols-[minmax(0,1.8fr)_minmax(420px,0.9fr)]">
+                <div className="space-y-4 min-w-0">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-black uppercase tracking-wider text-slate-500">Returned Items</p>
+                      <p className="text-sm text-slate-400">Use the quantity field for each item you want to return.</p>
+                    </div>
+                    <Badge variant="outline" className="rounded-full px-3 py-1 text-[11px] font-bold">
+                      {returnItems.length} item{returnItems.length === 1 ? "" : "s"}
+                    </Badge>
                   </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-[150px] overflow-y-auto pr-2 custom-scrollbar">
-                    {medicines.filter(m => m.name?.toLowerCase().includes(exchangeSearch.toLowerCase())).map(m => (
-                      <button 
-                        key={m.id} 
-                        className="p-2.5 rounded-xl border border-slate-100 hover:border-amber-200 hover:bg-amber-50/30 text-left transition-all group"
-                        onClick={() => {
-                          const existing = exchangeCart.find(c => c.medicineId === m.id)
-                          if (existing) {
-                            if (existing.quantity >= m.quantity) return toast.error("Stock limit")
-                             setExchangeCart(exchangeCart.map(c => c.medicineId === m.id ? { ...c, quantity: c.quantity + 1, total: (c.quantity + 1) * c.unitPrice } : c))
-                          } else {
-                            if (m.quantity < 1) return toast.error("Out of stock")
-                            setExchangeCart([...exchangeCart, { medicineId: m.id, name: m.name, quantity: 1, unitPrice: m.sellingPrice, total: m.sellingPrice }])
-                          }
-                        }}
-                      >
-                         <div className="flex justify-between items-start gap-1">
-                           <span className="text-[10px] font-black uppercase truncate">{m.name}</span>
-                           <span className="text-[9px] font-bold text-amber-600">${m.sellingPrice}</span>
-                         </div>
-                         <p className="text-[8px] text-slate-400">{m.quantity} in stock</p>
-                      </button>
-                    ))}
+
+                  <div className="border rounded-2xl overflow-hidden bg-white">
+                    <div className="max-h-[58vh] overflow-auto">
+                      <Table>
+                        <TableHeader className="bg-slate-50 sticky top-0 z-10">
+                          <TableRow>
+                            <TableHead className="text-[11px] font-black uppercase min-w-[220px]">Medicine</TableHead>
+                            <TableHead className="text-[11px] font-black uppercase text-center w-[110px]">Purchased</TableHead>
+                            <TableHead className="text-[11px] font-black uppercase text-right w-[150px]">Return Qty</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {returnItems.map((item, idx) => (
+                            <TableRow key={item.id} className="align-top">
+                              <TableCell className="py-4 min-w-0">
+                                <div className="min-w-0">
+                                  <p className="font-bold text-sm break-words leading-5">{item.medicine_name}</p>
+                                  <p className="text-[11px] text-slate-400 mt-1">${item.unit_price} / unit</p>
+                                </div>
+                              </TableCell>
+                              <TableCell className="text-center font-bold text-sm">{item.quantity}</TableCell>
+                              <TableCell className="text-right">
+                                <div className="flex items-center justify-end">
+                                  <Input 
+                                    type="number" 
+                                    className="w-24 h-10 rounded-lg text-center font-bold"
+                                    max={item.quantity}
+                                    min={0}
+                                    value={item.returnQty}
+                                    onChange={e => {
+                                      const val = Math.min(item.quantity, Math.max(0, parseInt(e.target.value) || 0))
+                                      setReturnItems(returnItems.map((it, i) => i === idx ? { ...it, returnQty: val } : it))
+                                    }}
+                                  />
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
                   </div>
                 </div>
-              )}
 
-              {exchangeCart.length > 0 && (
-                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-2">
-                  <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Current Exchange Cart</p>
-                  <div className="space-y-2">
-                    {exchangeCart.map((item, idx) => (
-                      <div key={idx} className="flex justify-between items-center text-xs">
-                         <div className="flex items-center gap-2">
-                            <button onClick={() => setExchangeCart(exchangeCart.filter((_, i) => i !== idx))}><X className="size-3 text-rose-400"/></button>
-                            <span className="font-bold">{item.name}</span>
-                            <span className="text-slate-400 ml-1">x{item.quantity}</span>
-                         </div>
-                         <span className="font-black">${item.total.toLocaleString()}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-            
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="bg-amber-50 p-4 rounded-xl border border-amber-100">
-                 <p className="text-[8px] font-black text-amber-900 uppercase">Total Return Value</p>
-                 <p className="text-lg font-black text-amber-600">
-                   ${Number(returnItems.reduce((sum, i) => sum + (i.returnQty * i.unit_price), 0)).toLocaleString()}
-                 </p>
-              </div>
-              <div className="bg-indigo-50 p-4 rounded-xl border border-indigo-100">
-                 <p className="text-[8px] font-black text-indigo-900 uppercase">New Products Value</p>
-                 <p className="text-lg font-black text-indigo-600">
-                   ${Number(exchangeCart.reduce((sum, i) => sum + i.total, 0)).toLocaleString()}
-                 </p>
-              </div>
-            </div>
-
-            <div className={`p-4 rounded-xl border flex justify-between items-center ${
-              (returnItems.reduce((sum, i) => sum + (i.returnQty * i.unit_price), 0) - exchangeCart.reduce((sum, i) => sum + i.total, 0)) >= 0
-              ? 'bg-emerald-50 border-emerald-100' : 'bg-rose-50 border-rose-100'
-            }`}>
-               <span className="text-[10px] font-black uppercase tracking-wider">
-                 {(returnItems.reduce((sum, i) => sum + (i.returnQty * i.unit_price), 0) - exchangeCart.reduce((sum, i) => sum + i.total, 0)) >= 0 
-                 ? "Net Credit to Patient" : "Net Due from Patient"}
-               </span>
-               <span className={`text-xl font-black ${
-                 (returnItems.reduce((sum, i) => sum + (i.returnQty * i.unit_price), 0) - exchangeCart.reduce((sum, i) => sum + i.total, 0)) >= 0
-                 ? 'text-emerald-600' : 'text-rose-600'
-               }`}>
-                 ${Math.abs(returnItems.reduce((sum, i) => sum + (i.returnQty * i.unit_price), 0) - exchangeCart.reduce((sum, i) => sum + i.total, 0)).toLocaleString()}
-               </span>
-            </div>
-
-            {exchangeCart.length > 0 && Math.abs(returnItems.reduce((sum, i) => sum + (i.returnQty * i.unit_price), 0) - exchangeCart.reduce((sum, i) => sum + i.total, 0)) > 0 && (
-              <div className="space-y-2">
-                <p className="text-[10px] font-black uppercase text-slate-400">Payment method for difference</p>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                  {['ZAAD', 'SAHAL', 'EDAHAB', 'MYCASH'].map(m => (
-                    <button 
-                      key={m} 
-                      className={`h-8 rounded-lg border text-[8px] font-black uppercase transition-all ${paymentMethod === m ? 'bg-slate-900 text-white border-slate-900 shadow-lg' : 'bg-white text-slate-500 border-slate-100'}`}
-                      onClick={() => setPaymentMethod(m)}
+                <div className="space-y-4 min-w-0">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-xs font-black uppercase tracking-wider text-slate-500">Exchange Items</p>
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      className={`h-9 rounded-lg px-3 text-[10px] font-black uppercase transition-all whitespace-nowrap ${isExchangeMode ? 'bg-amber-600 text-white border-amber-600' : 'text-slate-500'}`}
+                      onClick={() => setIsExchangeMode(!isExchangeMode)}
                     >
-                      {m}
-                    </button>
-                  ))}
+                      {isExchangeMode ? "Close Exchange Hub" : "+ Add Exchange Items"}
+                    </Button>
+                  </div>
+
+                  {isExchangeMode && (
+                    <div className="space-y-4 animate-in slide-in-from-top duration-300 rounded-2xl border border-slate-100 bg-slate-50/70 p-4">
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-slate-400" />
+                        <Input 
+                          placeholder="Search for exchange replacement..." 
+                          className="pl-10 h-10 rounded-xl border-slate-200 bg-white"
+                          value={exchangeSearch}
+                          onChange={e => setExchangeSearch(e.target.value)}
+                        />
+                      </div>
+                      <div className="grid grid-cols-1 gap-2 max-h-[34vh] overflow-y-auto pr-1 custom-scrollbar">
+                        {medicines.filter(m => m.name?.toLowerCase().includes(exchangeSearch.toLowerCase())).map(m => (
+                          <button 
+                            key={m.id} 
+                            className="p-3 rounded-xl border border-slate-100 bg-white hover:border-amber-200 hover:bg-amber-50/30 text-left transition-all group"
+                            onClick={() => {
+                              const existing = exchangeCart.find(c => c.medicineId === m.id)
+                              if (existing) {
+                                if (existing.quantity >= m.quantity) return toast.error("Stock limit")
+                                setExchangeCart(exchangeCart.map(c => c.medicineId === m.id ? { ...c, quantity: c.quantity + 1, total: (c.quantity + 1) * c.unitPrice } : c))
+                              } else {
+                                if (m.quantity < 1) return toast.error("Out of stock")
+                                setExchangeCart([...exchangeCart, { medicineId: m.id, name: m.name, quantity: 1, unitPrice: m.sellingPrice, total: m.sellingPrice }])
+                              }
+                            }}
+                          >
+                            <div className="flex justify-between items-start gap-3">
+                              <span className="text-xs font-black uppercase break-words leading-5">{m.name}</span>
+                              <span className="text-[11px] font-bold text-amber-600 whitespace-nowrap">${m.sellingPrice}</span>
+                            </div>
+                            <p className="text-[10px] text-slate-400 mt-1">{m.quantity} in stock</p>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {exchangeCart.length > 0 && (
+                    <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-3">
+                      <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Current Exchange Cart</p>
+                      <div className="space-y-2 max-h-[24vh] overflow-auto pr-1">
+                        {exchangeCart.map((item, idx) => (
+                          <div key={idx} className="flex justify-between items-start gap-3 text-sm">
+                            <div className="flex items-start gap-2 min-w-0">
+                              <button onClick={() => setExchangeCart(exchangeCart.filter((_, i) => i !== idx))} className="mt-0.5 shrink-0">
+                                <X className="size-3 text-rose-400"/>
+                              </button>
+                              <div className="min-w-0">
+                                <span className="font-bold break-words">{item.name}</span>
+                                <span className="text-slate-400 ml-1">x{item.quantity}</span>
+                              </div>
+                            </div>
+                            <span className="font-black whitespace-nowrap">${item.total.toLocaleString()}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-1 gap-4">
+                    <div className="bg-amber-50 p-4 rounded-xl border border-amber-100">
+                      <p className="text-[10px] font-black text-amber-900 uppercase">Total Return Value</p>
+                      <p className="text-xl font-black text-amber-600 mt-1">
+                        ${Number(totalReturnValue).toLocaleString()}
+                      </p>
+                    </div>
+                    <div className="bg-indigo-50 p-4 rounded-xl border border-indigo-100">
+                      <p className="text-[10px] font-black text-indigo-900 uppercase">New Products Value</p>
+                      <p className="text-xl font-black text-indigo-600 mt-1">
+                        ${Number(totalExchangeValue).toLocaleString()}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className={`p-4 rounded-xl border space-y-2 ${
+                    netReturnDifference >= 0
+                    ? 'bg-emerald-50 border-emerald-100' : 'bg-rose-50 border-rose-100'
+                  }`}>
+                    <span className="block text-[10px] font-black uppercase tracking-wider">
+                      {netReturnDifference >= 0 
+                      ? "Net Credit to Patient" : "Net Due from Patient"}
+                    </span>
+                    <span className={`block text-2xl font-black break-words ${
+                      netReturnDifference >= 0
+                      ? 'text-emerald-600' : 'text-rose-600'
+                    }`}>
+                      ${absoluteNetReturnDifference.toLocaleString()}
+                    </span>
+                  </div>
+
+                  {needsDifferencePaymentMethod && (
+                    <div className="space-y-2">
+                      <p className="text-[10px] font-black uppercase text-slate-400">Payment method for difference</p>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-2 gap-2">
+                        {['ZAAD', 'SAHAL', 'EDAHAB', 'MYCASH'].map(m => (
+                          <button 
+                            key={m} 
+                            className={`h-9 rounded-lg border px-2 text-[10px] font-black uppercase transition-all ${returnPaymentMethod === m ? 'bg-slate-900 text-white border-slate-900 shadow-lg' : 'bg-white text-slate-500 border-slate-100'}`}
+                            onClick={() => setReturnPaymentMethod(m)}
+                          >
+                            {m}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
-            )}
-
-            <Button 
-              className={`w-full h-12 rounded-xl text-white font-black uppercase tracking-widest shadow-xl transition-all ${
-                exchangeCart.length > 0 ? 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-200' : 'bg-amber-600 hover:bg-amber-700 shadow-amber-200'
-              }`}
-              onClick={handleProcessReturn}
-              disabled={loading || (returnItems.every(i => i.returnQty === 0) && exchangeCart.length === 0)}
-            >
-              {loading ? "PROCESSING..." : (exchangeCart.length > 0 ? "FINALIZE EXCHANGE" : "FINALIZE RETURN & RESTOCK")}
-            </Button>
-           </div>
-         </ScrollArea>
+            </div>
+          </ScrollArea>
+          <DialogFooter className="shrink-0 border-t bg-white px-4 py-4 sm:px-6 lg:px-8">
+            <div className="flex w-full flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <Button
+                type="button"
+                variant="outline"
+                className="h-11 rounded-xl"
+                onClick={() => handleReturnDialogChange(false)}
+                disabled={loading}
+              >
+                Cancel Transaction
+              </Button>
+              <Button 
+                className={`h-11 w-full rounded-xl text-white font-black uppercase tracking-widest shadow-xl transition-all sm:w-auto ${
+                  exchangeCart.length > 0 ? 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-200' : 'bg-amber-600 hover:bg-amber-700 shadow-amber-200'
+                }`}
+                onClick={handleProcessReturn}
+                disabled={loading || (returnItems.every(i => i.returnQty === 0) && exchangeCart.length === 0)}
+              >
+                {loading ? "PROCESSING..." : (exchangeCart.length > 0 ? "FINALIZE EXCHANGE" : "FINALIZE RETURN & RESTOCK")}
+              </Button>
+            </div>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
@@ -898,7 +1037,7 @@ export function PharmacyTransactions({ medicines, onRefresh }: Props) {
                     {/* Note: Ideally we'd have the items here. For the print view we might fetch them when Print is clicked */}
                     <div className="px-4 flex justify-between items-center">
                        <p className="text-xs font-bold text-slate-800">{invoiceToPrint?.items_summary || '... pharmaceutical items as per transaction ...'}</p>
-                       <p className="text-xl font-black tracking-tighter">${Number(invoiceToPrint?.total_amount || 0).toLocaleString()}</p>
+                       <p className="text-xl font-black tracking-tighter">${Number(invoiceToPrint?.subtotal_amount || invoiceToPrint?.total_amount || 0).toLocaleString()}</p>
                     </div>
                   </div>
                 </div>
@@ -907,6 +1046,10 @@ export function PharmacyTransactions({ medicines, onRefresh }: Props) {
              {/* Totals */}
              <div className="flex justify-between items-end bg-slate-900 text-white rounded-3xl p-8 shadow-2xl shadow-slate-200">
                <div className="flex gap-12">
+                 <div className="space-y-1">
+                   <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Discount</p>
+                   <p className="text-lg font-black text-rose-400">${Number(invoiceToPrint?.discount_amount || 0).toLocaleString()}</p>
+                 </div>
                  <div className="space-y-1">
                    <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Amount Paid</p>
                    <p className="text-lg font-black">${Number(invoiceToPrint?.paid_amount || 0).toLocaleString()}</p>
@@ -981,9 +1124,11 @@ export function PharmacyTransactions({ medicines, onRefresh }: Props) {
                     invoiceItems.map((item, i) => (
                       <tr key={i}>
                         <td style={{ wordBreak: 'break-word', fontWeight: 'bold' }}>{item.medicine_name}</td>
-                        <td style={{ textAlign: 'center' }}>{item.quantity}</td>
+                        <td style={{ textAlign: 'center' }}>{Number(item.remaining_quantity ?? item.quantity ?? 0)}</td>
                         <td style={{ textAlign: 'center' }}>{Number(item.unit_price).toFixed(1)}</td>
-                        <td style={{ textAlign: 'right' }}>{Number(item.total_price).toFixed(1)}</td>
+                        <td style={{ textAlign: 'right' }}>
+                          {Number((Number(item.remaining_quantity ?? item.quantity ?? 0) * Number(item.unit_price || 0))).toFixed(1)}
+                        </td>
                       </tr>
                     ))
                   ) : (
@@ -1001,9 +1146,15 @@ export function PharmacyTransactions({ medicines, onRefresh }: Props) {
 
               <div className="thermal-totals">
                 <div className="thermal-row">
-                  <span>Vat @ 5 %</span>
-                  <span>0.0</span>
+                  <span>Subtotal</span>
+                  <span>{Number(invoiceToPrint?.subtotal_amount || invoiceToPrint?.total_amount || 0).toFixed(1)}</span>
                 </div>
+                {Number(invoiceToPrint?.discount_amount || 0) > 0 && (
+                  <div className="thermal-row">
+                    <span>Discount</span>
+                    <span>-{Number(invoiceToPrint?.discount_amount || 0).toFixed(1)}</span>
+                  </div>
+                )}
                 <div className="thermal-row">
                   <span>Paid Amount</span>
                   <span>{Number(invoiceToPrint?.paid_amount || 0).toFixed(1)}</span>
@@ -1012,7 +1163,7 @@ export function PharmacyTransactions({ medicines, onRefresh }: Props) {
                 <div className="thermal-separator"></div>
                 
                 <div className="thermal-row" style={{ fontSize: '13px', fontWeight: '800' }}>
-                  <span>Total : {Number((invoiceToPrint?.total_amount || 0) - (invoiceToPrint?.discount || 0)).toFixed(1)}</span>
+                  <span>Total : {Number(invoiceToPrint?.total_amount || 0).toFixed(1)}</span>
                   <span></span>
                 </div>
                 <div className="thermal-row" style={{ fontSize: '13px', fontWeight: '800' }}>
@@ -1146,14 +1297,26 @@ export function PharmacyTransactions({ medicines, onRefresh }: Props) {
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-slate-400" />
                     <Input 
                       placeholder="Search catalog items..." 
-                      className="pl-9 h-10 rounded-xl border-slate-100 bg-white shadow-sm font-bold text-xs"
+                      className="pl-9 h-10 rounded-xl border border-slate-200 bg-white shadow-sm font-bold text-xs focus-visible:ring-1 focus-visible:ring-primary/30"
+                      value={posSearchTerm}
+                      onChange={e => setPosSearchTerm(e.target.value)}
+                      autoComplete="off"
                     />
+                    {posSearchTerm && (
+                      <button onClick={() => setPosSearchTerm("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                        <X className="size-3.5" />
+                      </button>
+                    )}
                  </div>
               </div>
 
-              <ScrollArea className="flex-1 p-4 sm:p-6">
+              <div className="flex-1 overflow-y-auto p-4 sm:p-6">
                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-6">
-                   {medicines.filter(m => activeCategory === 'All' || activeCategory === 'Pharmacy').map(m => (
+                   {medicines.filter(m => {
+                     const matchCat = activeCategory === 'All' || activeCategory === 'Pharmacy'
+                     const matchSearch = !posSearchTerm || m.name.toLowerCase().includes(posSearchTerm.toLowerCase())
+                     return matchCat && matchSearch
+                   }).map(m => (
                      <Card 
                         key={m.id} 
                         className="rounded-3xl border-slate-100 hover:border-primary/20 hover:shadow-2xl hover:shadow-primary/5 transition-all group cursor-pointer relative overflow-hidden flex flex-col h-full min-h-[120px] sm:min-h-[140px]"
@@ -1180,7 +1343,7 @@ export function PharmacyTransactions({ medicines, onRefresh }: Props) {
                      </Card>
                    ))}
                  </div>
-              </ScrollArea>
+              </div>
             </div>
 
             {/* Right: Order Summary */}
@@ -1219,7 +1382,25 @@ export function PharmacyTransactions({ medicines, onRefresh }: Props) {
                       <div key={item.id} className="group relative bg-white flex items-center justify-between p-3 rounded-xl border border-slate-100 hover:border-slate-200 transition-all shadow-sm">
                          <div className="flex flex-col gap-1 flex-1">
                             <h5 className="font-bold text-xs text-slate-800 uppercase tracking-tight">{item.name}</h5>
-                            <p className="text-[10px] text-slate-400 font-medium tracking-tight">${item.unitPrice}</p>
+                            <div className="flex items-center gap-1">
+                              <span className="text-[10px] text-slate-400">$</span>
+                              <input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                value={item.unitPrice}
+                                onChange={e => {
+                                  const val = parseFloat(e.target.value)
+                                  const price = isNaN(val) || val < 0 ? 0 : val
+                                  const qty = Number(item.quantity) || 1
+                                  setCart(cart.map((c, i) => i === idx ? { ...c, unitPrice: price, total: Number((price * qty).toFixed(2)) } : c))
+                                }}
+                                onClick={e => (e.target as HTMLInputElement).select()}
+                                className="w-20 text-[10px] font-bold text-slate-700 bg-slate-100 border border-slate-200 rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-primary/40 focus:bg-white"
+                                title="Click to edit price"
+                              />
+                              <span className="text-[10px] text-slate-400">each</span>
+                            </div>
                          </div>
                          
                          <div className="flex items-center gap-6">
@@ -1228,18 +1409,35 @@ export function PharmacyTransactions({ medicines, onRefresh }: Props) {
                                  className="size-6 rounded-md hover:bg-white flex items-center justify-center transition-all disabled:opacity-30"
                                  onClick={() => {
                                    if (item.quantity > 1) {
-                                      setCart(cart.map((c, i) => i === idx ? { ...c, quantity: c.quantity - 1, total: (c.quantity - 1) * c.unitPrice } : c))
+                                      const newQty = Number(item.quantity) - 1
+                                      const price = Number(item.unitPrice) || 0
+                                      setCart(cart.map((c, i) => i === idx ? { ...c, quantity: newQty, total: Number((newQty * price).toFixed(2)) } : c))
                                    }
                                  }}
                                  disabled={item.isFromPrescription || item.isFromLab}
                                >
                                   <Minus className="size-3 text-slate-400" />
                                </button>
-                               <span className="w-8 text-center font-black text-xs text-slate-700">{item.quantity}</span>
+                               <input
+                                 type="number"
+                                 min="1"
+                                 value={item.quantity}
+                                 disabled={item.isFromPrescription || item.isFromLab}
+                                 onChange={(e) => {
+                                   const val = parseInt(e.target.value)
+                                   if (isNaN(val) || val < 1) return
+                                   const price = Number(item.unitPrice) || 0
+                                   setCart(cart.map((c, i) => i === idx ? { ...c, quantity: val, total: Number((val * price).toFixed(2)) } : c))
+                                 }}
+                                 onClick={(e) => (e.target as HTMLInputElement).select()}
+                                 className="w-12 text-center font-black text-xs text-slate-700 bg-transparent border-0 focus:outline-none focus:ring-1 focus:ring-primary/40 focus:bg-white focus:rounded-md px-1 disabled:opacity-50"
+                               />
                                <button 
                                  className="size-6 rounded-md hover:bg-white flex items-center justify-center transition-all disabled:opacity-30"
                                  onClick={() => {
-                                    setCart(cart.map((c, i) => i === idx ? { ...c, quantity: c.quantity + 1, total: (c.quantity + 1) * c.unitPrice } : c))
+                                    const newQty = Number(item.quantity) + 1
+                                    const price = Number(item.unitPrice) || 0
+                                    setCart(cart.map((c, i) => i === idx ? { ...c, quantity: newQty, total: Number((newQty * price).toFixed(2)) } : c))
                                  }}
                                  disabled={item.isFromPrescription || item.isFromLab}
                                 >
@@ -1247,7 +1445,7 @@ export function PharmacyTransactions({ medicines, onRefresh }: Props) {
                                </button>
                             </div>
                             <div className="text-right min-w-[70px]">
-                               <p className="font-black text-sm tracking-tight text-slate-900">${item.total.toLocaleString()}</p>
+                               <p className="font-black text-sm tracking-tight text-slate-900">${(Number(item.unitPrice) * Number(item.quantity)).toFixed(2)}</p>
                             </div>
                             <button 
                               className="size-8 rounded-lg text-slate-200 hover:text-rose-500 hover:bg-rose-50 transition-all ml-2"
@@ -1274,7 +1472,7 @@ export function PharmacyTransactions({ medicines, onRefresh }: Props) {
                   <div className="grid grid-cols-4 divide-x border-b">
                      <div className="p-4 space-y-1">
                         <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Subtotal</p>
-                        <p className="text-lg font-black text-slate-900">${cartTotal.toLocaleString()}</p>
+                        <p className="text-lg font-black text-slate-900">${cartTotal.toFixed(2)}</p>
                      </div>
                      <div className="p-4 space-y-1">
                         <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Discount</p>
@@ -1297,7 +1495,7 @@ export function PharmacyTransactions({ medicines, onRefresh }: Props) {
                      </div>
                      <div className="p-4 space-y-1 bg-emerald-50/50">
                         <p className="text-[10px] font-black uppercase text-emerald-600 tracking-widest">Total Due</p>
-                        <p className="text-2xl font-black text-emerald-500">${Math.max(0, cartTotal - discount).toLocaleString()}</p>
+                        <p className="text-2xl font-black text-emerald-500">${Math.max(0, cartTotal - (Number(discount) || 0)).toFixed(2)}</p>
                      </div>
                   </div>
                   <div className="p-4 sm:p-6 space-y-4">
@@ -1319,21 +1517,39 @@ export function PharmacyTransactions({ medicines, onRefresh }: Props) {
                      {paymentMethod === 'CREDIT' && (
                        <div className="space-y-2 p-4 bg-slate-900 rounded-2xl animate-in slide-in-from-bottom-2 duration-300">
                           <Label className="text-[9px] font-black uppercase tracking-widest text-slate-400">Select Credit Account</Label>
-                          <Select onValueChange={(v) => setSelectedCreditCustomerId(v)}>
+                          <Select value={selectedCreditCustomerId || ""} onValueChange={(v) => setSelectedCreditCustomerId(v)}>
                              <SelectTrigger className="h-10 rounded-xl bg-white/5 border-white/10 text-white font-bold text-xs">
                                 <SelectValue placeholder="Search account..." />
                              </SelectTrigger>
                              <SelectContent className="rounded-xl bg-slate-900 border-slate-800 text-white">
-                                {creditCustomers.map(c => (
-                                  <SelectItem key={c.id} value={c.id} className="font-bold py-2 hover:bg-white/5">
-                                     <div className="flex flex-col">
-                                        <span className="text-xs">{c.full_name}</span>
-                                        <span className="text-[8px] text-rose-400 font-black uppercase mt-0.5">${c.outstanding_balance} owed</span>
-                                     </div>
-                                  </SelectItem>
-                                ))}
+                                {creditCustomers.map(c => {
+                                  const available = (parseFloat(c.credit_limit) || 0) - (parseFloat(c.outstanding_balance) || 0)
+                                  const isAtLimit = available <= 0
+                                  return (
+                                    <SelectItem key={c.id} value={c.id} className="font-bold py-2 hover:bg-white/5" disabled={isAtLimit}>
+                                       <div className="flex flex-col">
+                                          <span className="text-xs">{c.full_name} {isAtLimit ? '🚫' : ''}</span>
+                                          <span className="text-[8px] text-rose-400 font-black uppercase mt-0.5">${parseFloat(c.outstanding_balance || 0).toFixed(2)} owed · ${available.toFixed(2)} available</span>
+                                       </div>
+                                    </SelectItem>
+                                  )
+                                })}
                              </SelectContent>
                           </Select>
+                          {(() => {
+                            const cust = creditCustomers.find(c => c.id === selectedCreditCustomerId)
+                            if (!cust) return null
+                            const available = (parseFloat(cust.credit_limit) || 0) - (parseFloat(cust.outstanding_balance) || 0)
+                            const saleTotal = Math.max(0, cartTotal - (Number(discount) || 0))
+                            const isOver = saleTotal > available
+                            return (
+                              <div className={`flex justify-between items-center px-3 py-2 rounded-xl text-[10px] font-black uppercase ${isOver ? 'bg-rose-900/60 text-rose-300' : 'bg-white/5 text-slate-300'}`}>
+                                <span>Available Credit: ${available.toFixed(2)}</span>
+                                <span>Sale Total: ${saleTotal.toFixed(2)}</span>
+                                {isOver && <span className="text-rose-400">⚠ Limit Exceeded</span>}
+                              </div>
+                            )
+                          })()}
                        </div>
                      )}
 
@@ -1372,7 +1588,13 @@ export function PharmacyTransactions({ medicines, onRefresh }: Props) {
                         <Button 
                            className="flex-[2] h-12 rounded-2xl bg-slate-900 text-white font-black text-sm uppercase tracking-tighter italic shadow-xl transition-all hover:bg-slate-800 active:scale-95 flex items-center justify-center gap-3 group disabled:opacity-50"
                            onClick={handleCreateSale}
-                           disabled={loading || cart.length === 0 || (paymentMethod === 'CREDIT' && !selectedCreditCustomerId) || (paymentMethod === 'EMPLOYEE_CREDIT' && !selectedEmployeeId)}
+          disabled={loading || cart.length === 0 || (paymentMethod === 'CREDIT' && !selectedCreditCustomerId) || (paymentMethod === 'EMPLOYEE_CREDIT' && !selectedEmployeeId) || (() => {
+                             if (paymentMethod !== 'CREDIT' || !selectedCreditCustomerId) return false
+                             const cust = creditCustomers.find(c => c.id === selectedCreditCustomerId)
+                             if (!cust) return false
+                             const available = (parseFloat(cust.credit_limit) || 0) - (parseFloat(cust.outstanding_balance) || 0)
+                             return Math.max(0, cartTotal - (Number(discount) || 0)) > available
+                           })()}
                         >
                            {loading ? (
                              <Activity className="size-5 animate-spin" />
@@ -1381,7 +1603,7 @@ export function PharmacyTransactions({ medicines, onRefresh }: Props) {
                                <div className="size-6 bg-emerald-500 rounded-full flex items-center justify-center">
                                   <Check className="size-3.5 text-white" />
                                </div>
-                               <span>TENDER ${(cartTotal - discount).toLocaleString()}</span>
+                               <span>TENDER ${Math.max(0, cartTotal - (Number(discount) || 0)).toFixed(2)}</span>
                              </>
                            )}
                         </Button>

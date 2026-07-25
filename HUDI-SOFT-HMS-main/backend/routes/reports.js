@@ -8,16 +8,16 @@ router.use(authenticate);
 // Revenue report
 router.get('/revenue', async (req, res) => {
     const { period } = req.query; // 'daily', 'monthly', 'yearly'
-    let groupBy = "date";
-    if (period === 'monthly') groupBy = "TO_CHAR(date::date, 'YYYY-MM')";
-    if (period === 'yearly') groupBy = "TO_CHAR(date::date, 'YYYY')";
+    let groupBy = "date::text";
+    if (period === 'monthly') groupBy = "LEFT(date::text, 7)";
+    if (period === 'yearly') groupBy = "LEFT(date::text, 4)";
 
     try {
         const data = await db.prepare(`
             SELECT ${groupBy} as period, SUM(paid_amount) as revenue, SUM(total) as billed, COUNT(*) as invoices 
             FROM invoices 
-            GROUP BY period 
-            ORDER BY period DESC 
+            GROUP BY ${groupBy} 
+            ORDER BY ${groupBy} DESC 
             LIMIT 30
         `).all();
         res.json(data);
@@ -45,12 +45,12 @@ router.get('/financial', async (req, res) => {
 
         const monthlyTrend = await db.prepare(`
             SELECT 
-                TO_CHAR(date::date, 'YYYY-MM') as month,
+                LEFT(date::text, 7) as month,
                 SUM(CASE WHEN type = 'income' THEN amount ELSE 0 END) as income,
                 SUM(CASE WHEN type = 'expense' THEN amount ELSE 0 END) as expense
             FROM account_entries
-            GROUP BY month
-            ORDER BY month DESC
+            GROUP BY LEFT(date::text, 7)
+            ORDER BY LEFT(date::text, 7) DESC
             LIMIT 12
         `).all();
 
@@ -70,7 +70,7 @@ router.get('/patients', async (req, res) => {
         const byGender = await db.prepare('SELECT gender, COUNT(*) as count FROM patients GROUP BY gender').all();
         const byStatus = await db.prepare('SELECT status, COUNT(*) as count FROM patients GROUP BY status').all();
         const byBloodGroup = await db.prepare('SELECT blood_group, COUNT(*) as count FROM patients WHERE blood_group IS NOT NULL GROUP BY blood_group').all();
-        const newThisMonth = await db.prepare("SELECT COUNT(*) as c FROM patients WHERE TO_CHAR(registered_at, 'YYYY-MM') = TO_CHAR(CURRENT_DATE, 'YYYY-MM')").get();
+        const newThisMonth = await db.prepare("SELECT COUNT(*) as c FROM patients WHERE LEFT(registered_at::text, 7) = LEFT(CURRENT_DATE::text, 7)").get();
         res.json({ byGender, byStatus, byBloodGroup, newThisMonth: newThisMonth.c });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -83,7 +83,7 @@ router.get('/appointments', async (req, res) => {
         const byType = await db.prepare('SELECT type, COUNT(*) as count FROM appointments GROUP BY type').all();
         const byStatus = await db.prepare('SELECT status, COUNT(*) as count FROM appointments GROUP BY status').all();
         const byDepartment = await db.prepare('SELECT department, COUNT(*) as count FROM appointments GROUP BY department ORDER BY count DESC').all();
-        const byMonth = await db.prepare("SELECT TO_CHAR(date::date, 'YYYY-MM') as month, COUNT(*) as count FROM appointments GROUP BY month ORDER BY month DESC LIMIT 12").all();
+        const byMonth = await db.prepare("SELECT LEFT(date::text, 7) as month, COUNT(*) as count FROM appointments GROUP BY LEFT(date::text, 7) ORDER BY LEFT(date::text, 7) DESC LIMIT 12").all();
         res.json({ byType, byStatus, byDepartment, byMonth });
     } catch (err) {
         res.status(500).json({ error: err.message });

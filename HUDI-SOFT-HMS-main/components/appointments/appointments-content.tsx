@@ -446,7 +446,7 @@ export function AppointmentsContent({
                       <HeartPulse className="size-4 text-rose-500" />
                     </Button>
                     <Button variant="ghost" size="icon" title="View Patient Profile" onClick={() => handleDoctorView(a)} asChild>
-                      <Link href={`/patients/detail?id=${a.patientId}`}>
+                      <Link href={`/patients/${a.patientId}`}>
                         <Eye className="size-4 text-muted-foreground" />
                       </Link>
                     </Button>

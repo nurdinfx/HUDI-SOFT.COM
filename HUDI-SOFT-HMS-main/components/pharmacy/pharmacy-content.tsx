@@ -29,12 +29,26 @@ import { toast } from "sonner"
 import { InventoryManagement } from "./inventory-management"
 import { PharmacyTransactions } from "./pharmacy-transactions"
 import { PurchaseHub } from "./purchase-hub"
+import { SalesReceiptsHub } from "./sales-receipts-hub"
 
 interface Props {
   prescriptions: Prescription[]
   medicines: Medicine[]
   onRefresh: () => void
 }
+
+const getNumber = (value: unknown) => {
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : 0
+}
+
+const formatCurrency = (value: number) =>
+  new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(getNumber(value))
 
 export function PharmacyContent({ prescriptions, medicines, onRefresh }: Props) {
   const [activeTab, setActiveTab] = useState("queue")
@@ -54,6 +68,10 @@ export function PharmacyContent({ prescriptions, medicines, onRefresh }: Props) 
 
   const pending = prescriptions.filter((p) => p.status === "pending")
   const dispensedToday = prescriptions.filter((p) => p.status === "dispensed")
+  const totalInventoryValue = medicines.reduce(
+    (sum, medicine) => sum + (getNumber(medicine.quantity) * getNumber(medicine.unitPrice)),
+    0
+  )
 
   const filteredRx = prescriptions.filter((p) => {
     if (!search) return true
@@ -78,11 +96,12 @@ export function PharmacyContent({ prescriptions, medicines, onRefresh }: Props) 
     <div className="flex flex-col gap-6 animate-in fade-in duration-500">
       <PageHeader title="International Pharmacy" description="Standardized medicine dispensing and inventory oversight." />
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
         <StatCard title="Pending Rx" value={pending.length} icon={Clock} iconClassName="bg-amber-100 text-amber-600" />
         <StatCard title="Dispensed Today" value={dispensedToday.length} icon={CheckCircle2} iconClassName="bg-emerald-100 text-emerald-600" />
         <StatCard title="Low Stock Items" value={alerts.lowStock} icon={AlertCircle} iconClassName="bg-rose-100 text-rose-600" />
         <StatCard title="Total Inventory" value={medicines.length} icon={Package} iconClassName="bg-blue-100 text-blue-600" />
+        <StatCard title="Inventory Value" value={formatCurrency(totalInventoryValue)} icon={TrendingUp} iconClassName="bg-violet-100 text-violet-600" />
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
@@ -91,8 +110,8 @@ export function PharmacyContent({ prescriptions, medicines, onRefresh }: Props) 
           <TabsTrigger value="inventory" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-full px-0">Inventory Hub</TabsTrigger>
           <TabsTrigger value="purchase" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-full px-0">Purchase Hub</TabsTrigger>
           <TabsTrigger value="financials" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-full px-0">Financial Hub</TabsTrigger>
-          <TabsTrigger value="alerts" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-full px-0">Risk Alerts</TabsTrigger>
-        </TabsList>
+          <TabsTrigger value="sales" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-full px-0">Sales Receipts</TabsTrigger>
+          <TabsTrigger value="alerts" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-full px-0">Risk Alerts</TabsTrigger>        </TabsList>
 
         <TabsContent value="queue" className="mt-0 space-y-4">
           <Card>
@@ -164,6 +183,10 @@ export function PharmacyContent({ prescriptions, medicines, onRefresh }: Props) 
 
         <TabsContent value="purchase" className="mt-0">
           <PurchaseHub medicines={medicines} onRefresh={onRefresh} />
+        </TabsContent>
+
+        <TabsContent value="sales" className="mt-0">
+          <SalesReceiptsHub />
         </TabsContent>
 
         <TabsContent value="alerts" className="mt-0 space-y-6">

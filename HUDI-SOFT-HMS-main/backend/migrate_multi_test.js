@@ -1,19 +1,12 @@
-const { addColumnIfMissing } = require('./utils/schema');
+const db = require('./database');
 
 async function migrateMultiTest() {
     console.log('Adding selected_tests to daily_operations table...');
     try {
-        const state = await addColumnIfMissing('daily_operations', 'selected_tests', 'JSONB');
-        if (state === 'added') {
-            console.log('Successfully added selected_tests column.');
-        } else if (state === 'exists') {
-            console.log('ℹ️ selected_tests column already exists.');
-        } else if (state === 'not_owner') {
-            console.log('ℹ️ Skipping selected_tests migration: current DB user is not the table owner.');
-        } else {
-            console.log('ℹ️ Skipping selected_tests migration: daily_operations table does not exist yet.');
-        }
+        await db.prepare('ALTER TABLE daily_operations ADD COLUMN IF NOT EXISTS selected_tests JSONB').run();
+        console.log('Successfully added selected_tests column.');
     } catch (err) {
+        // In case ADD COLUMN IF NOT EXISTS is not supported by some PG versions or SQLite shims
         console.error('Migration notice:', err.message);
     }
 }

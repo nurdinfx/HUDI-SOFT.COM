@@ -1,21 +1,19 @@
-const { addColumnIfMissing } = require('./utils/schema');
+const db = require('./database');
 
 async function migratePurchasePayment() {
     console.log('🚀 Starting Purchase Payment Migration (Adding payment_type)...');
     try {
-        const state = await addColumnIfMissing('pharmacy_purchase_orders', 'payment_type', `TEXT DEFAULT 'cash'`);
-        if (state === 'added') {
-            console.log('✨ Purchase Payment Migration completed successfully!');
-        } else if (state === 'exists') {
-            console.log('ℹ️ Column payment_type already exists.');
-        } else if (state === 'not_owner') {
-            console.log('ℹ️ Skipping payment_type migration: current DB user is not the table owner.');
-        } else {
-            console.log('ℹ️ Skipping payment_type migration: pharmacy_purchase_orders table does not exist.');
-        }
+        await db.query(`
+            ALTER TABLE pharmacy_purchase_orders ADD COLUMN payment_type TEXT DEFAULT 'cash';
+        `);
+        console.log('✨ Purchase Payment Migration completed successfully!');
     } catch (err) {
-        console.error('❌ Purchase Payment Migration Error:', err.message);
-        throw err;
+        if (err.message.includes('duplicate column name')) {
+            console.log('ℹ️ Column payment_type already exists.');
+        } else {
+            console.error('❌ Purchase Payment Migration Error:', err.message);
+            throw err;
+        }
     }
 }
 

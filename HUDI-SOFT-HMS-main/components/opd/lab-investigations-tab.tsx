@@ -18,6 +18,51 @@ interface LabInvestigationsTabProps {
     visit: OPDVisit
 }
 
+interface ParsedLabResultItem {
+    parameter: string
+    value: string
+    range: string
+}
+
+function parseLabResults(test: LabTest | null): ParsedLabResultItem[] {
+    if (!test?.results) {
+        return []
+    }
+
+    try {
+        const parsed = JSON.parse(test.results)
+
+        if (Array.isArray(parsed)) {
+            return parsed
+        }
+
+        if (parsed && typeof parsed === "object" && Array.isArray(parsed.items)) {
+            return parsed.items
+        }
+    } catch (error) {
+        // Keep legacy plain-text result support.
+    }
+
+    return [{
+        parameter: test.testName,
+        value: test.results,
+        range: test.normalRange || "",
+    }]
+}
+
+function summarizeLabResults(test: LabTest) {
+    const results = parseLabResults(test)
+
+    if (results.length === 0) {
+        return "No finalized result"
+    }
+
+    return results
+        .slice(0, 2)
+        .map((item) => item.value || item.parameter || "Result")
+        .join(" • ")
+}
+
 export function LabInvestigationsTab({ visit }: LabInvestigationsTabProps) {
     const [catalog, setCatalog] = useState<LabCatalogItem[]>([])
     const [patientTests, setPatientTests] = useState<LabTest[]>([])
@@ -247,7 +292,7 @@ export function LabInvestigationsTab({ visit }: LabInvestigationsTabProps) {
                                                     <Badge className="bg-red-600 text-white text-[9px] font-black animate-pulse">CRITICAL ALERT</Badge>
                                                 )}
                                             </div>
-                                            <p className={`text-base font-black ${test.criticalFlag ? 'text-red-950' : 'text-emerald-950'} mb-2`}>{test.results}</p>
+                                            <p className={`text-base font-black ${test.criticalFlag ? 'text-red-950' : 'text-emerald-950'} mb-2`}>{summarizeLabResults(test)}</p>
                                             <div className="grid grid-cols-2 gap-4 mt-4 pt-4 border-t border-slate-100">
                                                 <div>
                                                     <p className="text-[8px] uppercase font-black text-slate-400 tracking-tighter mb-1">Reference Range</p>
@@ -392,22 +437,24 @@ export function LabInvestigationsTab({ visit }: LabInvestigationsTabProps) {
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-slate-50">
-                                            <tr>
-                                                <td className="px-6 py-8">
-                                                    <p className="font-black text-slate-900 text-lg uppercase tracking-tight">{selectedTest?.testName}</p>
-                                                    <p className="text-[10px] text-slate-400 font-bold mt-1 uppercase tracking-widest">{selectedTest?.testCategory}</p>
-                                                </td>
-                                                <td className="px-6 py-8 text-center">
-                                                    <span className={`text-3xl font-black leading-none ${selectedTest?.criticalFlag ? 'text-red-600' : 'text-slate-900'}`}>
-                                                        {selectedTest?.results}
-                                                    </span>
-                                                </td>
-                                                <td className="px-6 py-8 text-right">
-                                                    <p className="font-mono text-sm font-black text-slate-600 bg-slate-50 inline-block px-3 py-1 rounded-lg border border-slate-100">
-                                                        {selectedTest?.normalRange || 'NOT DEFINED'}
-                                                    </p>
-                                                </td>
-                                            </tr>
+                                            {parseLabResults(selectedTest).map((result, index) => (
+                                                <tr key={`${result.parameter}-${index}`}>
+                                                    <td className="px-6 py-8">
+                                                        <p className="font-black text-slate-900 text-lg uppercase tracking-tight">{result.parameter || selectedTest?.testName}</p>
+                                                        <p className="text-[10px] text-slate-400 font-bold mt-1 uppercase tracking-widest">{selectedTest?.testCategory}</p>
+                                                    </td>
+                                                    <td className="px-6 py-8 text-center">
+                                                        <span className={`text-3xl font-black leading-none ${selectedTest?.criticalFlag ? 'text-red-600' : 'text-slate-900'}`}>
+                                                            {result.value || 'PENDING'}
+                                                        </span>
+                                                    </td>
+                                                    <td className="px-6 py-8 text-right">
+                                                        <p className="font-mono text-sm font-black text-slate-600 bg-slate-50 inline-block px-3 py-1 rounded-lg border border-slate-100">
+                                                            {result.range || selectedTest?.normalRange || 'NOT DEFINED'}
+                                                        </p>
+                                                    </td>
+                                                </tr>
+                                            ))}
                                         </tbody>
                                     </table>
                                 </div>

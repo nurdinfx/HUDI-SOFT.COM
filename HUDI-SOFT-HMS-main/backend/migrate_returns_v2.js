@@ -1,21 +1,19 @@
-const { addColumnIfMissing } = require('./utils/schema');
+const db = require('./database');
 
 async function migrateReturnsV2() {
     console.log('🚀 Starting Returns V2 Migration (Adding medicine_id)...');
     try {
-        const state = await addColumnIfMissing('pharmacy_supplier_returns', 'medicine_id', 'UUID REFERENCES medicines(id)');
-        if (state === 'added') {
-            console.log('✨ Returns V2 Migration completed successfully!');
-        } else if (state === 'exists') {
-            console.log('ℹ️ Column medicine_id already exists.');
-        } else if (state === 'not_owner') {
-            console.log('ℹ️ Skipping medicine_id migration: current DB user is not the table owner.');
-        } else {
-            console.log('ℹ️ Skipping medicine_id migration: pharmacy_supplier_returns table does not exist.');
-        }
+        await db.query(`
+            ALTER TABLE pharmacy_supplier_returns ADD COLUMN medicine_id UUID REFERENCES medicines(id);
+        `);
+        console.log('✨ Returns V2 Migration completed successfully!');
     } catch (err) {
-        console.error('❌ Returns V2 Migration Error:', err.message);
-        throw err;
+        if (err.message.includes('duplicate column name')) {
+            console.log('ℹ️ Column medicine_id already exists.');
+        } else {
+            console.error('❌ Returns V2 Migration Error:', err.message);
+            throw err;
+        }
     }
 }
 

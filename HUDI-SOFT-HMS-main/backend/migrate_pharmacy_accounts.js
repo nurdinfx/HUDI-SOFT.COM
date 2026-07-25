@@ -2,7 +2,7 @@
  * migrate_pharmacy_accounts.js
  * Adds pharmacy_zaad, pharmacy_sahal, pharmacy_edahab, pharmacy_mycash columns to hospital_settings.
  */
-const { addColumnIfMissing } = require('./utils/schema');
+const db = require('./database');
 
 async function migrate() {
     try {
@@ -13,18 +13,15 @@ async function migrate() {
         
         for (const col of columns) {
             try {
-                const state = await addColumnIfMissing('hospital_settings', col, `TEXT DEFAULT ''`);
-                if (state === 'added') {
-                    console.log(`✅ Added column ${col}`);
-                } else if (state === 'exists') {
-                    console.log(`ℹ️ Column ${col} already exists`);
-                } else if (state === 'not_owner') {
-                    console.log(`ℹ️ Skipping column ${col}: current DB user is not the hospital_settings owner`);
-                } else {
-                    console.log(`ℹ️ Skipping column ${col}: hospital_settings table does not exist`);
-                }
+                await db.exec(`ALTER TABLE hospital_settings ADD COLUMN IF NOT EXISTS ${col} TEXT DEFAULT ''`);
+                console.log(`✅ Added column ${col}`);
             } catch (err) {
-                console.warn(`⚠️ Warning adding ${col}: ${err.message}`);
+                // Ignore if it already exists (Postgres throws "column already exists", SQLite throws "duplicate column name")
+                if (err.message.includes('already exists') || err.message.includes('duplicate column name')) {
+                    console.log(`ℹ️ Column ${col} already exists`);
+                } else {
+                    console.warn(`⚠️ Warning adding ${col}: ${err.message}`);
+                }
             }
         }
 

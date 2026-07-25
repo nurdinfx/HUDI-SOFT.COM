@@ -1,36 +1,32 @@
 -- HMS PostgreSQL Schema for Supabase
--- TRUE MULTI-TENANT: every table has tenant_id for complete data isolation
 
 -- 1. Users
 CREATE TABLE IF NOT EXISTS users (
     id UUID PRIMARY KEY,
     name TEXT NOT NULL,
-    email TEXT NOT NULL,               -- NOT globally unique — scoped per tenant below
+    email TEXT UNIQUE NOT NULL,
     password_hash TEXT NOT NULL,
     role TEXT NOT NULL,
     phone TEXT,
     department TEXT,
     avatar TEXT,
     is_active INTEGER DEFAULT 1,
-    tenant_id VARCHAR(255) NOT NULL DEFAULT '00000000-0000-0000-0000-000000000000',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
-CREATE UNIQUE INDEX IF NOT EXISTS users_tenant_email_key ON users(tenant_id, email);
-CREATE INDEX IF NOT EXISTS idx_users_tenant_id ON users(tenant_id);
 
 -- 2. Patients
 CREATE TABLE IF NOT EXISTS patients (
     id UUID PRIMARY KEY,
-    patient_id TEXT,                   -- tenant-scoped, not globally unique
+    patient_id TEXT UNIQUE, -- Added
     first_name TEXT NOT NULL,
     last_name TEXT NOT NULL,
     email TEXT,
     phone TEXT,
     gender TEXT,
-    date_of_birth DATE,
-    blood_group TEXT,
+    date_of_birth DATE, -- Renamed from dob to match route
+    blood_group TEXT, -- Added
     address TEXT,
-    city TEXT,
+    city TEXT, -- Added
     status TEXT DEFAULT 'active',
     allergies TEXT DEFAULT '[]',
     chronic_conditions TEXT DEFAULT '[]',
@@ -38,42 +34,36 @@ CREATE TABLE IF NOT EXISTS patients (
     emergency_phone TEXT,
     insurance_provider TEXT,
     insurance_policy_number TEXT,
-    registered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    last_visit TIMESTAMP,
-    notes TEXT,
-    tenant_id VARCHAR(255) NOT NULL DEFAULT '00000000-0000-0000-0000-000000000000',
+    registered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, -- Added
+    last_visit TIMESTAMP, -- Added
+    notes TEXT, -- Added
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
-CREATE UNIQUE INDEX IF NOT EXISTS patients_tenant_pid_key ON patients(tenant_id, patient_id);
-CREATE INDEX IF NOT EXISTS idx_patients_tenant_id ON patients(tenant_id);
 
 -- 3. Doctors
 CREATE TABLE IF NOT EXISTS doctors (
     id UUID PRIMARY KEY,
-    doctor_id TEXT,                    -- tenant-scoped, not globally unique
+    doctor_id TEXT UNIQUE, -- Added
     name TEXT NOT NULL,
     specialization TEXT,
     email TEXT,
     phone TEXT,
     status TEXT DEFAULT 'available',
     department TEXT,
-    qualification TEXT,
-    experience INTEGER DEFAULT 0,
+    qualification TEXT, -- Added
+    experience INTEGER DEFAULT 0, -- Added
     consultation_fee NUMERIC DEFAULT 50,
-    available_days TEXT DEFAULT '[]',
-    available_time_start TEXT DEFAULT '09:00',
-    available_time_end TEXT DEFAULT '17:00',
-    joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    tenant_id VARCHAR(255) NOT NULL DEFAULT '00000000-0000-0000-0000-000000000000',
+    available_days TEXT DEFAULT '[]', -- Added (JSON string)
+    available_time_start TEXT DEFAULT '09:00', -- Added
+    available_time_end TEXT DEFAULT '17:00', -- Added
+    joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, -- Added
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
-CREATE UNIQUE INDEX IF NOT EXISTS doctors_tenant_did_key ON doctors(tenant_id, doctor_id);
-CREATE INDEX IF NOT EXISTS idx_doctors_tenant_id ON doctors(tenant_id);
 
 -- 4. Appointments
 CREATE TABLE IF NOT EXISTS appointments (
     id UUID PRIMARY KEY,
-    appointment_id TEXT,
+    appointment_id TEXT UNIQUE,
     patient_id UUID REFERENCES patients(id) ON DELETE CASCADE,
     patient_name TEXT,
     doctor_id UUID REFERENCES doctors(id) ON DELETE CASCADE,
@@ -84,11 +74,8 @@ CREATE TABLE IF NOT EXISTS appointments (
     type TEXT DEFAULT 'consultation',
     status TEXT DEFAULT 'scheduled',
     notes TEXT,
-    tenant_id VARCHAR(255) NOT NULL DEFAULT '00000000-0000-0000-0000-000000000000',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
-CREATE UNIQUE INDEX IF NOT EXISTS appointments_tenant_aid_key ON appointments(tenant_id, appointment_id);
-CREATE INDEX IF NOT EXISTS idx_appointments_tenant_id ON appointments(tenant_id);
 
 -- 5. Medicines
 CREATE TABLE IF NOT EXISTS medicines (
@@ -104,15 +91,13 @@ CREATE TABLE IF NOT EXISTS medicines (
     unit_price NUMERIC DEFAULT 0,
     selling_price NUMERIC DEFAULT 0,
     unit TEXT DEFAULT 'tablet',
-    status TEXT DEFAULT 'in-stock',
-    tenant_id VARCHAR(255) NOT NULL DEFAULT '00000000-0000-0000-0000-000000000000'
+    status TEXT DEFAULT 'in-stock'
 );
-CREATE INDEX IF NOT EXISTS idx_medicines_tenant_id ON medicines(tenant_id);
 
 -- 6. Prescriptions
 CREATE TABLE IF NOT EXISTS prescriptions (
     id UUID PRIMARY KEY,
-    prescription_id TEXT,
+    prescription_id TEXT UNIQUE,
     patient_id UUID REFERENCES patients(id) ON DELETE CASCADE,
     patient_name TEXT,
     doctor_id UUID REFERENCES doctors(id) ON DELETE CASCADE,
@@ -120,19 +105,16 @@ CREATE TABLE IF NOT EXISTS prescriptions (
     appointment_id UUID,
     date DATE DEFAULT CURRENT_DATE,
     diagnosis TEXT,
-    medicines TEXT DEFAULT '[]',
+    medicines TEXT DEFAULT '[]', -- JSON string
     notes TEXT,
     status TEXT DEFAULT 'pending',
-    tenant_id VARCHAR(255) NOT NULL DEFAULT '00000000-0000-0000-0000-000000000000',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
-CREATE UNIQUE INDEX IF NOT EXISTS prescriptions_tenant_pid_key ON prescriptions(tenant_id, prescription_id);
-CREATE INDEX IF NOT EXISTS idx_prescriptions_tenant_id ON prescriptions(tenant_id);
 
 -- 7. Lab Tests
 CREATE TABLE IF NOT EXISTS lab_tests (
     id UUID PRIMARY KEY,
-    test_id TEXT,
+    test_id TEXT UNIQUE,
     patient_id UUID REFERENCES patients(id) ON DELETE CASCADE,
     patient_name TEXT,
     doctor_id UUID REFERENCES doctors(id) ON DELETE CASCADE,
@@ -159,11 +141,8 @@ CREATE TABLE IF NOT EXISTS lab_tests (
     sample_collected_by TEXT,
     sample_barcode TEXT,
     result_entered_by TEXT,
-    result_entered_at TIMESTAMP,
-    tenant_id VARCHAR(255) NOT NULL DEFAULT '00000000-0000-0000-0000-000000000000'
+    result_entered_at TIMESTAMP
 );
-CREATE UNIQUE INDEX IF NOT EXISTS lab_tests_tenant_tid_key ON lab_tests(tenant_id, test_id);
-CREATE INDEX IF NOT EXISTS idx_lab_tests_tenant_id ON lab_tests(tenant_id);
 
 -- 8. Lab Catalog
 CREATE TABLE IF NOT EXISTS lab_catalog (
@@ -172,10 +151,8 @@ CREATE TABLE IF NOT EXISTS lab_catalog (
     category TEXT,
     sample_type TEXT,
     normal_range TEXT,
-    cost NUMERIC DEFAULT 0,
-    tenant_id VARCHAR(255) NOT NULL DEFAULT '00000000-0000-0000-0000-000000000000'
+    cost NUMERIC DEFAULT 0
 );
-CREATE INDEX IF NOT EXISTS idx_lab_catalog_tenant_id ON lab_catalog(tenant_id);
 
 -- 9. Lab Audit Logs
 CREATE TABLE IF NOT EXISTS lab_audit_logs (
@@ -184,20 +161,18 @@ CREATE TABLE IF NOT EXISTS lab_audit_logs (
     action TEXT,
     performed_by TEXT,
     details TEXT,
-    tenant_id VARCHAR(255) NOT NULL DEFAULT '00000000-0000-0000-0000-000000000000',
     timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
-CREATE INDEX IF NOT EXISTS idx_lab_audit_tenant_id ON lab_audit_logs(tenant_id);
 
 -- 10. Invoices
 CREATE TABLE IF NOT EXISTS invoices (
     id UUID PRIMARY KEY,
-    invoice_id TEXT,
+    invoice_id TEXT UNIQUE,
     patient_id UUID REFERENCES patients(id) ON DELETE CASCADE,
     patient_name TEXT,
     date DATE DEFAULT CURRENT_DATE,
     due_date DATE,
-    items TEXT DEFAULT '[]',
+    items TEXT DEFAULT '[]', -- JSON string
     subtotal NUMERIC DEFAULT 0,
     tax NUMERIC DEFAULT 0,
     discount NUMERIC DEFAULT 0,
@@ -207,16 +182,13 @@ CREATE TABLE IF NOT EXISTS invoices (
     payment_method TEXT,
     notes TEXT,
     insurance_claim TEXT,
-    tenant_id VARCHAR(255) NOT NULL DEFAULT '00000000-0000-0000-0000-000000000000',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
-CREATE UNIQUE INDEX IF NOT EXISTS invoices_tenant_iid_key ON invoices(tenant_id, invoice_id);
-CREATE INDEX IF NOT EXISTS idx_invoices_tenant_id ON invoices(tenant_id);
 
 -- 11. OPD Visits
 CREATE TABLE IF NOT EXISTS opd_visits (
     id UUID PRIMARY KEY,
-    visit_id TEXT,
+    visit_id TEXT UNIQUE,
     patient_id UUID REFERENCES patients(id) ON DELETE CASCADE,
     patient_name TEXT,
     doctor_id UUID REFERENCES doctors(id) ON DELETE CASCADE,
@@ -230,21 +202,18 @@ CREATE TABLE IF NOT EXISTS opd_visits (
     family_history TEXT,
     physical_examination TEXT,
     clinical_notes TEXT,
-    vitals TEXT DEFAULT '{}',
+    vitals TEXT DEFAULT '{}', -- JSON string
     diagnosis TEXT,
     status TEXT DEFAULT 'waiting',
     token_number INTEGER,
     visit_type TEXT DEFAULT 'New',
-    tenant_id VARCHAR(255) NOT NULL DEFAULT '00000000-0000-0000-0000-000000000000',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
-CREATE UNIQUE INDEX IF NOT EXISTS opd_visits_tenant_vid_key ON opd_visits(tenant_id, visit_id);
-CREATE INDEX IF NOT EXISTS idx_opd_visits_tenant_id ON opd_visits(tenant_id);
 
 -- 12. IPD Admissions
 CREATE TABLE IF NOT EXISTS ipd_admissions (
     id UUID PRIMARY KEY,
-    admission_id TEXT,
+    admission_id TEXT UNIQUE,
     patient_id UUID REFERENCES patients(id) ON DELETE CASCADE,
     patient_name TEXT,
     doctor_id UUID REFERENCES doctors(id) ON DELETE CASCADE,
@@ -256,12 +225,9 @@ CREATE TABLE IF NOT EXISTS ipd_admissions (
     discharge_date DATE,
     diagnosis TEXT,
     status TEXT DEFAULT 'admitted',
-    nursing_notes TEXT DEFAULT '[]',
-    tenant_id VARCHAR(255) NOT NULL DEFAULT '00000000-0000-0000-0000-000000000000',
+    nursing_notes TEXT DEFAULT '[]', -- JSON string
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
-CREATE UNIQUE INDEX IF NOT EXISTS ipd_admissions_tenant_aid_key ON ipd_admissions(tenant_id, admission_id);
-CREATE INDEX IF NOT EXISTS idx_ipd_admissions_tenant_id ON ipd_admissions(tenant_id);
 
 -- 13. Wards
 CREATE TABLE IF NOT EXISTS wards (
@@ -271,25 +237,20 @@ CREATE TABLE IF NOT EXISTS wards (
     department TEXT,
     total_beds INTEGER DEFAULT 0,
     daily_rate NUMERIC DEFAULT 0,
-    tenant_id VARCHAR(255) NOT NULL DEFAULT '00000000-0000-0000-0000-000000000000',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
-CREATE INDEX IF NOT EXISTS idx_wards_tenant_id ON wards(tenant_id);
 
 -- 14. Beds
 CREATE TABLE IF NOT EXISTS beds (
     id UUID PRIMARY KEY,
     ward TEXT,
-    bed_number TEXT,               -- tenant-scoped, not globally unique
+    bed_number TEXT UNIQUE,
     type TEXT,
     status TEXT DEFAULT 'available',
     patient_id UUID,
     daily_rate NUMERIC DEFAULT 0,
-    ward_id UUID REFERENCES wards(id),
-    tenant_id VARCHAR(255) NOT NULL DEFAULT '00000000-0000-0000-0000-000000000000'
+    ward_id UUID REFERENCES wards(id)
 );
-CREATE UNIQUE INDEX IF NOT EXISTS beds_tenant_bnum_key ON beds(tenant_id, bed_number);
-CREATE INDEX IF NOT EXISTS idx_beds_tenant_id ON beds(tenant_id);
 
 -- 15. Nurse Notes
 CREATE TABLE IF NOT EXISTS nurse_notes (
@@ -303,10 +264,8 @@ CREATE TABLE IF NOT EXISTS nurse_notes (
     observations TEXT,
     medications TEXT DEFAULT '[]',
     shift TEXT,
-    tenant_id VARCHAR(255) NOT NULL DEFAULT '00000000-0000-0000-0000-000000000000',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
-CREATE INDEX IF NOT EXISTS idx_nurse_notes_tenant_id ON nurse_notes(tenant_id);
 
 -- 16. Doctor Rounds
 CREATE TABLE IF NOT EXISTS doctor_rounds (
@@ -319,16 +278,14 @@ CREATE TABLE IF NOT EXISTS doctor_rounds (
     observations TEXT,
     treatment_updates TEXT,
     procedure_orders TEXT DEFAULT '[]',
-    tenant_id VARCHAR(255) NOT NULL DEFAULT '00000000-0000-0000-0000-000000000000',
     timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
-CREATE INDEX IF NOT EXISTS idx_doctor_rounds_tenant_id ON doctor_rounds(tenant_id);
 
 -- 17. Account Entries
 CREATE TABLE IF NOT EXISTS account_entries (
     id UUID PRIMARY KEY,
     date DATE DEFAULT CURRENT_DATE,
-    type TEXT NOT NULL,
+    type TEXT NOT NULL, -- 'income' or 'expense'
     category TEXT,
     description TEXT,
     amount NUMERIC DEFAULT 0,
@@ -337,27 +294,20 @@ CREATE TABLE IF NOT EXISTS account_entries (
     department TEXT,
     status TEXT DEFAULT 'completed',
     user_id UUID,
-    tenant_id VARCHAR(255) NOT NULL DEFAULT '00000000-0000-0000-0000-000000000000',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
-CREATE INDEX IF NOT EXISTS idx_account_entries_tenant_id ON account_entries(tenant_id);
 
 -- 18. Department Budgets
 CREATE TABLE IF NOT EXISTS department_budgets (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    department TEXT NOT NULL,
+    id UUID PRIMARY KEY,
+    department TEXT UNIQUE,
     budget_amount NUMERIC DEFAULT 0,
-    period TEXT DEFAULT 'Monthly',
-    tenant_id VARCHAR(255) NOT NULL DEFAULT '00000000-0000-0000-0000-000000000000'
+    period TEXT DEFAULT 'Monthly'
 );
-CREATE UNIQUE INDEX IF NOT EXISTS department_budgets_tenant_dept_key ON department_budgets(tenant_id, department);
-CREATE INDEX IF NOT EXISTS idx_dept_budgets_tenant_id ON department_budgets(tenant_id);
 
 -- 19. Hospital Settings
--- MULTI-TENANT: each hospital has its OWN settings row keyed by tenant_id
 CREATE TABLE IF NOT EXISTS hospital_settings (
-    id SERIAL,
-    tenant_id VARCHAR(255) NOT NULL DEFAULT '00000000-0000-0000-0000-000000000000',
+    id INTEGER PRIMARY KEY,
     name TEXT DEFAULT 'Hospital',
     tagline TEXT,
     address TEXT,
@@ -370,10 +320,8 @@ CREATE TABLE IF NOT EXISTS hospital_settings (
     zaad TEXT,
     sahal TEXT,
     edahab TEXT,
-    mycash TEXT,
-    PRIMARY KEY (tenant_id)           -- one row per tenant, not one row globally
+    mycash TEXT
 );
-CREATE INDEX IF NOT EXISTS idx_hospital_settings_tenant_id ON hospital_settings(tenant_id);
 
 -- 20. Audit Logs
 CREATE TABLE IF NOT EXISTS audit_logs (
@@ -384,11 +332,9 @@ CREATE TABLE IF NOT EXISTS audit_logs (
     action TEXT,
     module TEXT,
     details TEXT,
-    tenant_id VARCHAR(255) NOT NULL DEFAULT '00000000-0000-0000-0000-000000000000',
     timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     ip_address TEXT
 );
-CREATE INDEX IF NOT EXISTS idx_audit_logs_tenant_id ON audit_logs(tenant_id);
 
 -- 21. Insurance Companies
 CREATE TABLE IF NOT EXISTS insurance_companies (
@@ -398,10 +344,8 @@ CREATE TABLE IF NOT EXISTS insurance_companies (
     phone TEXT,
     email TEXT,
     address TEXT,
-    status TEXT DEFAULT 'active',
-    tenant_id VARCHAR(255) NOT NULL DEFAULT '00000000-0000-0000-0000-000000000000'
+    status TEXT DEFAULT 'active'
 );
-CREATE INDEX IF NOT EXISTS idx_insurance_companies_tenant_id ON insurance_companies(tenant_id);
 
 -- 22. Patient Insurance Policies
 CREATE TABLE IF NOT EXISTS patient_insurance_policies (
@@ -416,15 +360,13 @@ CREATE TABLE IF NOT EXISTS patient_insurance_policies (
     co_pay_percent NUMERIC DEFAULT 0,
     expiry_date DATE,
     status TEXT DEFAULT 'active',
-    tenant_id VARCHAR(255) NOT NULL DEFAULT '00000000-0000-0000-0000-000000000000',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
-CREATE INDEX IF NOT EXISTS idx_pat_ins_policies_tenant_id ON patient_insurance_policies(tenant_id);
 
 -- 23. Insurance Claims
 CREATE TABLE IF NOT EXISTS insurance_claims (
     id UUID PRIMARY KEY,
-    claim_id TEXT,
+    claim_id TEXT UNIQUE,
     patient_id UUID REFERENCES patients(id) ON DELETE CASCADE,
     patient_name TEXT,
     insurance_company TEXT,
@@ -433,13 +375,20 @@ CREATE TABLE IF NOT EXISTS insurance_claims (
     claim_amount NUMERIC DEFAULT 0,
     approved_amount NUMERIC DEFAULT 0,
     status TEXT DEFAULT 'submitted',
-    policy_id UUID,
-    tenant_id VARCHAR(255) NOT NULL DEFAULT '00000000-0000-0000-0000-000000000000',
     submitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    settled_at TIMESTAMP
+    settled_at TIMESTAMP,
+    policy_id UUID
 );
-CREATE UNIQUE INDEX IF NOT EXISTS insurance_claims_tenant_cid_key ON insurance_claims(tenant_id, claim_id);
-CREATE INDEX IF NOT EXISTS idx_insurance_claims_tenant_id ON insurance_claims(tenant_id);
+
+-- Initial Admin Seed
+-- Password: admin123
+INSERT INTO users (id, name, email, password_hash, role, is_active, created_at)
+VALUES ('00000000-0000-0000-0000-000000000000', 'Admin', 'admin@hospital.com', '$2a$10$N/9hhUBRWNSwgJDpkCwIH.Saq56rylQ2glQRnmJde5RYLZPG7/GqW', 'admin', 1, CURRENT_TIMESTAMP)
+ON CONFLICT (email) DO UPDATE SET password_hash = EXCLUDED.password_hash;
+
+INSERT INTO hospital_settings (id, name, tagline, currency, tax_rate)
+VALUES (1, 'Hudi Hospital', 'Care with Excellence', 'USD', 10)
+ON CONFLICT (id) DO NOTHING;
 
 -- 24. Daily Operations
 CREATE TABLE IF NOT EXISTS daily_operations (
@@ -454,11 +403,9 @@ CREATE TABLE IF NOT EXISTS daily_operations (
     description TEXT,
     date DATE DEFAULT CURRENT_DATE,
     recorded_by TEXT,
-    tenant_id VARCHAR(255) NOT NULL DEFAULT '00000000-0000-0000-0000-000000000000',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP
 );
-CREATE INDEX IF NOT EXISTS idx_daily_operations_tenant_id ON daily_operations(tenant_id);
 
 -- 25. Manual Daily Revenue (Spreadsheet-like)
 CREATE TABLE IF NOT EXISTS manual_daily_revenue (
@@ -467,30 +414,6 @@ CREATE TABLE IF NOT EXISTS manual_daily_revenue (
     department TEXT NOT NULL,
     category TEXT NOT NULL,
     amount NUMERIC DEFAULT 0,
-    tenant_id VARCHAR(255) NOT NULL DEFAULT '00000000-0000-0000-0000-000000000000',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(date, department, category)
 );
-CREATE UNIQUE INDEX IF NOT EXISTS manual_daily_revenue_tenant_date_dept_cat_key
-    ON manual_daily_revenue(tenant_id, date, department, category);
-CREATE INDEX IF NOT EXISTS idx_manual_daily_revenue_tenant_id ON manual_daily_revenue(tenant_id);
-
--- HMS License cache
-CREATE TABLE IF NOT EXISTS hms_license (
-    machine_id TEXT PRIMARY KEY,
-    license_key TEXT,
-    company_name TEXT,
-    product_type TEXT DEFAULT 'HMS',
-    start_date TEXT,
-    expiry_date TEXT,
-    status TEXT DEFAULT 'Active',
-    is_trial INTEGER DEFAULT 0,
-    tenant_id VARCHAR(255) NOT NULL DEFAULT '00000000-0000-0000-0000-000000000000',
-    last_checked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-CREATE INDEX IF NOT EXISTS idx_hms_license_tenant_id ON hms_license(tenant_id);
-CREATE INDEX IF NOT EXISTS idx_hms_license_key ON hms_license(license_key);
-
--- NOTE: No default admin seeded here.
--- Each hospital gets its own isolated admin created during license activation.
--- See routes/license.js → ensureTenantAdmin()

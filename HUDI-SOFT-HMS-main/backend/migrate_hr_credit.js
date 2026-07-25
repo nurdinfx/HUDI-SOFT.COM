@@ -1,28 +1,19 @@
 const db = require('./database');
-const { addColumnIfMissing, columnExists, tableExists } = require('./utils/schema');
 
 async function migrate_hr_credit() {
     console.log("🚀 Starting Employee Credit Migration...");
     try {
-        const state = await addColumnIfMissing('employees', 'outstanding_balance', 'DECIMAL(12, 2) DEFAULT 0.00');
-        if (state === 'added') {
+        await db.exec('BEGIN');
+
+        try {
+            await db.prepare('ALTER TABLE employees ADD COLUMN outstanding_balance DECIMAL(12, 2) DEFAULT 0.00').run();
             console.log("✅ Added `outstanding_balance` column to `employees`");
-        } else if (state === 'exists') {
-            console.log("ℹ️ `outstanding_balance` column already exists.");
-        } else if (state === 'not_owner') {
-            console.log("ℹ️ Skipping `outstanding_balance` schema change: current DB user is not the `employees` table owner.");
-        } else {
-            console.log("ℹ️ Skipping Employee Credit Migration: `employees` table does not exist.");
-            return;
-        }
-
-        const hasEmployeesTable = await tableExists('employees');
-        const hasExpensesTable = await tableExists('employee_expenses');
-        const hasOutstandingBalance = hasEmployeesTable && await columnExists('employees', 'outstanding_balance');
-
-        if (!hasExpensesTable || !hasOutstandingBalance) {
-            console.log("ℹ️ Skipping balance recalculation until the required HR tables/columns are available.");
-            return;
+        } catch (e) {
+            if (e.message.includes('duplicate column name')) {
+                console.log("⚠️ `outstanding_balance` column already exists.");
+            } else {
+                throw e;
+            }
         }
 
         // Backfill outstanding_balance for existing employees based on their pending employee_expenses (advances)
@@ -45,14 +36,14 @@ async function migrate_hr_credit() {
         }
         
         console.log(`✅ Updated balances for ${updatedCount} employees with pending advances.`);
+
+        await db.exec('COMMIT');
         console.log("🎉 Employee Credit Migration completed successfully.");
     } catch (err) {
+        await db.exec('ROLLBACK');
         console.error("❌ Migration failed:", err.message);
-        throw err;
+        process.exit(1);
     }
 }
 
-module.exports = migrate_hr_credit;
-if (require.main === module) {
-    migrate_hr_credit();
-}
+migrate_hr_credit();

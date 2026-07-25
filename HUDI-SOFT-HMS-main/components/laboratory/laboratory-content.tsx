@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useEffect, useRef } from "react"
 import { Search, FlaskConical, Clock, CheckCircle2, AlertTriangle, Beaker, FileText, Save, ArrowRight, Plus, Printer, Download, Eye, Check, X, ClipboardList, User, UserPlus, Filter, MoreVertical, LayoutDashboard, Database, AlertCircle, Barcode } from "lucide-react"
-import { laboratoryApi, patientsApi, doctorsApi, type LabTest, type LabStats, type LabCatalogItem, type Patient, type Doctor } from "@/lib/api"
+import { laboratoryApi, patientsApi, doctorsApi, settingsApi, type LabTest, type LabStats, type LabCatalogItem, type Patient, type Doctor, type HospitalSettings } from "@/lib/api"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
@@ -22,6 +22,113 @@ import { format } from "date-fns"
 import { useAuth } from "@/lib/auth-context"
 
 interface Props { initialLabTests: LabTest[] }
+
+interface LabReportItem {
+  parameter: string
+  value: string
+  range: string
+}
+
+interface ParsedLabReport {
+  items: LabReportItem[]
+  patientReference: string
+}
+
+const defaultHospitalSettings: HospitalSettings = {
+  name: "HUDI-SOFT HMS",
+  tagline: "Clinical Laboratory Services",
+  address: "",
+  phone: "",
+  email: "",
+  website: "",
+  currency: "USD",
+  taxRate: 0,
+}
+
+function buildFallbackReportItem(test: LabTest | null): LabReportItem {
+  return {
+    parameter: test?.testName || "",
+    value: "",
+    range: test?.normalRange || "",
+  }
+}
+
+function parseLabReport(test: LabTest | null): ParsedLabReport {
+  if (!test?.results) {
+    return {
+      items: [buildFallbackReportItem(test)],
+      patientReference: test?.patientId || "",
+    }
+  }
+
+  try {
+    const parsed = JSON.parse(test.results)
+
+    if (Array.isArray(parsed)) {
+      return {
+        items: parsed,
+        patientReference: test.patientId || "",
+      }
+    }
+
+    if (parsed && typeof parsed === "object") {
+      const parsedItems = Array.isArray(parsed.items)
+        ? parsed.items
+        : [{ parameter: test.testName, value: test.results, range: test.normalRange || "" }]
+
+      return {
+        items: parsedItems,
+        patientReference: typeof parsed.patientReference === "string" ? parsed.patientReference : (test.patientId || ""),
+      }
+    }
+  } catch (error) {
+    // Fall back to legacy plain-text results.
+  }
+
+  return {
+    items: [{ parameter: test.testName, value: test.results, range: test.normalRange || "" }],
+    patientReference: test.patientId || "",
+  }
+}
+
+function summarizeLabResults(items: LabReportItem[]) {
+  const meaningfulItems = items.filter((item) => item.parameter.trim() || item.value.trim())
+
+  if (meaningfulItems.length === 0) {
+    return "No finalized result"
+  }
+
+  return meaningfulItems
+    .slice(0, 2)
+    .map((item) => item.value || item.parameter || "Result")
+    .join(" • ")
+}
+
+function formatDisplayDate(value?: string, pattern = "PPP") {
+  if (!value) return "Not available"
+  const parsed = new Date(value)
+  return Number.isNaN(parsed.getTime()) ? "Not available" : format(parsed, pattern)
+}
+
+function calculateAge(dateOfBirth?: string) {
+  if (!dateOfBirth) return "N/A"
+  const dob = new Date(dateOfBirth)
+  if (Number.isNaN(dob.getTime())) return "N/A"
+
+  const today = new Date()
+  let age = today.getFullYear() - dob.getFullYear()
+  const monthDifference = today.getMonth() - dob.getMonth()
+  if (monthDifference < 0 || (monthDifference === 0 && today.getDate() < dob.getDate())) {
+    age -= 1
+  }
+
+  return `${age} yrs`
+}
+
+function formatGender(value?: string) {
+  if (!value) return "Not available"
+  return value.charAt(0).toUpperCase() + value.slice(1).toLowerCase()
+}
 
 export function LaboratoryContent({ initialLabTests }: Props) {
   const [labTests, setLabTests] = useState<LabTest[]>(initialLabTests)
@@ -49,15 +156,27 @@ export function LaboratoryContent({ initialLabTests }: Props) {
   const [formStatus, setFormStatus] = useState("")
   const [formCritical, setFormCritical] = useState(false)
   const [formNotes, setFormNotes] = useState("")
-  const [resultItems, setResultItems] = useState<{ parameter: string; value: string; range: string }[]>([
+  const [resultItems, setResultItems] = useState<LabReportItem[]>([
     { parameter: "", value: "", range: "" }
   ])
+  const [formPatientReference, setFormPatientReference] = useState("")
+  const [hospitalSettings, setHospitalSettings] = useState<HospitalSettings>(defaultHospitalSettings)
+  const [pendingPrint, setPendingPrint] = useState(false)
+  const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null)
+  const [selectedDoctorProfile, setSelectedDoctorProfile] = useState<Doctor | null>(null)
 
   // Collection Form State
   const [collectedBy, setCollectedBy] = useState("")
   const [specimenBarcode, setSpecimenBarcode] = useState("")
 
   const reportRef = useRef<HTMLDivElement>(null)
+
+  const selectedReport = useMemo(() => parseLabReport(selectedTest), [selectedTest])
+  const hospitalName = hospitalSettings.name?.trim() || defaultHospitalSettings.name
+  const hospitalTagline = hospitalSettings.tagline?.trim() || defaultHospitalSettings.tagline
+  const hospitalContactLine = [hospitalSettings.address, hospitalSettings.phone, hospitalSettings.email].filter(Boolean).join("  |  ")
+  const hospitalWeb = hospitalSettings.website?.trim()
+  const compactReport = selectedReport.items.length > 6 || (selectedTest?.clinicalNotes?.length || 0) > 220
 
   useEffect(() => {
     // Pre-load html2pdf script
@@ -68,8 +187,9 @@ export function LaboratoryContent({ initialLabTests }: Props) {
   }, [])
 
   const handlePrint = () => {
+    if (!selectedTest) return
     const originalTitle = document.title
-    document.title = `Lab-Report-${selectedTest?.testId || 'Official'}`
+    document.title = `Lab-Report-${selectedTest.testId || 'Official'}`
     window.print()
     document.title = originalTitle
   }
@@ -149,6 +269,15 @@ export function LaboratoryContent({ initialLabTests }: Props) {
     } catch (e) { }
   }
 
+  const fetchHospitalSettings = async () => {
+    try {
+      const settings = await settingsApi.get()
+      setHospitalSettings({ ...defaultHospitalSettings, ...settings })
+    } catch (error) {
+      console.error("Failed to fetch hospital settings", error)
+    }
+  }
+
   const fetchCategories = async () => {
     try {
       const cats = await laboratoryApi.getCategories()
@@ -175,7 +304,52 @@ export function LaboratoryContent({ initialLabTests }: Props) {
     fetchStats()
     fetchCatalog()
     fetchCategories()
+    fetchHospitalSettings()
   }, [])
+
+  useEffect(() => {
+    if (!isReportModalOpen || !pendingPrint || !selectedTest) return
+
+    const timer = window.setTimeout(() => {
+      handlePrint()
+      setPendingPrint(false)
+    }, 300)
+
+    return () => window.clearTimeout(timer)
+  }, [isReportModalOpen, pendingPrint, selectedTest])
+
+  useEffect(() => {
+    if (!selectedTest?.patientId) {
+      setSelectedPatient(null)
+      setSelectedDoctorProfile(null)
+      return
+    }
+
+    let isActive = true
+
+    const loadLinkedProfiles = async () => {
+      try {
+        const [patient, doctor] = await Promise.all([
+          patientsApi.getById(selectedTest.patientId),
+          selectedTest.doctorId ? doctorsApi.getById(selectedTest.doctorId) : Promise.resolve(null as Doctor | null),
+        ])
+
+        if (!isActive) return
+        setSelectedPatient(patient ?? null)
+        setSelectedDoctorProfile(doctor ?? null)
+      } catch (error) {
+        if (!isActive) return
+        setSelectedPatient(null)
+        setSelectedDoctorProfile(null)
+      }
+    }
+
+    loadLinkedProfiles()
+
+    return () => {
+      isActive = false
+    }
+  }, [selectedTest])
 
   const fetchDropdowns = async () => {
     try {
@@ -265,29 +439,23 @@ export function LaboratoryContent({ initialLabTests }: Props) {
 
   const handleOpenResult = (test: LabTest) => {
     setSelectedTest(test)
+    const parsedReport = parseLabReport(test)
+
     setFormResults(test.results || "")
     setFormNormalRange(test.normalRange || "")
     setFormStatus(test.status)
     setFormCritical(test.criticalFlag || false)
     setFormNotes(test.clinicalNotes || "")
-
-    // Parse structured data if exists
-    try {
-      if (test.results && (test.results.startsWith('[') || test.results.startsWith('{'))) {
-        const parsed = JSON.parse(test.results)
-        if (Array.isArray(parsed)) {
-          setResultItems(parsed)
-        } else {
-          setResultItems([{ parameter: test.testName, value: test.results, range: test.normalRange || "" }])
-        }
-      } else {
-        setResultItems([{ parameter: test.testName, value: test.results || "", range: test.normalRange || "" }])
-      }
-    } catch (e) {
-      setResultItems([{ parameter: test.testName, value: test.results || "", range: test.normalRange || "" }])
-    }
+    setFormPatientReference(parsedReport.patientReference || test.patientId || "")
+    setResultItems(parsedReport.items.length > 0 ? parsedReport.items : [buildFallbackReportItem(test)])
 
     setIsResultModalOpen(true)
+  }
+
+  const openReportPreview = (test: LabTest, shouldPrint = false) => {
+    setSelectedTest(test)
+    setPendingPrint(shouldPrint)
+    setIsReportModalOpen(true)
   }
 
   const handleOpenCollect = (test: LabTest) => {
@@ -323,7 +491,11 @@ export function LaboratoryContent({ initialLabTests }: Props) {
     setLoading(true)
     try {
       // Always mark as completed when confirming results
-      const structuredResults = JSON.stringify(validItems)
+      const structuredResults = JSON.stringify({
+        version: 2,
+        patientReference: formPatientReference.trim(),
+        items: validItems,
+      })
       const primaryRange = validItems[0]?.range || ""
 
       await laboratoryApi.update(selectedTest.id, {
@@ -543,10 +715,10 @@ export function LaboratoryContent({ initialLabTests }: Props) {
 
                           {test.status === 'completed' && (
                             <>
-                              <Button variant="outline" size="sm" className="h-8 rounded-lg" onClick={() => { setSelectedTest(test); setIsReportModalOpen(true) }}>
+                              <Button variant="outline" size="sm" className="h-8 rounded-lg" onClick={() => openReportPreview(test)}>
                                 <Eye className="size-3.5 mr-1" /> View
                               </Button>
-                              <Button variant="outline" size="sm" className="h-8 rounded-lg border-primary/20 text-primary">
+                              <Button variant="outline" size="sm" className="h-8 rounded-lg border-primary/20 text-primary" onClick={() => openReportPreview(test, true)}>
                                 <Printer className="size-3.5" />
                               </Button>
                             </>
@@ -749,105 +921,192 @@ export function LaboratoryContent({ initialLabTests }: Props) {
 
       {/* MODAL: RESULT ENTRY */}
       <Dialog open={isResultModalOpen} onOpenChange={setIsResultModalOpen}>
-        <DialogContent className="max-w-2xl rounded-3xl p-0 overflow-hidden border-none shadow-2xl">
-          <DialogHeader className="p-8 bg-gradient-to-br from-slate-900 to-slate-800 text-white">
-            <div className="flex justify-between items-start">
-              <div className="space-y-1">
-                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Diagnostic Findings</p>
-                <DialogTitle className="text-2xl font-black flex items-center gap-3 italic tracking-tighter uppercase">
-                  Investigation Report
-                  <StatusBadge status={formStatus} />
-                </DialogTitle>
+        <DialogContent className="max-w-5xl rounded-[30px] p-0 overflow-hidden border-none shadow-2xl animate-in fade-in zoom-in-95 slide-in-from-bottom-4 duration-300">
+          <DialogHeader className="relative overflow-hidden border-b border-cyan-400/20 bg-[radial-gradient(circle_at_top_left,_rgba(34,211,238,0.35),_transparent_35%),linear-gradient(135deg,#020617_0%,#0f172a_45%,#0f766e_100%)] p-8 text-white">
+            <div className="absolute -right-8 -top-10 size-40 rounded-full bg-white/10 blur-2xl" />
+            <div className="absolute bottom-0 left-0 h-1 w-full bg-gradient-to-r from-cyan-400 via-emerald-400 to-transparent" />
+            <div className="relative flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+              <div className="space-y-3">
+                <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-4 py-1.5 text-[11px] font-black uppercase tracking-[0.28em] text-cyan-100 backdrop-blur">
+                  <FlaskConical className="size-4" />
+                  Result Workspace
+                </div>
+                <div className="space-y-2">
+                  <DialogTitle className="text-3xl font-black tracking-tight">Laboratory Result Entry</DialogTitle>
+                  <DialogDescription className="max-w-2xl text-sm text-slate-200">
+                    Review patient information, enter all test values, verify reference ranges, and finalize a clean professional report for printing.
+                  </DialogDescription>
+                </div>
               </div>
-              <FlaskConical className="size-8 text-primary/50" />
+              <div className="grid gap-3 sm:grid-cols-3">
+                <div className="rounded-2xl border border-white/10 bg-white/10 px-4 py-3 backdrop-blur">
+                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-white/60">Lab No.</p>
+                  <p className="mt-2 text-lg font-black">{selectedTest?.testId || "Pending"}</p>
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-white/10 px-4 py-3 backdrop-blur">
+                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-white/60">Investigation</p>
+                  <p className="mt-2 text-sm font-bold leading-5">{selectedTest?.testName || "Not selected"}</p>
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-white/10 px-4 py-3 backdrop-blur">
+                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-white/60">Workflow</p>
+                  <div className="mt-2">
+                    <StatusBadge status={formStatus} />
+                  </div>
+                </div>
+              </div>
             </div>
           </DialogHeader>
 
-          <ScrollArea className="max-h-[60vh]">
-            <div className="p-8 space-y-8">
-              {/* Header Info */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100">
-                  <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">Investigation</p>
-                  <p className="font-bold text-slate-900">{selectedTest?.testName}</p>
-                  <p className="text-[10px] text-slate-500 mt-1">{selectedTest?.testId} · {selectedTest?.testCategory}</p>
+          <ScrollArea className="max-h-[68vh] bg-slate-50/60">
+            <div className="space-y-8 p-8">
+              <div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
+                <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm animate-in fade-in slide-in-from-left-3 duration-300">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">Patient Profile</p>
+                      <h3 className="mt-2 text-xl font-black text-slate-900">{selectedPatient ? `${selectedPatient.firstName} ${selectedPatient.lastName}` : (selectedTest?.patientName || "Not available")}</h3>
+                    </div>
+                    <div className="rounded-2xl bg-primary/5 px-4 py-3 text-right">
+                      <p className="text-[10px] font-black uppercase tracking-[0.2em] text-primary/60">Hospital ID</p>
+                      <p className="mt-1 font-mono text-sm font-bold text-slate-900">{selectedPatient?.patientId || selectedTest?.patientId || "Not available"}</p>
+                    </div>
+                  </div>
+                  <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                    <div className="rounded-2xl bg-slate-50 px-4 py-3">
+                      <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Age</p>
+                      <p className="mt-1 text-sm font-semibold text-slate-900">{calculateAge(selectedPatient?.dateOfBirth)}</p>
+                    </div>
+                    <div className="rounded-2xl bg-slate-50 px-4 py-3">
+                      <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Gender</p>
+                      <p className="mt-1 text-sm font-semibold text-slate-900">{formatGender(selectedPatient?.gender)}</p>
+                    </div>
+                    <div className="rounded-2xl bg-slate-50 px-4 py-3">
+                      <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Blood Group</p>
+                      <p className="mt-1 text-sm font-semibold text-slate-900">{selectedPatient?.bloodGroup || "Not available"}</p>
+                    </div>
+                    <div className="rounded-2xl bg-slate-50 px-4 py-3">
+                      <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Phone</p>
+                      <p className="mt-1 text-sm font-semibold text-slate-900">{selectedPatient?.phone || "Not available"}</p>
+                    </div>
+                  </div>
+                  <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">Patient Reference / File Number</Label>
+                      <Input
+                        placeholder="Enter file number, national ID, phone, or other patient reference"
+                        value={formPatientReference}
+                        onChange={(e) => setFormPatientReference(e.target.value)}
+                        className="h-12 rounded-2xl border-slate-200 bg-white font-medium px-4 shadow-sm transition-all focus:ring-primary/20"
+                      />
+                    </div>
+                    <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/80 px-4 py-3">
+                      <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Address</p>
+                      <p className="mt-1 text-sm leading-6 text-slate-700">{selectedPatient ? `${selectedPatient.address}, ${selectedPatient.city}` : "Patient address not available"}</p>
+                    </div>
+                  </div>
                 </div>
-                <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100">
-                  <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1">Status Update</p>
-                  <Select value={formStatus} onValueChange={setFormStatus}>
-                    <SelectTrigger className="h-10 rounded-xl border-slate-200 bg-white font-bold">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent className="rounded-xl">
-                      <SelectItem value="sample-collected">Sample Collected</SelectItem>
-                      <SelectItem value="in-progress">In Progress</SelectItem>
-                      <SelectItem value="completed">Finalized Report</SelectItem>
-                    </SelectContent>
-                  </Select>
+
+                <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm animate-in fade-in slide-in-from-right-3 duration-300">
+                  <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">Clinical Request</p>
+                  <div className="mt-4 space-y-3">
+                    <div className="rounded-2xl bg-slate-50 px-4 py-3">
+                      <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Requested By</p>
+                      <p className="mt-1 text-sm font-bold text-slate-900">{selectedDoctorProfile?.name || (selectedTest?.doctorName ? `Dr. ${selectedTest.doctorName}` : "General Staff")}</p>
+                      <p className="text-xs text-slate-500">{selectedDoctorProfile?.specialization || selectedDoctorProfile?.department || selectedTest?.testCategory || "Clinical team"}</p>
+                    </div>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div className="rounded-2xl bg-slate-50 px-4 py-3">
+                        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Ordered On</p>
+                        <p className="mt-1 text-sm font-semibold text-slate-900">{formatDisplayDate(selectedTest?.orderedAt, "PPP p")}</p>
+                      </div>
+                      <div className="rounded-2xl bg-slate-50 px-4 py-3">
+                        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Sample</p>
+                        <p className="mt-1 text-sm font-semibold text-slate-900">{selectedTest?.sampleType || "Not available"}</p>
+                        <p className="text-xs text-slate-500">Barcode: {selectedTest?.sampleBarcode || "Not available"}</p>
+                      </div>
+                    </div>
+                    <div className="rounded-2xl border border-slate-200 bg-[linear-gradient(135deg,rgba(15,23,42,0.03),rgba(8,145,178,0.06))] px-4 py-4">
+                      <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Status Update</p>
+                      <div className="mt-3">
+                        <Select value={formStatus} onValueChange={setFormStatus}>
+                          <SelectTrigger className="h-11 rounded-2xl border-slate-200 bg-white font-bold shadow-sm">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent className="rounded-2xl">
+                            <SelectItem value="sample-collected">Sample Collected</SelectItem>
+                            <SelectItem value="in-progress">In Progress</SelectItem>
+                            <SelectItem value="completed">Finalized Report</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
 
-              {/* Dynamic Findings List */}
-              <div className="space-y-4">
+              <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm animate-in fade-in slide-in-from-bottom-3 duration-300">
                 <div className="flex items-center justify-between">
-                  <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Result Parameters</h4>
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
-                    className="h-8 rounded-lg border-primary/20 text-primary font-bold text-[10px]"
+                  <div>
+                    <h4 className="text-sm font-black uppercase tracking-[0.22em] text-slate-400">Result Parameters</h4>
+                    <p className="mt-1 text-sm text-slate-500">Enter each numeric value, qualitative result, and its matching reference range.</p>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-10 rounded-xl border-primary/20 text-primary font-bold text-[11px] shadow-sm"
                     onClick={() => setResultItems([...resultItems, { parameter: "", value: "", range: "" }])}
                   >
-                    <Plus className="size-3 mr-1" /> ADD PARAMETER
+                    <Plus className="size-4 mr-1.5" /> ADD PARAMETER
                   </Button>
                 </div>
 
-                <div className="space-y-3">
+                <div className="mt-5 space-y-3">
                   {resultItems.map((item, idx) => (
-                    <div key={idx} className="grid grid-cols-12 gap-3 items-end group p-4 rounded-2xl bg-white border border-slate-100 hover:border-primary/20 transition-all">
-                      <div className="col-span-4 space-y-1.5">
-                        <Label className="text-[9px] font-black uppercase tracking-widest text-slate-400">Parameter</Label>
-                        <Input 
-                          placeholder="e.g. Sodium" 
-                          value={item.parameter} 
+                    <div key={idx} className="grid gap-3 rounded-[24px] border border-slate-200 bg-slate-50/70 p-4 transition-all duration-300 hover:-translate-y-0.5 hover:border-primary/25 hover:shadow-lg md:grid-cols-[1.2fr_0.8fr_0.9fr_auto]">
+                      <div className="space-y-1.5">
+                        <Label className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Parameter</Label>
+                        <Input
+                          placeholder="e.g. Hemoglobin"
+                          value={item.parameter}
                           onChange={(e) => {
-                            const newItems = [...resultItems];
-                            newItems[idx].parameter = e.target.value;
-                            setResultItems(newItems);
+                            const newItems = [...resultItems]
+                            newItems[idx].parameter = e.target.value
+                            setResultItems(newItems)
                           }}
-                          className="h-10 rounded-xl border-slate-100 font-bold px-3 focus:ring-primary/10" 
+                          className="h-11 rounded-2xl border-slate-200 bg-white font-semibold shadow-sm"
                         />
                       </div>
-                      <div className="col-span-3 space-y-1.5">
-                        <Label className="text-[9px] font-black uppercase tracking-widest text-slate-400">Result Value</Label>
-                        <Input 
-                          placeholder="Finding" 
-                          value={item.value} 
+                      <div className="space-y-1.5">
+                        <Label className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Result Value</Label>
+                        <Input
+                          placeholder="e.g. 13.4"
+                          value={item.value}
                           onChange={(e) => {
-                            const newItems = [...resultItems];
-                            newItems[idx].value = e.target.value;
-                            setResultItems(newItems);
+                            const newItems = [...resultItems]
+                            newItems[idx].value = e.target.value
+                            setResultItems(newItems)
                           }}
-                          className="h-10 rounded-xl border-slate-100 font-bold px-3 focus:ring-primary/10" 
+                          className="h-11 rounded-2xl border-slate-200 bg-white font-bold shadow-sm"
                         />
                       </div>
-                      <div className="col-span-4 space-y-1.5">
-                        <Label className="text-[9px] font-black uppercase tracking-widest text-slate-400">Reference Range</Label>
-                        <Input 
-                          placeholder="Normal Ref" 
-                          value={item.range} 
+                      <div className="space-y-1.5">
+                        <Label className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Reference Range</Label>
+                        <Input
+                          placeholder="e.g. 12 - 16 g/dL"
+                          value={item.range}
                           onChange={(e) => {
-                            const newItems = [...resultItems];
-                            newItems[idx].range = e.target.value;
-                            setResultItems(newItems);
+                            const newItems = [...resultItems]
+                            newItems[idx].range = e.target.value
+                            setResultItems(newItems)
                           }}
-                          className="h-10 rounded-xl border-slate-100 font-mono text-xs px-3 focus:ring-primary/10" 
+                          className="h-11 rounded-2xl border-slate-200 bg-white font-mono text-xs shadow-sm"
                         />
                       </div>
-                      <div className="col-span-1 pb-1">
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
-                          className="size-8 rounded-lg text-slate-300 hover:text-rose-500 hover:bg-rose-50"
+                      <div className="flex items-end">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="size-10 rounded-2xl text-slate-300 transition-all hover:bg-rose-50 hover:text-rose-500"
                           disabled={resultItems.length === 1}
                           onClick={() => setResultItems(resultItems.filter((_, i) => i !== idx))}
                         >
@@ -859,39 +1118,42 @@ export function LaboratoryContent({ initialLabTests }: Props) {
                 </div>
               </div>
 
-              {/* Notes & Flags */}
-              <div className="grid grid-cols-1 gap-6">
-                <div className="space-y-2">
-                  <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Clinical Interpretation</Label>
+              <div className="grid gap-6 xl:grid-cols-[1.3fr_0.7fr]">
+                <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+                  <Label className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">Clinical Interpretation</Label>
                   <Textarea
-                    placeholder="Provide professional notes or diagnostic summary..."
-                    className="rounded-2xl min-h-[100px] border-slate-100 font-medium focus:ring-primary/10 p-4"
+                    placeholder="Provide professional comments, interpretation, and any important clinical remarks."
+                    className="mt-3 min-h-[150px] rounded-[24px] border-slate-200 bg-slate-50/70 p-4 font-medium shadow-sm focus:ring-primary/20"
                     value={formNotes}
                     onChange={e => setFormNotes(e.target.value)}
                   />
                 </div>
 
-                <div className="flex items-center justify-between p-5 border-2 border-dashed border-rose-100 rounded-2xl bg-rose-50/30">
-                  <div className="flex items-center gap-3">
-                    <AlertCircle className={`size-6 ${formCritical ? 'text-rose-600 animate-pulse' : 'text-slate-300'}`} />
-                    <div>
-                      <p className="text-xs font-black text-slate-900 uppercase">Critical Value Alert</p>
-                      <p className="text-[10px] text-slate-500 font-medium leading-tight">Enable if values deviate significantly from life-sustaining ranges</p>
+                <div className="rounded-[28px] border border-rose-200 bg-[linear-gradient(135deg,rgba(254,242,242,0.85),rgba(255,255,255,1))] p-6 shadow-sm">
+                  <div className="flex items-start gap-3">
+                    <AlertCircle className={`mt-1 size-6 ${formCritical ? 'text-rose-600 animate-pulse' : 'text-slate-300'}`} />
+                    <div className="space-y-2">
+                      <p className="text-[10px] font-black uppercase tracking-[0.2em] text-rose-500">Critical Value Control</p>
+                      <p className="text-sm text-slate-600">Use this only when the result is dangerously abnormal and needs urgent clinical attention.</p>
                     </div>
+                  </div>
+                  <div className="mt-6 rounded-2xl border border-dashed border-rose-200 bg-white/80 p-4">
+                    <p className="text-sm font-semibold text-slate-900">{formCritical ? "Critical alert is active for this report." : "This report is currently marked as non-critical."}</p>
+                    <p className="mt-1 text-xs text-slate-500">The printed report will clearly highlight critical findings.</p>
                   </div>
                   <Button
                     variant={formCritical ? 'destructive' : 'outline'}
-                    className={`h-10 rounded-xl font-black text-[10px] px-6 transition-all ${formCritical ? 'shadow-lg shadow-rose-200' : 'bg-white opacity-60'}`}
+                    className={`mt-5 h-11 w-full rounded-2xl font-black tracking-wide transition-all ${formCritical ? 'shadow-lg shadow-rose-200' : 'bg-white'}`}
                     onClick={() => setFormCritical(!formCritical)}
                   >
-                    {formCritical ? 'ALERT ACTIVE' : 'MARK AS CRITICAL'}
+                    {formCritical ? 'REMOVE CRITICAL ALERT' : 'MARK AS CRITICAL'}
                   </Button>
                 </div>
               </div>
             </div>
           </ScrollArea>
 
-          <DialogFooter className="p-6 bg-slate-50 border-t flex gap-3 sm:justify-end">
+          <DialogFooter className="sticky bottom-0 border-t bg-white/95 p-6 backdrop-blur flex gap-3 sm:justify-end">
             <Button variant="ghost" className="rounded-xl h-11 px-6 font-black text-slate-400 hover:text-slate-900" onClick={() => setIsResultModalOpen(false)}>DISCARD</Button>
             <Button className="rounded-xl h-11 px-10 font-black shadow-xl shadow-primary/20 transition-all hover:scale-[1.02] active:scale-[0.98] bg-slate-900 text-white" onClick={handleResultSubmit} disabled={loading}>
               {loading ? <Clock className="size-4 animate-spin mr-2" /> : <Save className="size-4 mr-2" />}
@@ -904,141 +1166,183 @@ export function LaboratoryContent({ initialLabTests }: Props) {
       {/* MODAL: REPORT PREVIEW */}
       <Dialog open={isReportModalOpen} onOpenChange={setIsReportModalOpen}>
         <DialogContent
-          className="max-h-[96vh] rounded-2xl p-0 overflow-hidden border-none shadow-2xl flex flex-col"
+          className="h-[95vh] max-h-[95vh] rounded-2xl p-0 overflow-hidden border-none shadow-2xl flex flex-col animate-in fade-in zoom-in-95 slide-in-from-bottom-4 duration-300"
           style={{ maxWidth: '1200px', width: '95vw' }}
         >
           <DialogTitle className="sr-only">Report Preview</DialogTitle>
           <style>{`
             @media print {
-              @page { size: A4; margin: 0; }
+              @page { size: A4; margin: 8mm; }
               body * { visibility: hidden !important; pointer-events: none; }
+              .print-preview-shell, .print-preview-shell * { visibility: visible !important; }
+              .print-preview-shell {
+                position: fixed;
+                inset: 0;
+                background: white !important;
+                padding: 0 !important;
+                margin: 0 !important;
+                overflow: hidden !important;
+                z-index: 9999;
+              }
               .printable-area, .printable-area * { visibility: visible !important; }
               .printable-area {
-                position: fixed;
-                left: 0;
-                top: 0;
-                width: 210mm;
-                height: 297mm;
-                padding: 15mm;
+                width: 194mm;
+                min-height: 0;
+                max-height: 277mm;
+                height: auto;
+                margin: 0 auto;
+                padding: 0 !important;
                 background: white !important;
-                z-index: 9999;
                 box-shadow: none !important;
                 border: none !important;
+                border-radius: 0 !important;
                 color-adjust: exact;
                 -webkit-print-color-adjust: exact;
+                overflow: hidden !important;
+                page-break-inside: avoid !important;
+                page-break-after: avoid !important;
+                page-break-before: avoid !important;
               }
               .no-print { display: none !important; }
-              /* Ensure transparency etc don't break print */
-              .bg-primary { background-color: #0f172a !important; color: white !important; -webkit-print-color-adjust: exact; }
+              .report-body { padding: 10px !important; gap: 8px !important; }
+              .report-card { padding: 8px !important; border-radius: 10px !important; }
+              .report-table th, .report-table td { padding-top: 4px !important; padding-bottom: 4px !important; font-size: 10px !important; }
+              .report-title { font-size: 20px !important; }
               .text-white { color: white !important; }
+              * { page-break-inside: avoid !important; }
             }
           `}</style>
 
-          <ScrollArea className="flex-1">
-            <div id="report-content" className="printable-area">
-              <div className="bg-primary p-8 text-white relative">
-                <div className="flex justify-between items-start">
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-3 mb-4">
-                      <div className="size-10 bg-white rounded-xl flex items-center justify-center">
-                        <FlaskConical className="size-6 text-primary" />
+          <div className="flex-1 overflow-y-auto bg-slate-100/70">
+            <div className="print-preview-shell mx-auto w-full max-w-5xl p-4 md:p-6">
+              <div id="report-content" ref={reportRef} className="printable-area overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-xl">
+                <div className="border-b border-slate-200 bg-gradient-to-r from-slate-950 via-primary to-cyan-700 px-6 py-5 text-white">
+                  <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                    <div className="flex items-start gap-4">
+                      <div className="flex size-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-white/95 shadow-lg">
+                        {hospitalSettings.logo ? (
+                          <img src={hospitalSettings.logo} alt={`${hospitalName} logo`} className="h-full w-full object-contain p-2" />
+                        ) : (
+                          <FlaskConical className="size-8 text-primary" />
+                        )}
                       </div>
-                      <h2 className="text-2xl font-bold tracking-tight">Clinical Diagnostic Report</h2>
+                      <div className="space-y-2">
+                        <p className="text-xs font-black uppercase tracking-[0.28em] text-white/70">Official Laboratory Result</p>
+                        <div>
+                          <h2 className="report-title text-2xl font-black tracking-tight">{hospitalName}</h2>
+                          <p className="text-xs font-medium text-white/80">{hospitalTagline}</p>
+                        </div>
+                        {hospitalContactLine ? <p className="text-[11px] text-white/75">{hospitalContactLine}</p> : null}
+                        {hospitalWeb ? <p className="text-[11px] text-white/75">{hospitalWeb}</p> : null}
+                      </div>
                     </div>
-                    <p className="text-sm opacity-80">Reference ID: <span className="font-mono font-bold tracking-wider">{selectedTest?.testId}</span></p>
-                    <p className="text-sm opacity-80">Date Issued: {selectedTest?.completedAt ? format(new Date(selectedTest.completedAt), 'PPP p') : '-'}</p>
-                  </div>
-                  <div className="text-right space-y-1">
-                    <p className="text-xl font-bold tracking-tighter uppercase">Official Document</p>
-                    <p className="text-xs opacity-60">Verified Laboratory Record</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="p-8 bg-white space-y-8">
-                <div className="grid grid-cols-2 gap-8 py-4 px-6 bg-slate-50 rounded-2xl border border-slate-100">
-                  <div className="space-y-4">
-                    <div className="space-y-1">
-                      <Label className="text-[10px] uppercase font-bold text-slate-400 tracking-widest">Patient Details</Label>
-                      <p className="font-bold text-lg text-slate-800">{selectedTest?.patientName}</p>
-                      <p className="text-sm text-slate-500 font-mono tracking-tight uppercase">PID: {selectedTest?.patientId}</p>
-                    </div>
-                  </div>
-                  <div className="space-y-4 text-right">
-                    <div className="space-y-1">
-                      <Label className="text-[10px] uppercase font-bold text-slate-400 tracking-widest">Requested By</Label>
-                      <p className="font-bold text-lg text-slate-800">Dr. {selectedTest?.doctorName || 'General Staff'}</p>
-                      <p className="text-sm text-slate-500">Department: {selectedTest?.testCategory}</p>
+                    <div className="report-card rounded-2xl border border-white/15 bg-white/10 px-4 py-3 text-left backdrop-blur md:min-w-[250px] md:text-right">
+                      <p className="text-[11px] font-black uppercase tracking-[0.24em] text-white/70">Report Reference</p>
+                      <p className="mt-2 text-xl font-black tracking-tight">{selectedTest?.testId || "Pending"}</p>
+                      <p className="mt-1 text-xs text-white/80">Issued: {formatDisplayDate(selectedTest?.completedAt, 'PPP p')}</p>
+                      <p className="text-xs text-white/80">Requested: {formatDisplayDate(selectedTest?.orderedAt, 'PPP p')}</p>
                     </div>
                   </div>
                 </div>
 
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between border-b pb-2">
-                    <h4 className="font-bold text-slate-900 flex items-center gap-2">
-                      <ClipboardList className="size-4 text-primary" />
-                      Investigation Findings
-                    </h4>
-                    <Badge className={`${selectedTest?.criticalFlag ? 'bg-red-500' : 'bg-emerald-500'} text-white text-[10px] font-bold px-3`}>
-                      {selectedTest?.criticalFlag ? 'CRITICAL ALERT' : 'NORMAL RANGE'}
-                    </Badge>
-                  </div>
-                  <Table>
-                    <TableHeader>
-                      <TableRow className="bg-slate-50/50">
-                        <TableHead className="font-bold text-slate-700">Test Parameter</TableHead>
-                        <TableHead className="font-bold text-slate-700 text-center">Result</TableHead>
-                        <TableHead className="font-bold text-slate-700 text-right">Biological Reference Range</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {(() => {
-                        let results: { parameter: string; value: string; range: string }[] = []
-                        try {
-                          if (selectedTest?.results && (selectedTest.results.startsWith('[') || selectedTest.results.startsWith('{'))) {
-                            const parsed = JSON.parse(selectedTest.results)
-                            results = Array.isArray(parsed) ? parsed : [{ parameter: selectedTest.testName, value: selectedTest.results, range: selectedTest.normalRange || "" }]
-                          } else {
-                            results = [{ parameter: selectedTest?.testName || 'Investigation', value: selectedTest?.results || '', range: selectedTest?.normalRange || '' }]
-                          }
-                        } catch (e) {
-                          results = [{ parameter: selectedTest?.testName || 'Investigation', value: selectedTest?.results || '', range: selectedTest?.normalRange || '' }]
-                        }
+                <div className="report-body space-y-4 px-6 py-5">
+                  <div className="grid gap-3 lg:grid-cols-[1fr_1fr]">
+                    <div className="report-card rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">Patient Information</p>
+                          <p className="mt-2 text-lg font-black text-slate-900">{selectedPatient ? `${selectedPatient.firstName} ${selectedPatient.lastName}` : (selectedTest?.patientName || "Not available")}</p>
+                        </div>
+                        <Badge className={`${selectedTest?.criticalFlag ? 'bg-red-500' : 'bg-emerald-500'} text-white text-[10px] font-bold px-3 py-1`}>
+                          {selectedTest?.criticalFlag ? 'CRITICAL' : 'VERIFIED'}
+                        </Badge>
+                      </div>
+                      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                        <p className="text-xs text-slate-600"><span className="font-bold text-slate-900">Hospital ID:</span> {selectedPatient?.patientId || selectedTest?.patientId || "Not available"}</p>
+                        <p className="text-xs text-slate-600"><span className="font-bold text-slate-900">Reference:</span> {selectedReport.patientReference || selectedTest?.patientId || "Not provided"}</p>
+                        <p className="text-xs text-slate-600"><span className="font-bold text-slate-900">Age:</span> {calculateAge(selectedPatient?.dateOfBirth)}</p>
+                        <p className="text-xs text-slate-600"><span className="font-bold text-slate-900">Gender:</span> {formatGender(selectedPatient?.gender)}</p>
+                        <p className="text-xs text-slate-600"><span className="font-bold text-slate-900">Blood Group:</span> {selectedPatient?.bloodGroup || "Not available"}</p>
+                        <p className="text-xs text-slate-600"><span className="font-bold text-slate-900">Phone:</span> {selectedPatient?.phone || "Not available"}</p>
+                      </div>
+                      <p className="mt-2 text-xs text-slate-600"><span className="font-bold text-slate-900">Address:</span> {selectedPatient ? `${selectedPatient.address}, ${selectedPatient.city}` : "Not available"}</p>
+                    </div>
 
-                        return results.map((r, i) => (
-                          <TableRow key={i} className="border-b border-slate-50">
-                            <TableCell className="font-bold text-slate-800 py-4">{r.parameter}</TableCell>
-                            <TableCell className={`text-center py-4 font-mono text-lg font-black ${selectedTest?.criticalFlag ? 'text-red-600' : 'text-slate-900'}`}>{r.value}</TableCell>
-                            <TableCell className="text-right py-4 text-slate-600 font-mono text-sm">{r.range || 'N/A'}</TableCell>
+                    <div className="report-card rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+                      <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">Request & Sample Details</p>
+                      <div className="mt-3 grid gap-2">
+                        <p className="text-xs text-slate-600"><span className="font-bold text-slate-900">Requested By:</span> {selectedDoctorProfile?.name || (selectedTest?.doctorName ? `Dr. ${selectedTest.doctorName}` : "General Staff")}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="report-card rounded-2xl border border-primary/10 bg-primary/[0.03] px-4 py-3">
+                    <p className="text-[10px] font-black uppercase tracking-[0.22em] text-primary/60">Clinical Summary</p>
+                    <p className="mt-2 text-sm font-semibold text-slate-900">{summarizeLabResults(selectedReport.items)}</p>
+                  </div>
+
+                  <div className="overflow-hidden rounded-3xl border border-slate-200">
+                    <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-6 py-4">
+                      <h4 className="font-bold text-slate-900 flex items-center gap-2">
+                        <ClipboardList className="size-4 text-primary" />
+                        Investigation Findings
+                      </h4>
+                      <p className="text-xs font-semibold text-slate-500">{selectedReport.items.length} parameter{selectedReport.items.length === 1 ? "" : "s"}</p>
+                    </div>
+                    <Table className="report-table">
+                      <TableHeader>
+                        <TableRow className="bg-white">
+                          <TableHead className="font-bold text-slate-700">Test Parameter</TableHead>
+                          <TableHead className="font-bold text-slate-700 text-center">Result</TableHead>
+                          <TableHead className="font-bold text-slate-700 text-right">Biological Reference Range</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {selectedReport.items.map((item, index) => (
+                          <TableRow key={`${item.parameter}-${index}`} className="border-b border-slate-100">
+                            <TableCell className={compactReport ? "py-2.5" : "py-4"}>
+                              <div>
+                                <p className="font-semibold text-slate-900">{item.parameter || selectedTest?.testName || "Investigation"}</p>
+                                <p className="text-[11px] text-slate-500">{selectedTest?.testCategory || "Laboratory test"}</p>
+                              </div>
+                            </TableCell>
+                            <TableCell className={`${compactReport ? "py-2.5" : "py-4"} text-center font-mono ${compactReport ? "text-base" : "text-lg"} font-black ${selectedTest?.criticalFlag ? 'text-red-600' : 'text-slate-900'}`}>
+                              {item.value || "Pending"}
+                            </TableCell>
+                            <TableCell className={`${compactReport ? "py-2.5" : "py-4"} text-right text-slate-600 font-mono text-sm`}>
+                              {item.range || "N/A"}
+                            </TableCell>
                           </TableRow>
-                        ))
-                      })()}
-                    </TableBody>
-                  </Table>
-                </div>
-
-                <div className="space-y-3 p-4 bg-amber-50/30 rounded-xl border border-amber-100">
-                  <Label className="text-[10px] uppercase font-black text-amber-600 flex items-center gap-2 tracking-widest">
-                    Interpreting Pathologist Notes
-                  </Label>
-                  <p className="text-sm text-slate-700 leading-relaxed italic">
-                    {selectedTest?.clinicalNotes || "No specific interpretations provided for this investigation."}
-                  </p>
-                </div>
-
-                <div className="flex justify-between items-end pt-8 border-t">
-                  <div className="text-[9px] text-slate-400 max-w-sm italic">
-                    Disclaimer: This report is electronically generated and requires medical correlation. Please consult with your physician for clinical interpretation.
+                        ))}
+                      </TableBody>
+                    </Table>
                   </div>
-                  <div className="text-right space-y-2">
-                    <div className="h-0.5 w-32 bg-slate-200 ml-auto mb-1"></div>
-                    <p className="font-bold text-sm text-slate-800 uppercase tracking-tighter">Authorized Signature</p>
-                    <p className="text-[10px] text-slate-400">Computer Generated Hash: {selectedTest?.id.slice(0, 8)}</p>
+
+                  <div className="grid gap-3 lg:grid-cols-[1.3fr_0.7fr]">
+                    <div className="report-card rounded-2xl border border-amber-200 bg-amber-50/60 p-4">
+                      <Label className="text-[10px] uppercase font-black text-amber-700 tracking-[0.2em]">Interpretation / Notes</Label>
+                      <p className={`mt-2 ${compactReport ? "text-xs leading-6" : "text-sm leading-7"} text-slate-700`}>
+                        {selectedTest?.clinicalNotes || "No additional interpretation provided. Clinical correlation is recommended where appropriate."}
+                      </p>
+                    </div>
+                    <div className="report-card rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                      <p className="text-[10px] uppercase font-black tracking-[0.2em] text-slate-400">Authorization</p>
+                      <div className="mt-7 border-t border-dashed border-slate-300 pt-3">
+                        <p className="font-bold text-slate-900">{selectedTest?.resultEnteredBy || selectedTest?.sampleCollectedBy || "Laboratory Officer"}</p>
+                        <p className="text-xs text-slate-500">Authorized Laboratory Signatory</p>
+                        <p className="mt-2 text-xs text-slate-400">Verification Code: {selectedTest?.id.slice(0, 8)}</p>
+                        <p className="text-xs text-slate-400">Doctor Phone: {selectedDoctorProfile?.phone || "Not available"}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="report-card rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-[11px] leading-5 text-slate-500">
+                    This report is electronically generated by {hospitalName}. Review alongside the patient&apos;s clinical presentation and physician assessment before making treatment decisions.
                   </div>
                 </div>
               </div>
             </div>
-          </ScrollArea>
+          </div>
 
           <div className="bg-slate-50 p-6 flex justify-between gap-4 border-t no-print">
             <Button variant="ghost" className="rounded-xl h-12 px-8 font-black text-slate-400 hover:text-slate-900 uppercase tracking-widest text-xs" onClick={() => setIsReportModalOpen(false)}>Close Preview</Button>

@@ -9,6 +9,8 @@ import { useAuth } from "@/lib/auth-context"
 import { Loader2 } from "lucide-react"
 import { RouteGuard } from "@/components/with-role-guard"
 
+import { LicenseBanner } from "@/components/license-banner"
+
 export default function DashboardLayout({
   children,
 }: {
@@ -21,23 +23,15 @@ export default function DashboardLayout({
   useEffect(() => {
     if (isLoading) return
     if (!isAuthenticated) {
-      // Only redirect to login if there's no cached user at all
-      const cachedUser = typeof window !== 'undefined' ? localStorage.getItem('hms_user') : null
-      const cachedToken = typeof window !== 'undefined' ? localStorage.getItem('hms_token') : null
-      if (!cachedUser || !cachedToken) {
-        const redirect = `/login?redirect=${encodeURIComponent(pathname || "/dashboard")}`
-        router.replace(redirect)
-      }
+      const redirect = `/login?redirect=${encodeURIComponent(pathname || "/dashboard")}`
+      router.replace(redirect)
       return
     }
+
+    // Role-based route protection handled by RouteGuard component now
   }, [isAuthenticated, isLoading, router, pathname, user?.role])
 
-  // Show spinner only when truly loading (no cached data)
-  const hasCachedSession = typeof window !== 'undefined' && 
-    !!localStorage.getItem('hms_token') && 
-    !!localStorage.getItem('hms_user')
-
-  if ((isLoading && !hasCachedSession) || (!isAuthenticated && !hasCachedSession)) {
+  if (isLoading || !isAuthenticated) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <Loader2 className="size-8 animate-spin text-muted-foreground" />
@@ -49,6 +43,7 @@ export default function DashboardLayout({
     <SidebarProvider>
       <AppSidebar />
       <SidebarInset>
+        <LicenseBanner />
         <DashboardHeader />
         <main className="flex-1 overflow-auto p-4 md:p-6">
           <RouteGuard>

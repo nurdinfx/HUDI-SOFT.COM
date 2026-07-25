@@ -180,7 +180,7 @@ export function POSTerminal() {
 
 
     // Cart Calculations
-    const subtotal = cart.reduce((sum, item) => sum + ((item.unitPrice || 0) * (item.quantity || 1)), 0)
+    const subtotal = cart.reduce((sum, item) => sum + (Number(item.unitPrice) || 0) * (Number(item.quantity) || 1), 0)
     const totalBeforeInsurance = subtotal - discount
     const total = Math.max(0, totalBeforeInsurance - insuranceCoverage)
 
@@ -203,7 +203,7 @@ export function POSTerminal() {
                 name: item.name,
                 type: item.type,
                 category: item.category,
-                unitPrice: item.unitPrice,
+                unitPrice: Number(item.unitPrice) || 0,
                 quantity: 1
             }]
         })
@@ -227,6 +227,14 @@ export function POSTerminal() {
 
     const removeFromCart = (id: string) => {
         setCart(prev => prev.filter(item => item.id !== id))
+    }
+
+    const updatePrice = (id: string, newPrice: string) => {
+        const parsed = parseFloat(newPrice)
+        const price = isNaN(parsed) || parsed < 0 ? 0 : parsed
+        setCart(prev => prev.map(item =>
+            item.id === id ? { ...item, unitPrice: price } : item
+        ))
     }
 
     const handleCheckout = async () => {
@@ -486,14 +494,23 @@ export function POSTerminal() {
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-slate-400" />
                             <Input
                                 placeholder="Search catalog items..."
-                                className="pl-9 h-10 bg-slate-100 border-transparent rounded-xl text-sm font-medium focus-visible:bg-white transition-colors focus-visible:ring-1 focus-visible:ring-primary/30"
+                                className="pl-9 h-10 bg-white border border-slate-200 rounded-xl text-sm font-medium focus-visible:border-primary/50 focus-visible:ring-1 focus-visible:ring-primary/30 transition-colors"
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
+                                autoComplete="off"
                             />
+                            {searchTerm && (
+                                <button
+                                    onClick={() => setSearchTerm("")}
+                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                                >
+                                    <X className="size-3.5" />
+                                </button>
+                            )}
                         </div>
                     </div>
                     
-                    <ScrollArea className="flex-1 p-4">
+                    <div className="flex-1 overflow-y-auto p-4">
                         <div className="grid grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-3">
                             {filteredCatalog.map(item => (
                                 <div
@@ -531,7 +548,7 @@ export function POSTerminal() {
                                 </div>
                             )}
                         </div>
-                    </ScrollArea>
+                    </div>
                 </div>
 
                 {/* RIGHT COLLABORATIVE PANEL: Cart & Payment */}
@@ -564,21 +581,53 @@ export function POSTerminal() {
                                                     {item.isFromPrescription && <Badge variant="secondary" className="text-[9px] h-4 bg-emerald-100 text-emerald-700 hover:bg-emerald-100">RX</Badge>}
                                                     <h5 className="font-bold text-slate-900 truncate text-sm leading-none">{item.name}</h5>
                                                 </div>
-                                                <p className="text-xs font-bold text-slate-400 font-mono">${item.unitPrice.toLocaleString()}</p>
+                                                <div className="flex items-center gap-1 mt-1">
+                                                    <span className="text-[10px] font-bold text-slate-400">$</span>
+                                                    <input
+                                                        type="number"
+                                                        min="0"
+                                                        step="0.01"
+                                                        value={item.unitPrice}
+                                                        onChange={e => updatePrice(item.id, e.target.value)}
+                                                        className="w-20 text-xs font-bold text-slate-700 bg-slate-100 border border-slate-200 rounded-md px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-primary/40 focus:bg-white transition-colors"
+                                                        onClick={e => (e.target as HTMLInputElement).select()}
+                                                        title="Click to edit price"
+                                                    />
+                                                    <span className="text-[10px] text-slate-400">each</span>
+                                                </div>
                                             </div>
                                             
                                             <div className="flex items-center gap-1 bg-slate-50 rounded-lg p-1 border border-slate-200/60">
                                                 <Button variant="ghost" size="icon" className="h-6 w-6 rounded-md text-slate-500 hover:text-rose-600 hover:bg-rose-50" onClick={() => updateQuantity(item.id, -1)}>
                                                     <Minus className="size-3" />
                                                 </Button>
-                                                <span className="w-8 text-center font-black text-sm text-slate-700">{item.quantity}</span>
+                                                <input
+                                                    type="number"
+                                                    min="1"
+                                                    value={item.quantity}
+                                                    onChange={(e) => {
+                                                        const val = parseInt(e.target.value)
+                                                        if (isNaN(val) || val < 1) return
+                                                        setCart(prev => prev.map(ci => {
+                                                            if (ci.id !== item.id) return ci
+                                                            const catItem = catalog.find(c => c.id === ci.id)
+                                                            if (catItem?.type === 'medicine' && val > (catItem.stock || 0)) {
+                                                                toast.error("Cannot exceed available stock")
+                                                                return ci
+                                                            }
+                                                            return { ...ci, quantity: val }
+                                                        }))
+                                                    }}
+                                                    onClick={(e) => (e.target as HTMLInputElement).select()}
+                                                    className="w-12 text-center font-black text-sm text-slate-700 bg-transparent border-0 focus:outline-none focus:ring-1 focus:ring-primary/40 focus:bg-white focus:rounded-md px-1"
+                                                />
                                                 <Button variant="ghost" size="icon" className="h-6 w-6 rounded-md text-slate-500 hover:text-emerald-600 hover:bg-emerald-50" onClick={() => updateQuantity(item.id, 1)}>
                                                     <Plus className="size-3" />
                                                 </Button>
                                             </div>
                                             
                                             <div className="w-20 text-right">
-                                                <span className="font-black text-slate-900 block">${(item.unitPrice * item.quantity).toLocaleString()}</span>
+                                                <span className="font-black text-slate-900 block">${(Number(item.unitPrice) * Number(item.quantity)).toFixed(2)}</span>
                                             </div>
                                             
                                             <Button variant="ghost" size="icon" className="absolute -right-2 -top-2 h-6 w-6 rounded-full bg-white border border-slate-200 text-slate-400 hover:text-rose-500 hover:bg-rose-50 hover:border-rose-200 opacity-0 group-hover:opacity-100 transition-all z-10 shadow-sm" onClick={() => removeFromCart(item.id)}>
@@ -688,22 +737,26 @@ export function POSTerminal() {
                                                 </SelectTrigger>
                                                 <SelectContent className="rounded-2xl max-h-[300px]">
                                                     {creditCustomers.length > 0 ? (
-                                                        creditCustomers.map((c) => (
-                                                            <SelectItem key={c.id} value={c.id} className="p-3 border-b border-slate-50 last:border-0">
-                                                                <div className="flex flex-col text-left">
-                                                                    <div className="flex justify-between items-center gap-4">
-                                                                        <span className="font-bold text-slate-900 text-sm">{c.full_name}</span>
-                                                                        <Badge variant="outline" className="text-[9px] text-rose-600 border-rose-200 bg-rose-50 font-bold shrink-0">
-                                                                            ${parseFloat(c.outstanding_balance).toLocaleString()} Owed
-                                                                        </Badge>
+                                                        creditCustomers.map((c) => {
+                                                            const available = (parseFloat(c.credit_limit) || 0) - (parseFloat(c.outstanding_balance) || 0)
+                                                            const atLimit = available <= 0
+                                                            return (
+                                                                <SelectItem key={c.id} value={c.id} className="p-3 border-b border-slate-50 last:border-0" disabled={atLimit}>
+                                                                    <div className="flex flex-col text-left">
+                                                                        <div className="flex justify-between items-center gap-4">
+                                                                            <span className="font-bold text-slate-900 text-sm">{c.full_name} {atLimit ? '🚫' : ''}</span>
+                                                                            <Badge variant="outline" className="text-[9px] text-rose-600 border-rose-200 bg-rose-50 font-bold shrink-0">
+                                                                                ${parseFloat(c.outstanding_balance || 0).toFixed(2)} Owed
+                                                                            </Badge>
+                                                                        </div>
+                                                                        <div className="flex items-center gap-2 mt-0.5">
+                                                                            <span className="text-[10px] text-slate-500 font-mono">{c.customer_id}</span>
+                                                                            <span className={`text-[10px] font-bold ${atLimit ? 'text-rose-500' : 'text-emerald-600'}`}>• ${available.toFixed(2)} available</span>
+                                                                        </div>
                                                                     </div>
-                                                                    <div className="flex items-center gap-2 mt-0.5">
-                                                                        <span className="text-[10px] text-slate-500 font-mono">{c.customer_id}</span>
-                                                                        {c.phone && <span className="text-[10px] text-slate-400">• {c.phone}</span>}
-                                                                    </div>
-                                                                </div>
-                                                            </SelectItem>
-                                                        ))
+                                                                </SelectItem>
+                                                            )
+                                                        })
                                                     ) : (
                                                         <div className="p-4 text-center">
                                                             <p className="text-sm font-medium text-slate-600">No customers found</p>
@@ -712,21 +765,25 @@ export function POSTerminal() {
                                                 </SelectContent>
                                             </Select>
 
-                                            {selectedCreditCustomer && (
-                                                <div className="flex justify-between items-center px-4 py-2 bg-rose-50 border border-rose-100 rounded-xl">
-                                                    <div className="flex flex-col">
-                                                        <span className="text-[10px] font-black text-rose-500 uppercase">Limit Status</span>
-                                                        <span className={cn("text-xs font-black", 
-                                                            (parseFloat(selectedCreditCustomer.credit_limit) - parseFloat(selectedCreditCustomer.outstanding_balance)) < 100 ? "text-rose-600" : "text-emerald-600"
-                                                        )}>
-                                                            ${(parseFloat(selectedCreditCustomer.credit_limit) - parseFloat(selectedCreditCustomer.outstanding_balance)).toLocaleString()} available
-                                                        </span>
+                                            {selectedCreditCustomer && (() => {
+                                                const available = (parseFloat(selectedCreditCustomer.credit_limit) || 0) - (parseFloat(selectedCreditCustomer.outstanding_balance) || 0)
+                                                const isOver = total > available
+                                                return (
+                                                    <div className={`flex justify-between items-center px-4 py-2 rounded-xl border ${isOver ? 'bg-rose-50 border-rose-200' : 'bg-emerald-50 border-emerald-100'}`}>
+                                                        <div className="flex flex-col">
+                                                            <span className={`text-[10px] font-black uppercase ${isOver ? 'text-rose-500' : 'text-emerald-600'}`}>
+                                                                {isOver ? '⚠ Credit Limit Exceeded' : 'Limit Status'}
+                                                            </span>
+                                                            <span className={`text-xs font-black ${isOver ? 'text-rose-600' : 'text-emerald-600'}`}>
+                                                                ${available.toFixed(2)} available · Sale: ${total.toFixed(2)}
+                                                            </span>
+                                                        </div>
+                                                        <Badge variant="secondary" className={`font-bold uppercase text-[9px] ${isOver ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                                                            {selectedCreditCustomer.customer_id}
+                                                        </Badge>
                                                     </div>
-                                                    <Badge variant="secondary" className="bg-rose-100 text-rose-700 font-bold uppercase text-[9px]">
-                                                        {selectedCreditCustomer.customer_id}
-                                                    </Badge>
-                                                </div>
-                                            )}
+                                                )
+                                            })()}
                                         </div>
                                     </div>
                                 )}
@@ -782,6 +839,7 @@ export function POSTerminal() {
                                         isProcessing || 
                                         (total > 0 && paymentMethod === 'cash' && Number(amountPaid) > 0 && Number(amountPaid) < total) ||
                                         (paymentMethod === 'credit' && !selectedCreditCustomer) ||
+                                        (paymentMethod === 'credit' && selectedCreditCustomer && total > ((parseFloat(selectedCreditCustomer.credit_limit) || 0) - (parseFloat(selectedCreditCustomer.outstanding_balance) || 0))) ||
                                         (paymentMethod === 'employee_credit' && !selectedEmployee)
                                     }
                                     onClick={handleCheckout}
@@ -1064,8 +1122,18 @@ export function POSTerminal() {
 
                             <div className="thermal-totals">
                                 <div className="thermal-row">
-                                    <span>Vat @ 5 %</span>
-                                    <span>{(Number(lastInvoice?.total || 0) * 0.05).toFixed(1)}</span>
+                                    <span>Subtotal</span>
+                                    <span>{Number(lastInvoice?.subtotal || 0).toFixed(1)}</span>
+                                </div>
+                                {Number(lastInvoice?.discount || 0) > 0 && (
+                                  <div className="thermal-row">
+                                      <span>Discount</span>
+                                      <span>-{Number(lastInvoice?.discount || 0).toFixed(1)}</span>
+                                  </div>
+                                )}
+                                <div className="thermal-row">
+                                    <span>Total</span>
+                                    <span>{Number(lastInvoice?.total || 0).toFixed(1)}</span>
                                 </div>
                                 <div className="thermal-row">
                                     <span>Paid Amount</span>
@@ -1073,7 +1141,7 @@ export function POSTerminal() {
                                 </div>
                                 <div className="thermal-separator"></div>
                                 <div className="thermal-row" style={{ fontWeight: 'bold' }}>
-                                    <span>Total : {Number(lastInvoice?.total || 0).toFixed(1)}</span>
+                                    <span>Balance : {Math.max(0, Number(lastInvoice?.total || 0) - Number(lastInvoice?.paidAmount || 0)).toFixed(1)}</span>
                                 </div>
                                 <div className="thermal-row">
                                     <span>Total L/Currency : 0</span>

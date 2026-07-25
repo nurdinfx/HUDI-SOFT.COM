@@ -27,6 +27,19 @@ interface InventoryContentProps {
   medicines?: Medicine[]
 }
 
+const getNumber = (value: unknown) => {
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : 0
+}
+
+const formatCurrency = (value: number) =>
+  new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(getNumber(value))
+
 export function InventoryContent({ medicines = [] }: InventoryContentProps) {
   const [search, setSearch] = useState("")
   const [categoryFilter, setCategoryFilter] = useState("all")
@@ -46,12 +59,16 @@ export function InventoryContent({ medicines = [] }: InventoryContentProps) {
 
   const categories = useMemo(() => [...new Set(list.map((m) => m.category).filter(Boolean))], [list])
   const lowStock = list.filter((m) => m.quantity <= (m.reorderLevel || 0)).length
+  const totalInventoryValue = useMemo(
+    () => list.reduce((sum, medicine) => sum + (getNumber(medicine.quantity) * getNumber(medicine.unitPrice)), 0),
+    [list]
+  )
 
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
         title="Inventory"
-        description={`${list.length} items · ${lowStock} below reorder level`}
+        description={`${list.length} items · ${lowStock} below reorder level · Total value ${formatCurrency(totalInventoryValue)}`}
       />
       <Card>
         <CardContent className="p-4">
@@ -91,6 +108,8 @@ export function InventoryContent({ medicines = [] }: InventoryContentProps) {
                 <TableHead className="hidden md:table-cell">Batch</TableHead>
                 <TableHead>Quantity</TableHead>
                 <TableHead className="hidden md:table-cell">Reorder</TableHead>
+                <TableHead className="hidden lg:table-cell">Unit Price</TableHead>
+                <TableHead className="hidden lg:table-cell">Stock Value</TableHead>
                 <TableHead className="hidden md:table-cell">Expiry</TableHead>
                 <TableHead>Status</TableHead>
               </TableRow>
@@ -99,6 +118,7 @@ export function InventoryContent({ medicines = [] }: InventoryContentProps) {
               {filtered.map((m) => {
                 const isLow = m.quantity <= (m.reorderLevel || 0)
                 const status = isLow ? "low-stock" : "in-stock"
+                const stockValue = getNumber(m.quantity) * getNumber(m.unitPrice)
                 return (
                   <TableRow key={m.id}>
                     <TableCell className="font-medium">{m.name}</TableCell>
@@ -107,6 +127,8 @@ export function InventoryContent({ medicines = [] }: InventoryContentProps) {
                     <TableCell className="hidden md:table-cell font-mono text-xs">{m.batchNumber ?? "—"}</TableCell>
                     <TableCell>{m.quantity}</TableCell>
                     <TableCell className="hidden md:table-cell">{m.reorderLevel ?? "—"}</TableCell>
+                    <TableCell className="hidden lg:table-cell">{formatCurrency(getNumber(m.unitPrice))}</TableCell>
+                    <TableCell className="hidden lg:table-cell font-medium">{formatCurrency(stockValue)}</TableCell>
                     <TableCell className="hidden md:table-cell">{m.expiryDate ?? "—"}</TableCell>
                     <TableCell><StatusBadge status={status} /></TableCell>
                   </TableRow>
@@ -114,7 +136,7 @@ export function InventoryContent({ medicines = [] }: InventoryContentProps) {
               })}
               {filtered.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
                     No inventory items found.
                   </TableCell>
                 </TableRow>

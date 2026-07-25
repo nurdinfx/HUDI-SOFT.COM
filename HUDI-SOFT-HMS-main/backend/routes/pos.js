@@ -353,9 +353,23 @@ router.post('/checkout', async (req, res) => {
             const customer = await db.prepare('SELECT * FROM credit_customers WHERE id = ?').get(creditCustomerId);
             if (!customer) throw new Error('Credit Customer not found');
 
+            // ── Credit Limit Check ──────────────────────────────────
+            const currentBalance = parseFloat(customer.outstanding_balance) || 0;
+            const creditLimit    = parseFloat(customer.credit_limit)        || 0;
+            const remainingLimit = creditLimit - currentBalance;
+            const saleOnCredit   = total - paidAmount;
+
+            if (saleOnCredit > remainingLimit) {
+                throw new Error(
+                    `Credit limit exceeded for ${customer.full_name}. ` +
+                    `Available: $${remainingLimit.toFixed(2)}, Required: $${saleOnCredit.toFixed(2)}.`
+                );
+            }
+            // ───────────────────────────────────────────────────────
+
             const transactionId = uuidv4();
             const transactionUID = `CR-TXN-${uuidv4().slice(0, 8).toUpperCase()}`;
-            const remainingBalance = total - paidAmount;
+            const remainingBalance = saleOnCredit;
 
             // Record Credit Transaction
             await db.prepare(`
@@ -427,9 +441,17 @@ router.post('/checkout', async (req, res) => {
         logAction(req.user.id, req.user.name, req.user.role, 'CREATE', 'POS', `POS Checkout: ${invoiceUID}`, req.ip);
 
         res.status(201).json({
+            invoiceId: invoiceUID,
             status: invoiceStatus,
             items: invoiceItems,
-            userName: req.user.name
+            subtotal: subtotal,
+            tax: tax,
+            discount: disc,
+            total: total,
+            paidAmount: paidAmount,
+            patientName: actualPatientName,
+            userName: req.user.name,
+            date: today
         });
 
     } catch (err) {

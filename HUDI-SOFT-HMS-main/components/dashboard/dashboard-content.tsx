@@ -71,23 +71,20 @@ export function DashboardContent({
     const fetchData = async () => {
       setIsLoading(true)
       try {
-        // Use allSettled so one failing endpoint doesn't blank the whole dashboard
-        const [dashResult, apptsResult, creditsResult, hrResult, patientsResult, doctorsResult] = await Promise.allSettled([
+        const [dashData, appts, credits, hr, patients, doctorsData] = await Promise.all([
           dashboardApi.getStats(),
           appointmentsApi.getAll({ limit: 5 }),
           creditApi.getStats(),
           hrApi.getStats(),
-          patientsApi.getAll({ limit: 5 }),
-          dashboardApi.getDoctors(),
+          patientsApi.getAll({ limit: 5 }), // Fetch recent patients
+          dashboardApi.getDoctors(), // Fetch doctors
         ])
-        if (dashResult.status === 'fulfilled') setData(dashResult.value as any)
-        else console.warn("Dashboard stats failed:", (dashResult as any).reason?.message)
-
-        if (apptsResult.status === 'fulfilled') setRecentAppts((apptsResult.value as any) || [])
-        if (creditsResult.status === 'fulfilled') setCreditStats(creditsResult.value || null)
-        if (hrResult.status === 'fulfilled') setHrStats(hrResult.value || null)
-        if (patientsResult.status === 'fulfilled') setRecentPatients((patientsResult.value as any) || [])
-        if (doctorsResult.status === 'fulfilled') setDoctors((doctorsResult.value as any) || [])
+        setData(dashData as any)
+        setRecentAppts(appts as any || [])
+        setCreditStats(credits || null)
+        setHrStats(hr || null)
+        setRecentPatients(patients as any || [])
+        setDoctors(doctorsData as any || [])
       } catch (error) {
         console.error("Failed to fetch dashboard data:", error)
       } finally {

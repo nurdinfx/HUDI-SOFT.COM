@@ -1,24 +1,19 @@
 "use client"
 
-import { useEffect, useState, Suspense } from "react"
-import { useSearchParams, useRouter } from "next/navigation"
+import { useEffect, useState } from "react"
+import { useParams, useRouter } from "next/navigation"
 import { patientsApi, appointmentsApi, pharmacyApi, laboratoryApi, billingApi } from "@/lib/api"
 import { PatientProfile } from "@/components/patients/patient-profile"
-import { Loader2 } from "lucide-react"
 
-function PatientDetailContent() {
-  const searchParams = useSearchParams()
+export default function PatientDetailPage() {
+  const { id } = useParams<{ id: string }>()
   const router = useRouter()
-  const id = searchParams.get("id")
 
   const [data, setData] = useState<any>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    if (!id) {
-      router.push("/patients")
-      return
-    }
+    if (!id) return;
 
     Promise.all([
       patientsApi.getById(id).catch(() => null),
@@ -29,7 +24,7 @@ function PatientDetailContent() {
       billingApi.getPatientFinancialHistory(id).catch(() => null)
     ]).then(([patient, allAppts, allPrescs, allLabs, allInvoices, financialHistory]) => {
       if (!patient) {
-        router.push("/patients")
+        router.push("/404")
         return
       }
 
@@ -51,16 +46,8 @@ function PatientDetailContent() {
     })
   }, [id, router])
 
-  if (loading) return (
-    <div className="flex items-center justify-center p-12">
-      <Loader2 className="size-8 animate-spin text-muted-foreground" />
-    </div>
-  )
-  if (!data?.patient) return (
-    <div className="flex items-center justify-center p-12">
-      <p className="text-muted-foreground">Patient not found</p>
-    </div>
-  )
+  if (loading) return <div className="flex items-center justify-center p-12"><p className="text-muted-foreground animate-pulse">Loading patient profile...</p></div>
+  if (!data?.patient) return <div className="flex items-center justify-center p-12"><p className="text-muted-foreground">Patient not found</p></div>
 
   return (
     <PatientProfile
@@ -71,17 +58,5 @@ function PatientDetailContent() {
       invoices={data.invoices}
       financialHistory={data.financialHistory}
     />
-  )
-}
-
-export default function PatientDetailPage() {
-  return (
-    <Suspense fallback={
-      <div className="flex items-center justify-center p-12">
-        <Loader2 className="size-8 animate-spin text-muted-foreground" />
-      </div>
-    }>
-      <PatientDetailContent />
-    </Suspense>
   )
 }

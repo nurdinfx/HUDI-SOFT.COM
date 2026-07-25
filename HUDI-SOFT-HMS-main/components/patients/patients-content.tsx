@@ -69,6 +69,11 @@ export function PatientsContent({ patients: initialPatients, onRefresh }: Patien
   const [editDialogOpen, setEditDialogOpen] = useState(false)
   const [editingPatient, setEditingPatient] = useState<Patient | null>(null)
   const [isDeleting, setIsDeleting] = useState<string | null>(null)
+  const [newGender, setNewGender] = useState("male")
+  const [newBloodGroup, setNewBloodGroup] = useState("N/A")
+  const [editGender, setEditGender] = useState("male")
+  const [editBloodGroup, setEditBloodGroup] = useState("N/A")
+  const [editStatus, setEditStatus] = useState("active")
 
   async function handleDelete(id: string) {
     if (!confirm("Are you sure you want to delete this patient?")) return;
@@ -97,15 +102,15 @@ export function PatientsContent({ patients: initialPatients, onRefresh }: Patien
       firstName: formData.get("firstName") as string,
       lastName: formData.get("lastName") as string,
       dateOfBirth: formData.get("dob") as string,
-      gender: formData.get("gender") as string,
-      bloodGroup: formData.get("bloodGroup") as string,
+      gender: editGender,
+      bloodGroup: editBloodGroup,
       phone: formData.get("phone") as string,
       email: formData.get("email") as string,
       address: formData.get("address") as string,
       city: formData.get("city") as string,
       emergencyContact: formData.get("emergencyContact") as string,
       emergencyPhone: formData.get("emergencyPhone") as string,
-      status: formData.get("status") as string,
+      status: editStatus,
     }
 
     try {
@@ -131,11 +136,9 @@ export function PatientsContent({ patients: initialPatients, onRefresh }: Patien
     const data = {
       firstName: formData.get("firstName") as string,
       lastName: formData.get("lastName") as string,
-      dateOfBirth: formData.get("dob") as string,
-      gender: formData.get("gender") as string,
-      bloodGroup: formData.get("bloodGroup") as string,
+      gender: newGender,
+      bloodGroup: newBloodGroup,
       phone: formData.get("phone") as string,
-      email: formData.get("email") as string,
       address: formData.get("address") as string,
       city: formData.get("city") as string,
       emergencyContact: formData.get("emergencyContact") as string,
@@ -149,6 +152,8 @@ export function PatientsContent({ patients: initialPatients, onRefresh }: Patien
         icon: "🏥"
       })
       setDialogOpen(false)
+      setNewGender("male")
+      setNewBloodGroup("N/A")
       if (onRefresh) onRefresh()
     } catch (error: any) {
       toast.error(error.message || "Failed to register patient")
@@ -181,12 +186,8 @@ export function PatientsContent({ patients: initialPatients, onRefresh }: Patien
                 <Input id="lastName" name="lastName" placeholder="Doe" required />
               </div>
               <div className="flex flex-col gap-2">
-                <Label htmlFor="dob">Date of Birth</Label>
-                <Input id="dob" name="dob" type="date" required />
-              </div>
-              <div className="flex flex-col gap-2">
                 <Label htmlFor="gender">Gender</Label>
-                <Select name="gender" defaultValue="male">
+                <Select value={newGender} onValueChange={setNewGender}>
                   <SelectTrigger id="gender"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="male">Male</SelectItem>
@@ -197,10 +198,10 @@ export function PatientsContent({ patients: initialPatients, onRefresh }: Patien
               </div>
               <div className="flex flex-col gap-2">
                 <Label htmlFor="bloodGroup">Blood Group</Label>
-                <Select name="bloodGroup" defaultValue="O+">
+                <Select value={newBloodGroup} onValueChange={setNewBloodGroup}>
                   <SelectTrigger id="bloodGroup"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"].map((bg) => (
+                    {["N/A", "A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"].map((bg) => (
                       <SelectItem key={bg} value={bg}>{bg}</SelectItem>
                     ))}
                   </SelectContent>
@@ -209,10 +210,6 @@ export function PatientsContent({ patients: initialPatients, onRefresh }: Patien
               <div className="flex flex-col gap-2">
                 <Label htmlFor="phone">Phone</Label>
                 <Input id="phone" name="phone" placeholder="212-555-1234" required />
-              </div>
-              <div className="flex flex-col gap-2">
-                <Label htmlFor="email">Email</Label>
-                <Input id="email" name="email" type="email" placeholder="john@email.com" />
               </div>
               <div className="flex flex-col gap-2">
                 <Label htmlFor="city">City</Label>
@@ -317,11 +314,11 @@ export function PatientsContent({ patients: initialPatients, onRefresh }: Patien
                       </Link>
                     </Button>
                     <Button variant="ghost" size="icon" asChild title="View Profile">
-                      <Link href={`/patients/detail?id=${patient.id}`}>
+                      <Link href={`/patients/${patient.id}`}>
                         <Eye className="size-4" />
                       </Link>
                     </Button>
-                    <Button variant="ghost" size="icon" title="Edit Patient" onClick={() => { setEditingPatient(patient); setEditDialogOpen(true); }}>
+                    <Button variant="ghost" size="icon" title="Edit Patient" onClick={() => { setEditingPatient(patient); setEditGender(patient.gender || "male"); setEditBloodGroup(patient.bloodGroup || "N/A"); setEditStatus(patient.status || "active"); setEditDialogOpen(true); }}>
                       <Pencil className="size-4" />
                     </Button>
                     <Button variant="ghost" size="icon" title="Delete Patient" onClick={() => handleDelete(patient.id)} disabled={isDeleting === patient.id}>
@@ -378,7 +375,7 @@ export function PatientsContent({ patients: initialPatients, onRefresh }: Patien
               </div>
               <div className="flex flex-col gap-2">
                 <Label htmlFor="edit-gender">Gender</Label>
-                <Select name="gender" defaultValue={editingPatient.gender}>
+                <Select value={editGender} onValueChange={setEditGender}>
                   <SelectTrigger id="edit-gender"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="male">Male</SelectItem>
@@ -389,10 +386,10 @@ export function PatientsContent({ patients: initialPatients, onRefresh }: Patien
               </div>
               <div className="flex flex-col gap-2">
                 <Label htmlFor="edit-bloodGroup">Blood Group</Label>
-                <Select name="bloodGroup" defaultValue={editingPatient.bloodGroup || "O+"}>
+                <Select value={editBloodGroup} onValueChange={setEditBloodGroup}>
                   <SelectTrigger id="edit-bloodGroup"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"].map((bg) => (
+                    {["N/A", "A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"].map((bg) => (
                       <SelectItem key={bg} value={bg}>{bg}</SelectItem>
                     ))}
                   </SelectContent>
@@ -412,7 +409,7 @@ export function PatientsContent({ patients: initialPatients, onRefresh }: Patien
               </div>
               <div className="flex flex-col gap-2">
                 <Label htmlFor="edit-status">Status</Label>
-                <Select name="status" defaultValue={editingPatient.status}>
+                <Select value={editStatus} onValueChange={setEditStatus}>
                   <SelectTrigger id="edit-status"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="active">Active</SelectItem>

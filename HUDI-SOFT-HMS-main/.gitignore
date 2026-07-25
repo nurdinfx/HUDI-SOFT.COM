@@ -22,13 +22,3 @@ dist/
 *.keystore
 google-services.json
 GoogleService-Info.plist
-
-# Android build outputs
-android/.gradle/
-android/app/build/
-android/build/
-android/local.properties
-android/.idea/
-
-# Capacitor assets config (optional — not sensitive, but auto-generated)
-capacitor.assets.config.json

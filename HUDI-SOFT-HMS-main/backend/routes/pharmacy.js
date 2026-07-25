@@ -1,7 +1,6 @@
 const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const db = require('../database');
-const { addColumnIfMissing } = require('../utils/schema');
 const { authenticate, logAction, authorize } = require('../middleware/auth');
 const { sendPushNotification } = require('../utils/push-notify');
 const { recordGranularPayment } = require('../utils/finance');
@@ -27,6 +26,8 @@ async function initTables() {
                 invoice_id TEXT UNIQUE NOT NULL,
                 patient_id UUID,
                 patient_name TEXT,
+                subtotal_amount DECIMAL(15,2) DEFAULT 0,
+                discount_amount DECIMAL(15,2) DEFAULT 0,
                 total_amount DECIMAL(15,2) DEFAULT 0,
                 paid_amount DECIMAL(15,2) DEFAULT 0,
                 credit_amount DECIMAL(15,2) DEFAULT 0,
@@ -37,12 +38,9 @@ async function initTables() {
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         `);
-        const itemsSummaryState = await addColumnIfMissing('pharmacy_transactions', 'items_summary', 'TEXT');
-        if (itemsSummaryState === 'added') {
-            console.log('✅ Added items_summary column to pharmacy_transactions');
-        } else if (itemsSummaryState === 'not_owner') {
-            console.log('ℹ️ Skipping items_summary migration for pharmacy_transactions: current DB user is not the table owner');
-        }
+        try { await db.query('ALTER TABLE pharmacy_transactions ADD COLUMN items_summary TEXT'); } catch (e) {}
+        try { await db.query('ALTER TABLE pharmacy_transactions ADD COLUMN subtotal_amount DECIMAL(15,2) DEFAULT 0'); } catch (e) {}
+        try { await db.query('ALTER TABLE pharmacy_transactions ADD COLUMN discount_amount DECIMAL(15,2) DEFAULT 0'); } catch (e) {}
 
         await db.query(`
             CREATE TABLE IF NOT EXISTS pharmacy_transaction_items (
@@ -98,6 +96,7 @@ router.get('/transactions', async (req, res) => {
 
     if (patientId) { q += ' AND patient_id = ?'; params.push(patientId); }
     if (status) { q += ' AND status = ?'; params.push(status); }
+    else { q += " AND COALESCE(status, '') <> 'Cancelled' AND COALESCE(total_amount, 0) > 0"; }
     if (paymentMethod) { q += ' AND payment_method = ?'; params.push(paymentMethod); }
     if (startDate) { q += ' AND DATE(created_at) >= ?'; params.push(startDate); }
     if (endDate) { q += ' AND DATE(created_at) <= ?'; params.push(endDate); }
@@ -114,7 +113,22 @@ router.get('/transactions', async (req, res) => {
 
 router.get('/transactions/:id/items', async (req, res) => {
     try {
-        const items = await db.prepare('SELECT * FROM pharmacy_transaction_items WHERE transaction_id = ?').all(req.params.id);
+        const items = await db.prepare(`
+            SELECT ti.*,
+                   COALESCE(r.returned_qty, 0) AS returned_quantity,
+                   CASE
+                       WHEN ti.quantity - COALESCE(r.returned_qty, 0) > 0 THEN ti.quantity - COALESCE(r.returned_qty, 0)
+                       ELSE 0
+                   END AS remaining_quantity
+            FROM pharmacy_transaction_items ti
+            LEFT JOIN (
+                SELECT item_id, COALESCE(SUM(quantity), 0) AS returned_qty
+                FROM pharmacy_returns
+                GROUP BY item_id
+            ) r ON r.item_id = ti.id
+            WHERE ti.transaction_id = ?
+            ORDER BY ti.medicine_name ASC
+        `).all(req.params.id);
         res.json(items);
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -125,7 +139,7 @@ router.post('/transactions', async (req, res) => {
     const { 
         patientId, patientName, items, totalAmount, 
         paidAmount, paymentMethod, status, appliedCredit,
-        notes, creditCustomerId 
+        notes, creditCustomerId, discount
     } = req.body;
     
     try {
@@ -143,17 +157,42 @@ router.post('/transactions', async (req, res) => {
         
         await db.run('BEGIN TRANSACTION');
 
-        const safeAppliedCredit = appliedCredit ? parseFloat(appliedCredit) : 0;
-        const totalToReconcile = totalAmount - safeAppliedCredit;
-        // if paymentMethod is 'credit', paidAmount might be 0 or partial.
-        const creditAmount = paymentMethod === 'credit' ? (totalToReconcile - (parseFloat(paidAmount) || 0)) : (totalAmount - (parseFloat(paidAmount) || 0) - safeAppliedCredit);
+        const subtotalAmount = parseFloat(totalAmount) || 0;
+        const discountAmount = Math.max(0, parseFloat(discount) || 0);
+        const netTotalAmount = Math.max(0, subtotalAmount - discountAmount);
+        const safeAppliedCredit = Math.min(netTotalAmount, appliedCredit ? parseFloat(appliedCredit) : 0);
+        const totalToReconcile = Math.max(0, netTotalAmount - safeAppliedCredit);
+        const pmLower = (paymentMethod || '').toLowerCase();
+        const resolvedPaidAmount =
+            (pmLower === 'credit' || pmLower === 'employee_credit')
+                ? (parseFloat(paidAmount) || 0)
+                : ((paidAmount !== undefined && paidAmount !== null && paidAmount !== '')
+                    ? (parseFloat(paidAmount) || 0)
+                    : totalToReconcile);
+        const creditAmount = pmLower === 'credit'
+            ? (totalToReconcile - resolvedPaidAmount)
+            : (netTotalAmount - resolvedPaidAmount - safeAppliedCredit);
         const itemsSummary = items.map(i => `${i.medicineName || i.name} (x${i.quantity})`).join(', ');
 
         // Insert Transaction
         await db.prepare(`INSERT INTO pharmacy_transactions 
-            (id, invoice_id, patient_id, patient_name, total_amount, paid_amount, credit_amount, payment_method, status, created_by, items_summary)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-            .run(txId, invoiceId, patientId || null, patientName, totalAmount, (parseFloat(paidAmount) || 0) + safeAppliedCredit, Math.max(0, creditAmount), paymentMethod, status || 'Completed', req.user.name, itemsSummary);
+            (id, invoice_id, patient_id, patient_name, subtotal_amount, discount_amount, total_amount, paid_amount, credit_amount, payment_method, status, created_by, items_summary)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+            .run(
+                txId,
+                invoiceId,
+                patientId || null,
+                patientName,
+                subtotalAmount,
+                discountAmount,
+                netTotalAmount,
+                resolvedPaidAmount + safeAppliedCredit,
+                Math.max(0, creditAmount),
+                paymentMethod,
+                status || 'Completed',
+                req.user.name,
+                itemsSummary
+            );
 
         const isValidUUID = (str) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
 
@@ -190,54 +229,67 @@ router.post('/transactions', async (req, res) => {
             if (item.type === 'medicine' || (!item.type && finalMedId)) {
                 if (finalMedId) {
                     const med = await db.prepare('SELECT quantity, reorder_level FROM medicines WHERE id = ?').get(finalMedId);
-                
-                if (med) {
-                    if (med.quantity < item.quantity) {
-                        throw new Error(`Insufficient stock for ${item.medicineName || item.name}`);
-                    }
+                    if (med) {
+                        if (med.quantity < item.quantity) {
+                            throw new Error(`Insufficient stock for ${item.medicineName || item.name}`);
+                        }
 
-                    // Deduct from batches
-                    let remainingToDeduct = item.quantity;
-                    const batches = await db.prepare('SELECT * FROM pharmacy_batches WHERE medicine_id = ? AND quantity_remaining > 0 ORDER BY expiry_date ASC').all(finalMedId);
-                    
-                    for (const batch of batches) {
-                        if (remainingToDeduct === 0) break;
-                        const deduct = Math.min(batch.quantity_remaining, remainingToDeduct);
-                        await db.prepare('UPDATE pharmacy_batches SET quantity_remaining = quantity_remaining - ? WHERE id = ?').run(deduct, batch.id);
-                        remainingToDeduct -= deduct;
-                    }
+                        // Deduct from batches
+                        let remainingToDeduct = item.quantity;
+                        const batches = await db.prepare('SELECT * FROM pharmacy_batches WHERE medicine_id = ? AND quantity_remaining > 0 ORDER BY expiry_date ASC').all(finalMedId);
+                        
+                        for (const batch of batches) {
+                            if (remainingToDeduct === 0) break;
+                            const deduct = Math.min(batch.quantity_remaining, remainingToDeduct);
+                            await db.prepare('UPDATE pharmacy_batches SET quantity_remaining = quantity_remaining - ? WHERE id = ?').run(deduct, batch.id);
+                            remainingToDeduct -= deduct;
+                        }
 
-                    // Update overall quantity
-                    const newQty = med.quantity - item.quantity;
-                    const newStatus = newQty === 0 ? 'out-of-stock' : newQty <= med.reorder_level ? 'low-stock' : 'in-stock';
-                    await db.prepare('UPDATE medicines SET quantity = ?, status = ? WHERE id = ?')
-                        .run(newQty, newStatus, finalMedId);
+                        // Update overall quantity
+                        const newQty = med.quantity - item.quantity;
+                        const newStatus = newQty === 0 ? 'out-of-stock' : newQty <= med.reorder_level ? 'low-stock' : 'in-stock';
+                        await db.prepare('UPDATE medicines SET quantity = ?, status = ? WHERE id = ?')
+                            .run(newQty, newStatus, finalMedId);
+                    }
                 }
             }
         }
-    }
 
         // Handle Credit Module Integration
-        if (paymentMethod === 'credit' && creditCustomerId) {
+        if (pmLower === 'credit' && creditCustomerId) {
             const customer = await db.prepare('SELECT * FROM credit_customers WHERE id = ?').get(creditCustomerId);
             if (!customer) throw new Error('Credit Customer not found');
 
+            // ── Credit Limit Check ──────────────────────────────────
+            const currentBalance = parseFloat(customer.outstanding_balance) || 0;
+            const creditLimit    = parseFloat(customer.credit_limit)        || 0;
+            const remainingLimit = creditLimit - currentBalance;
+            const saleOnCredit   = totalToReconcile - resolvedPaidAmount;
+
+            if (saleOnCredit > remainingLimit) {
+                throw new Error(
+                    `Credit limit exceeded for ${customer.full_name}. ` +
+                    `Available: $${remainingLimit.toFixed(2)}, Required: $${saleOnCredit.toFixed(2)}.`
+                );
+            }
+            // ───────────────────────────────────────────────────────
+
             const transactionId = uuidv4();
             const transactionUID = `CR-TXN-${uuidv4().slice(0, 8).toUpperCase()}`;
-            const remainingBalance = totalToReconcile - (parseFloat(paidAmount) || 0);
+            const remainingBalance = saleOnCredit;
 
             await db.prepare(`
                 INSERT INTO credit_transactions (id, transaction_id, customer_id, invoice_id, invoice_number, items_summary, total_amount, amount_paid, remaining_balance, status, staff_id, staff_name)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             `).run(
                 transactionId, transactionUID, creditCustomerId, txId, invoiceId, itemsSummary,
-                totalAmount, (parseFloat(paidAmount) || 0), remainingBalance, remainingBalance <= 0 ? 'paid' : 'unpaid',
+                netTotalAmount, resolvedPaidAmount, remainingBalance, remainingBalance <= 0 ? 'paid' : 'unpaid',
                 req.user.id, req.user.name
             );
 
             // Update Customer Balance
             const newBalance = parseFloat(customer.outstanding_balance) + remainingBalance;
-            const newTotalCredit = parseFloat(customer.total_credit_taken) + totalAmount;
+            const newTotalCredit = parseFloat(customer.total_credit_taken) + netTotalAmount;
             
             await db.prepare(`
                 UPDATE credit_customers 
@@ -251,14 +303,14 @@ router.post('/transactions', async (req, res) => {
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             `).run(
                 uuidv4(), creditCustomerId, new Date().toISOString().split('T')[0], `Pharmacy POS Credit Purchase: ${invoiceId}`,
-                'debit', totalAmount, newBalance, transactionUID
+                'debit', netTotalAmount, newBalance, transactionUID
             );
-        } else if (paymentMethod === 'employee_credit' && creditCustomerId) {
+        } else if (pmLower === 'employee_credit' && creditCustomerId) {
             // Handle Employee Credit Integration
             const employee = await db.prepare('SELECT * FROM employees WHERE id = ?').get(creditCustomerId);
             if (!employee) throw new Error('Employee not found');
 
-            const remainingBalance = totalToReconcile - (parseFloat(paidAmount) || 0);
+            const remainingBalance = totalToReconcile - resolvedPaidAmount;
 
             // 1. Log an advance in employee_expenses
             const expenseId = uuidv4();
@@ -288,7 +340,7 @@ router.post('/transactions', async (req, res) => {
                 await db.prepare('UPDATE patient_credits SET balance = patient_credits.balance - ?, last_updated = CURRENT_TIMESTAMP WHERE patient_id = ?')
                     .run(safeAppliedCredit, patientId);
             }
-            if (creditAmount > 0 && paymentMethod !== 'credit' && paymentMethod !== 'employee_credit') {
+            if (creditAmount > 0 && pmLower !== 'credit' && pmLower !== 'employee_credit') {
                 await db.prepare(`INSERT INTO patient_credits (id, patient_id, balance) 
                     VALUES (?, ?, ?) 
                     ON CONFLICT(patient_id) DO UPDATE SET balance = patient_credits.balance + ?, last_updated = CURRENT_TIMESTAMP`)
@@ -299,24 +351,27 @@ router.post('/transactions', async (req, res) => {
         await db.run('COMMIT');
         logAction(req.user.id, req.user.name, req.user.role, 'CREATE', 'Pharmacy', `POS Transaction ${invoiceId} created`, req.ip);
 
-        // Log income to account_entries for departmental revenue report
-        if ((parseFloat(paidAmount) || 0) > 0 && paymentMethod !== 'credit') {
+        // DISABLED: Pharmacy sales now transferred end-of-day.
+        // Log income to account_entries for departmental revenue report (Only via End of Day Transfer)
+        /*
+        if (resolvedPaidAmount > 0 && pmLower !== 'credit') {
             try {
                 await recordGranularPayment({
                     invoiceId,
                     dbInvoiceId: txId,
                     patientName,
-                    paymentAmount: (parseFloat(paidAmount) || 0) + (appliedCredit ? parseFloat(appliedCredit) : 0),
+                    paymentAmount: resolvedPaidAmount + safeAppliedCredit,
                     paymentMethod,
                     userId: req.user.id,
                     defaultDept: 'Pharmacy'
                 });
             } catch (e) { console.error('Finance logging error:', e.message); }
         }
+        */
 
         sendPushNotification({
-            title: 'ðŸ·ï¸ New Pharmacy POS Sale',
-            message: `New sale completed by pharmacist: ${invoiceId} for ${patientName || 'Walk-in'}. Total: $${totalAmount}.`,
+            title: '💊 New Pharmacy POS Sale',
+            message: `New sale completed by pharmacist: ${invoiceId} for ${patientName || 'Walk-in'}. Total: $${netTotalAmount}.`,
             url: `/pharmacy/transactions`
         });
 
@@ -328,35 +383,71 @@ router.post('/transactions', async (req, res) => {
 });
 
 router.post('/transactions/:id/return', async (req, res) => {
-    const { items, exchangeItems, netAmount, paymentMethod } = req.body; 
-    // items: Array of { itemId, quantity, amount }
-    // exchangeItems: Array of { medicineId, medicineName, quantity, unitPrice, totalPrice }
+    const { items, exchangeItems, paymentMethod } = req.body; 
     
     try {
         const tx = await db.prepare('SELECT * FROM pharmacy_transactions WHERE id = ?').get(req.params.id);
         if (!tx) return res.status(404).json({ error: 'Transaction not found' });
 
+        const returnItems = Array.isArray(items) ? items.filter(item => (parseInt(item?.quantity, 10) || 0) > 0) : [];
+        const safeExchangeItems = Array.isArray(exchangeItems) ? exchangeItems.filter(item => (parseInt(item?.quantity, 10) || 0) > 0) : [];
+
+        if (returnItems.length === 0 && safeExchangeItems.length === 0) {
+            return res.status(400).json({ error: 'No return or exchange items provided' });
+        }
+
         await db.run('BEGIN TRANSACTION');
 
-        let totalReturnedAmount = 0;
+        const originalPaidAmount = Math.max(0, parseFloat(tx.paid_amount) || 0);
+        const originalDiscountAmount = Math.max(
+            0,
+            parseFloat(tx.discount_amount) || Math.max(0, (parseFloat(tx.subtotal_amount) || parseFloat(tx.total_amount) || 0) - (parseFloat(tx.total_amount) || 0))
+        );
 
         // 1. Process Returns
-        for (const rItem of items) {
-            const item = await db.prepare('SELECT * FROM pharmacy_transaction_items WHERE id = ?').get(rItem.itemId);
+        for (const rItem of returnItems) {
+            const item = await db.prepare('SELECT * FROM pharmacy_transaction_items WHERE id = ? AND transaction_id = ?').get(rItem.itemId, req.params.id);
             if (!item) throw new Error('Transaction item not found');
 
+            const requestedQty = Math.max(0, parseInt(rItem.quantity, 10) || 0);
+            if (requestedQty <= 0) continue;
+
+            const previouslyReturned = await db.prepare(`
+                SELECT COALESCE(SUM(quantity), 0) AS returned_qty
+                FROM pharmacy_returns
+                WHERE item_id = ?
+            `).get(rItem.itemId);
+
+            const soldQty = Math.max(0, parseInt(item.quantity, 10) || 0);
+            const alreadyReturnedQty = Math.max(0, parseInt(previouslyReturned?.returned_qty, 10) || 0);
+            const remainingQty = Math.max(0, soldQty - alreadyReturnedQty);
+
+            if (requestedQty > remainingQty) {
+                throw new Error(`Return quantity for ${item.medicine_name} exceeds remaining sold quantity`);
+            }
+
+            const unitPrice = Math.max(0, parseFloat(item.unit_price) || 0);
+            const returnAmount = Number((requestedQty * unitPrice).toFixed(2));
             const returnId = uuidv4();
             await db.prepare('INSERT INTO pharmacy_returns (id, transaction_id, item_id, quantity, amount) VALUES (?, ?, ?, ?, ?)')
-                .run(returnId, req.params.id, rItem.itemId, rItem.quantity, rItem.amount);
+                .run(returnId, req.params.id, rItem.itemId, requestedQty, returnAmount);
 
             // Increase Stock (Old Item)
-            await db.prepare('UPDATE medicines SET quantity = quantity + ? WHERE id = ?').run(rItem.quantity, item.medicine_id);
-            totalReturnedAmount += parseFloat(rItem.amount);
+            const medicine = item.medicine_id
+                ? await db.prepare('SELECT quantity, reorder_level FROM medicines WHERE id = ?').get(item.medicine_id)
+                : null;
+
+            if (medicine) {
+                const updatedQty = (parseInt(medicine.quantity, 10) || 0) + requestedQty;
+                const reorderLevel = parseInt(medicine.reorder_level, 10) || 0;
+                const updatedStatus = updatedQty === 0 ? 'out-of-stock' : updatedQty <= reorderLevel ? 'low-stock' : 'in-stock';
+                await db.prepare('UPDATE medicines SET quantity = ?, status = ? WHERE id = ?').run(updatedQty, updatedStatus, item.medicine_id);
+            }
         }
 
         // 2. Process Exchanges (as a new sale if exchangeItems exist)
         let totalExchangeAmount = 0;
-        if (exchangeItems && exchangeItems.length > 0) {
+        if (safeExchangeItems.length > 0) {
             const exchangeTxId = uuidv4();
             const maxExcData = await db.prepare("SELECT invoice_id FROM pharmacy_transactions WHERE invoice_id LIKE 'PHARM-EXC-%' ORDER BY invoice_id DESC LIMIT 1").get();
             let nextExcNumber = 1;
@@ -366,27 +457,23 @@ router.post('/transactions/:id/return', async (req, res) => {
             }
             const exchangeInvoiceId = `PHARM-EXC-${String(nextExcNumber).padStart(4, '0')}`;
             
-            // Calculate total first to insert transaction
-            for (const eItem of exchangeItems) {
+            for (const eItem of safeExchangeItems) {
                 totalExchangeAmount += parseFloat(eItem.totalPrice);
             }
 
-            const itemsSummaryText = exchangeItems.map(i => `${i.medicineName} (x${i.quantity})`).join(', ');
+            const itemsSummaryText = safeExchangeItems.map(i => `${i.medicineName} (x${i.quantity})`).join(', ');
             
-            // Insert parent transaction FIRST to satisfy FK
             await db.prepare(`INSERT INTO pharmacy_transactions 
-                (id, invoice_id, patient_id, patient_name, total_amount, paid_amount, credit_amount, payment_method, status, created_by, items_summary)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+                (id, invoice_id, patient_id, patient_name, total_amount, paid_amount, credit_amount, payment_method, status, created_by, items_summary, is_transferred)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`)
                 .run(exchangeTxId, exchangeInvoiceId, tx.patient_id, tx.patient_name, totalExchangeAmount, totalExchangeAmount, 0, paymentMethod || tx.payment_method, 'Exchange', req.user.name, `EXC for ${tx.invoice_id}: ${itemsSummaryText}`);
 
-            for (const eItem of exchangeItems) {
-                // Deduct Stock for New Item
+            for (const eItem of safeExchangeItems) {
                 const med = await db.prepare('SELECT quantity, reorder_level FROM medicines WHERE id = ?').get(eItem.medicineId);
                 if (!med || med.quantity < eItem.quantity) {
                     throw new Error(`Insufficient stock for exchange item: ${eItem.medicineName}`);
                 }
 
-                // Deduct from batches
                 let remainingToDeduct = eItem.quantity;
                 const batches = await db.prepare('SELECT * FROM pharmacy_batches WHERE medicine_id = ? AND quantity_remaining > 0 ORDER BY expiry_date ASC').all(eItem.medicineId);
                 for (const batch of batches) {
@@ -400,7 +487,6 @@ router.post('/transactions/:id/return', async (req, res) => {
                 const newStatus = newQty === 0 ? 'out-of-stock' : newQty <= med.reorder_level ? 'low-stock' : 'in-stock';
                 await db.prepare('UPDATE medicines SET quantity = ?, status = ? WHERE id = ?').run(newQty, newStatus, eItem.medicineId);
 
-                // Record Exchange Item
                 const exchangeItemId = uuidv4();
                 await db.prepare(`INSERT INTO pharmacy_transaction_items 
                     (id, transaction_id, medicine_id, medicine_name, quantity, unit_price, total_price)
@@ -409,14 +495,97 @@ router.post('/transactions/:id/return', async (req, res) => {
             }
         }
 
-        // 3. Handle Financial Balance Adjustment
-        // Net balance change for the patient/system
-        const balanceChange = totalReturnedAmount - totalExchangeAmount;
+        const originalItems = await db.prepare('SELECT * FROM pharmacy_transaction_items WHERE transaction_id = ?').all(req.params.id);
+        const returnedQtyRows = await db.prepare(`
+            SELECT item_id, COALESCE(SUM(quantity), 0) AS returned_qty
+            FROM pharmacy_returns
+            WHERE transaction_id = ?
+            GROUP BY item_id
+        `).all(req.params.id);
+
+        const returnedQtyMap = new Map(
+            returnedQtyRows.map(row => [row.item_id, Math.max(0, parseInt(row.returned_qty, 10) || 0)])
+        );
+
+        const remainingItems = originalItems
+            .map(item => {
+                const soldQty = Math.max(0, parseInt(item.quantity, 10) || 0);
+                const returnedQty = Math.min(soldQty, returnedQtyMap.get(item.id) || 0);
+                const remainingQty = Math.max(0, soldQty - returnedQty);
+                const unitPrice = Math.max(0, parseFloat(item.unit_price) || 0);
+                return {
+                    ...item,
+                    remainingQty,
+                    unitPrice,
+                    remainingLineTotal: Number((remainingQty * unitPrice).toFixed(2))
+                };
+            })
+            .filter(item => item.remainingQty > 0);
+
+        const updatedSubtotalAmount = Number(
+            remainingItems.reduce((sum, item) => sum + item.remainingLineTotal, 0).toFixed(2)
+        );
+        const updatedDiscountAmount = Number(Math.min(originalDiscountAmount, updatedSubtotalAmount).toFixed(2));
+        const updatedTotalAmount = Number(Math.max(0, updatedSubtotalAmount - updatedDiscountAmount).toFixed(2));
+        const updatedPaidAmount = Number(Math.min(originalPaidAmount, updatedTotalAmount).toFixed(2));
+        const updatedCreditAmount = Number(Math.max(0, updatedTotalAmount - updatedPaidAmount).toFixed(2));
+        const updatedItemsSummary = remainingItems.length > 0
+            ? remainingItems.map(item => `${item.medicine_name} (x${item.remainingQty})`).join(', ')
+            : 'All items returned';
+
+        const isReturnOnlyFlow = safeExchangeItems.length === 0;
+
+        let updatedStatus = 'Paid';
+        if (updatedTotalAmount === 0) updatedStatus = 'Cancelled';
+        else if (updatedCreditAmount > 0 && updatedPaidAmount > 0) updatedStatus = 'Partial';
+        else if (updatedCreditAmount > 0) updatedStatus = 'Credit';
+
+        await db.prepare(`
+            UPDATE pharmacy_transactions
+            SET subtotal_amount = ?,
+                discount_amount = ?,
+                total_amount = ?,
+                paid_amount = ?,
+                credit_amount = ?,
+                status = ?,
+                items_summary = ?
+            WHERE id = ?
+        `).run(
+            updatedSubtotalAmount,
+            updatedDiscountAmount,
+            updatedTotalAmount,
+            updatedPaidAmount,
+            updatedCreditAmount,
+            updatedStatus,
+            updatedItemsSummary,
+            req.params.id
+        );
+
+        const refundableBalance = Number(Math.max(0, originalPaidAmount - updatedPaidAmount).toFixed(2));
         
-        if (tx.patient_id) {
-            // If balanceChange > 0, patient gets credit (Return > Exchange)
-            // If balanceChange < 0, patient owes money (Exchange > Return) - but usually they'd pay at counter.
-            // We'll update the patient_credits balance regardless.
+        if (tx.is_transferred === 1 && refundableBalance > 0) {
+            const todayStr = new Date().toISOString().split('T')[0];
+            await db.prepare(`
+                INSERT INTO account_entries (id, date, type, category, description, amount, payment_method, reference_id, department, status, user_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `).run(
+                uuidv4(),
+                todayStr,
+                'expense',
+                'Pharmacy Refund',
+                `Refund for returned items (Inv: ${tx.invoice_id}, Patient: ${tx.patient_name || 'Walk-In'})`,
+                refundableBalance,
+                paymentMethod || tx.payment_method || 'cash',
+                `PHARM-REFUND-${tx.invoice_id}`,
+                'Pharmacy',
+                'completed',
+                req.user.id
+            );
+        }
+
+        const balanceChange = Number((refundableBalance - totalExchangeAmount).toFixed(2));
+        
+        if (tx.patient_id && balanceChange !== 0 && !isReturnOnlyFlow) {
             await db.prepare(`INSERT INTO patient_credits (id, patient_id, balance) 
                 VALUES (?, ?, ?) 
                 ON CONFLICT(patient_id) DO UPDATE SET balance = patient_credits.balance + ?, last_updated = CURRENT_TIMESTAMP`)
@@ -425,7 +594,11 @@ router.post('/transactions/:id/return', async (req, res) => {
 
         await db.run('COMMIT');
         logAction(req.user.id, req.user.name, req.user.role, 'UPDATE', 'Pharmacy', `Return/Exchange processed for ${tx.invoice_id}`, req.ip);
-        res.json({ message: 'Return/Exchange processed successfully' });
+        res.json({ 
+            message: 'Return/Exchange processed successfully',
+            refundAmount: refundableBalance,
+            cancelledTransaction: updatedStatus === 'Cancelled'
+        });
     } catch (err) {
         await db.run('ROLLBACK');
         res.status(400).json({ error: err.message });
@@ -435,12 +608,13 @@ router.post('/transactions/:id/return', async (req, res) => {
 router.get('/stats/revenue', async (req, res) => {
     try {
         const stats = {
-            totalSales: (await db.prepare("SELECT SUM(total_amount) as s FROM pharmacy_transactions WHERE DATE(created_at) = CURRENT_DATE").get()).s || 0,
-            totalPaid: (await db.prepare("SELECT SUM(paid_amount) as s FROM pharmacy_transactions WHERE DATE(created_at) = CURRENT_DATE").get()).s || 0,
+            totalSales: (await db.prepare("SELECT SUM(total_amount) as s FROM pharmacy_transactions WHERE DATE(created_at) = CURRENT_DATE AND COALESCE(status, '') <> 'Cancelled'").get()).s || 0,
+            totalDiscount: (await db.prepare("SELECT SUM(discount_amount) as s FROM pharmacy_transactions WHERE DATE(created_at) = CURRENT_DATE AND COALESCE(status, '') <> 'Cancelled'").get()).s || 0,
+            totalPaid: (await db.prepare("SELECT SUM(paid_amount) as s FROM pharmacy_transactions WHERE DATE(created_at) = CURRENT_DATE AND COALESCE(status, '') <> 'Cancelled'").get()).s || 0,
             totalReturns: (await db.prepare("SELECT SUM(amount) as s FROM pharmacy_returns WHERE DATE(created_at) = CURRENT_DATE").get()).s || 0,
-            transactionCount: (await db.prepare("SELECT COUNT(*) as c FROM pharmacy_transactions WHERE DATE(created_at) = CURRENT_DATE").get()).c || 0,
+            transactionCount: (await db.prepare("SELECT COUNT(*) as c FROM pharmacy_transactions WHERE DATE(created_at) = CURRENT_DATE AND COALESCE(status, '') <> 'Cancelled'").get()).c || 0,
             outstandingCredit: (await db.query("SELECT SUM(patient_credits.balance) as s FROM patient_credits")).rows[0].s || 0,
-            breakdown: await db.prepare("SELECT payment_method, SUM(paid_amount) as amount FROM pharmacy_transactions WHERE DATE(created_at) = CURRENT_DATE GROUP BY payment_method").all()
+            breakdown: await db.prepare("SELECT payment_method, SUM(paid_amount) as amount FROM pharmacy_transactions WHERE DATE(created_at) = CURRENT_DATE AND COALESCE(status, '') <> 'Cancelled' GROUP BY payment_method").all()
         };
         res.json(stats);
     } catch (err) {
@@ -459,14 +633,28 @@ router.get('/credits/:patientId', async (req, res) => {
 
 router.get('/transactions/:id/items', async (req, res) => {
     try {
-        const rows = await db.prepare('SELECT * FROM pharmacy_transaction_items WHERE transaction_id = ?').all(req.params.id);
+        const rows = await db.prepare(`
+            SELECT ti.*,
+                   COALESCE(r.returned_qty, 0) AS returned_quantity,
+                   CASE
+                       WHEN ti.quantity - COALESCE(r.returned_qty, 0) > 0 THEN ti.quantity - COALESCE(r.returned_qty, 0)
+                       ELSE 0
+                   END AS remaining_quantity
+            FROM pharmacy_transaction_items ti
+            LEFT JOIN (
+                SELECT item_id, COALESCE(SUM(quantity), 0) AS returned_qty
+                FROM pharmacy_returns
+                GROUP BY item_id
+            ) r ON r.item_id = ti.id
+            WHERE ti.transaction_id = ?
+            ORDER BY ti.medicine_name ASC
+        `).all(req.params.id);
         res.json(rows);
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
 });
 
-// â”€â”€ Categories â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 router.get('/categories', async (req, res) => {
     try {
         const rows = await db.prepare('SELECT * FROM medicine_categories ORDER BY name').all();
@@ -491,7 +679,6 @@ router.post('/categories', async (req, res) => {
     }
 });
 
-// â”€â”€ Medicines â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const fmtMed = (m) => ({
     id: m.id, name: m.name, genericName: m.generic_name, category: m.category,
     manufacturer: m.manufacturer, batchNumber: m.batch_number, expiryDate: m.expiry_date,
@@ -593,7 +780,6 @@ router.delete('/medicines/:id', async (req, res) => {
     }
 });
 
-// â”€â”€ Prescriptions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const fmtRx = (p) => ({
     id: p.id, prescriptionId: p.prescription_id, patientId: p.patient_id, patientName: p.patient_name,
     doctorId: p.doctor_id, doctorName: p.doctor_name, appointmentId: p.appointment_id,
@@ -634,9 +820,8 @@ router.post('/prescriptions', async (req, res) => {
             .run(id, rxId, patientId, patient ? `${patient.first_name} ${patient.last_name}` : 'Unknown', doctorId, doctor ? doctor.name : 'Unknown', appointmentId || null, new Date().toISOString().split('T')[0], diagnosis, JSON.stringify(medicines || []), notes || null, 'pending');
         logAction(req.user.id, req.user.name, req.user.role, 'CREATE', 'Pharmacy', `Prescription created: ${rxId}`, req.ip);
         
-        // Trigger social push notification
         sendPushNotification({
-            title: 'ðŸ’Š New Prescription Issued',
+            title: '💊 New Prescription Issued',
             message: `New prescription ${rxId} issued for ${patient ? `${patient.first_name} ${patient.last_name}` : 'Patient'}.`,
             url: `/pharmacy/prescriptions`
         });
@@ -693,7 +878,6 @@ router.put('/prescriptions/:id/dispense', async (req, res) => {
                     throw new Error(`Insufficient stock for ${item.medicineName}`);
                 }
 
-                // Normal stock deduction logic (same as /transactions)
                 let remainingToDeduct = qtyDispensed;
                 const batches = await db.prepare('SELECT * FROM pharmacy_batches WHERE medicine_id = ? AND quantity_remaining > 0 ORDER BY expiry_date ASC').all(item.medicineId);
                 
@@ -755,4 +939,428 @@ router.get('/stats', async (req, res) => {
     }
 });
 
+router.delete('/admin/clear-transactions', async (req, res) => {
+    if (!req.user || req.user.role !== 'admin') {
+        return res.status(403).json({ error: 'Admin only' });
+    }
+    try {
+        await db.exec('BEGIN');
+
+        const txRows = await db.prepare('SELECT id, invoice_id FROM pharmacy_transactions').all();
+        const txIds      = txRows.map(r => r.id);
+        const invoiceIds = txRows.map(r => r.invoice_id).filter(Boolean);
+
+        if (txIds.length > 0) {
+            const crTxnRows = await db.prepare(`
+                SELECT transaction_id FROM credit_transactions
+                WHERE invoice_id = ANY($1::text[])
+            `).all(txIds);
+            if (crTxnRows.length > 0) {
+                const crTxnIds = crTxnRows.map(r => r.transaction_id);
+                await db.prepare(`DELETE FROM credit_ledger WHERE reference_id = ANY($1::text[])`).run(crTxnIds);
+            }
+
+            await db.prepare(`DELETE FROM credit_transactions WHERE invoice_id = ANY($1::text[])`).run(txIds);
+
+            await db.prepare(`DELETE FROM pharmacy_returns WHERE transaction_id = ANY($1::uuid[])`).run(txIds);
+
+            await db.prepare(`DELETE FROM pharmacy_transaction_items WHERE transaction_id = ANY($1::uuid[])`).run(txIds);
+
+            if (invoiceIds.length > 0) {
+                await db.prepare(`DELETE FROM account_entries WHERE reference_id = ANY($1::text[])`).run(invoiceIds);
+            }
+        }
+
+        await db.exec('DELETE FROM pharmacy_transactions');
+
+        await db.exec('COMMIT');
+
+        logAction(req.user.id, req.user.name, req.user.role, 'DELETE', 'Pharmacy', 'Admin cleared all pharmacy transactions', req.ip);
+        res.json({ message: `Cleared ${txIds.length} pharmacy transactions successfully.` });
+    } catch (err) {
+        try { await db.exec('ROLLBACK'); } catch (_) {}
+        res.status(500).json({ error: err.message });
+    }
+});
+
+router.delete('/admin/clear-hospital-revenue', async (req, res) => {
+    if (!req.user || req.user.role !== 'admin') {
+        return res.status(403).json({ error: 'Admin only' });
+    }
+    try {
+        await db.exec('BEGIN');
+
+        await db.exec(`DELETE FROM invoices WHERE invoice_id LIKE 'INV-POS-%'`);
+
+        await db.exec(`DELETE FROM account_entries WHERE type = 'income'`);
+
+        await db.exec('COMMIT');
+
+        logAction(req.user.id, req.user.name, req.user.role, 'DELETE', 'Pharmacy', 'Admin cleared all hospital revenue entries', req.ip);
+        res.json({ message: 'All hospital revenue entries cleared successfully.' });
+    } catch (err) {
+        try { await db.exec('ROLLBACK'); } catch (_) {}
+        res.status(500).json({ error: err.message });
+    }
+});
+
+router.post('/sales-receipts/manual', async (req, res) => {
+    const { date, amount, paymentMethod, referenceName, invoiceNumber } = req.body;
+
+    if (!date || !amount || !paymentMethod) {
+        return res.status(400).json({ error: 'date, amount, and paymentMethod are required' });
+    }
+
+    const parsedAmount = parseFloat(amount);
+    if (isNaN(parsedAmount) || parsedAmount <= 0) {
+        return res.status(400).json({ error: 'amount must be a positive number' });
+    }
+
+    try {
+        const txId = uuidv4();
+        let invoiceId = invoiceNumber && invoiceNumber.trim() ? invoiceNumber.trim() : null;
+        if (!invoiceId) {
+            const maxInvData = await db.prepare("SELECT invoice_id FROM pharmacy_transactions ORDER BY LENGTH(invoice_id) DESC, invoice_id DESC LIMIT 1").get();
+            let nextInvNumber = 1;
+            if (maxInvData && maxInvData.invoice_id) {
+                const parts = maxInvData.invoice_id.split('-');
+                const lastPart = parts[parts.length - 1].length === 4 ? parts[parts.length - 2] : parts[parts.length - 1];
+                const lastNumber = parseInt(lastPart);
+                if (!isNaN(lastNumber)) nextInvNumber = lastNumber + 1;
+            }
+            const randomSuffix = Math.random().toString(36).substring(2, 6).toUpperCase();
+            invoiceId = `QB-${String(nextInvNumber).padStart(4, '0')}-${randomSuffix}`;
+        }
+
+        const patientName = referenceName && referenceName.trim() ? referenceName.trim() : 'QuickBooks Import';
+        const customTimestamp = `${date} 12:00:00`;
+
+        await db.prepare(`
+            INSERT INTO pharmacy_transactions
+            (id, invoice_id, patient_id, patient_name, subtotal_amount, discount_amount, total_amount, paid_amount, credit_amount, payment_method, status, created_by, items_summary, created_at, is_transferred)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+        `).run(
+            txId, invoiceId, null, patientName,
+            parsedAmount, 0, parsedAmount, parsedAmount, 0,
+            paymentMethod, 'Completed', req.user.name,
+            'Manual QuickBooks Import', customTimestamp
+        );
+
+        logAction(req.user.id, req.user.name, req.user.role, 'CREATE', 'Pharmacy', `Manual QB receipt added: ${invoiceId}`, req.ip);
+        res.status(201).json({ id: txId, invoiceId, message: 'Manual receipt added successfully' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+router.get('/sales-receipts/pending-transfers', async (req, res) => {
+    try {
+        const queryStr = `
+            SELECT DATE(created_at) as date, COUNT(*) as transaction_count, SUM(paid_amount) as total_amount
+            FROM pharmacy_transactions
+            WHERE COALESCE(is_transferred, 0) = 0
+              AND DATE(created_at) <= CURRENT_DATE
+              AND COALESCE(status, '') <> 'Cancelled'
+              AND COALESCE(total_amount, 0) > 0
+            GROUP BY DATE(created_at)
+            ORDER BY DATE(created_at) DESC
+        `;
+        const rows = await db.prepare(queryStr).all();
+        
+        const formatted = rows.map(r => {
+            let dateStr = r.date;
+            if (dateStr instanceof Date) {
+                dateStr = dateStr.toISOString().split('T')[0];
+            } else if (typeof dateStr === 'string') {
+                dateStr = dateStr.split('T')[0];
+            }
+            return {
+                date: dateStr,
+                transactionCount: parseInt(r.transaction_count) || 0,
+                totalAmount: parseFloat(r.total_amount) || 0
+            };
+        });
+        
+        res.json(formatted);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+router.post('/sales-receipts/transfer', async (req, res) => {
+    const { date } = req.body;
+    if (!date) {
+        return res.status(400).json({ error: 'date is required' });
+    }
+
+    try {
+        await db.run('BEGIN TRANSACTION');
+
+        const txs = await db.prepare(`
+            SELECT id, total_amount, paid_amount, payment_method
+            FROM pharmacy_transactions
+            WHERE DATE(created_at) = ?
+              AND COALESCE(is_transferred, 0) = 0
+              AND COALESCE(status, '') <> 'Cancelled'
+              AND COALESCE(total_amount, 0) > 0
+        `).all(date);
+
+        if (txs.length === 0) {
+            await db.run('COMMIT');
+            return res.json({ message: 'No pending transactions to transfer for this date', transferred: 0 });
+        }
+
+        const groups = {};
+        for (const tx of txs) {
+            const method = (tx.payment_method || 'CASH').toUpperCase();
+            const amt = parseFloat(tx.paid_amount) || 0;
+            if (amt > 0) {
+                groups[method] = (groups[method] || 0) + amt;
+            }
+        }
+
+        const methodsTransferred = [];
+        let totalTransferred = 0;
+        for (const [method, amount] of Object.entries(groups)) {
+            if (amount <= 0) continue;
+
+            const refId = `PHARM-TRANSFER-${date}-${method}`;
+            
+            const existing = await db.prepare(`
+                SELECT id FROM account_entries WHERE reference_id = ?
+            `).get(refId);
+
+            if (!existing) {
+                await db.prepare(`
+                    INSERT INTO account_entries (id, date, type, category, description, amount, payment_method, reference_id, department, status, user_id)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                `).run(
+                    uuidv4(),
+                    date,
+                    'income',
+                    'Pharmacy Sales Transfer',
+                    `Pharmacy sales transfer (${method}) for ${date}`,
+                    amount,
+                    method,
+                    refId,
+                    'Pharmacy',
+                    'completed',
+                    req.user.id
+                );
+            }
+            methodsTransferred.push({ method, amount });
+            totalTransferred += amount;
+        }
+
+        await db.prepare(`
+            UPDATE pharmacy_transactions
+            SET is_transferred = 1
+            WHERE DATE(created_at) = ?
+              AND COALESCE(is_transferred, 0) = 0
+              AND COALESCE(status, '') <> 'Cancelled'
+              AND COALESCE(total_amount, 0) > 0
+        `).run(date);
+
+        await db.run('COMMIT');
+
+        logAction(req.user.id, req.user.name, req.user.role, 'CREATE', 'Pharmacy', `Transferred pharmacy sales for ${date}: ${totalTransferred}`, req.ip);
+
+        res.json({
+            message: `Successfully transferred daily sales for ${date}`,
+            date,
+            totalTransferred,
+            transfers: methodsTransferred
+        });
+    } catch (err) {
+        if (db.inTransaction) await db.run('ROLLBACK');
+        res.status(500).json({ error: err.message });
+    }
+});
+
+router.get('/sales-receipts', async (req, res) => {
+    const { startDate, endDate, paymentMethod, pendingOnly } = req.query;
+
+    const today = new Date().toISOString().split('T')[0];
+    const start = startDate || '2000-01-01';
+    const end   = endDate   || today;
+
+    try {
+        let txQ = `SELECT id, invoice_id, patient_name, subtotal_amount, discount_amount, total_amount, paid_amount, credit_amount,
+                          payment_method, status, items_summary, created_at, is_transferred
+                   FROM pharmacy_transactions
+                   WHERE DATE(created_at) >= ? AND DATE(created_at) <= ?
+                     AND COALESCE(status, '') <> 'Cancelled'
+                     AND COALESCE(total_amount, 0) > 0`;
+        const txParams = [start, end];
+        if (pendingOnly === 'true') {
+            txQ += ' AND COALESCE(is_transferred, 0) = 0';
+        }
+        if (paymentMethod && paymentMethod !== 'ALL') {
+            txQ += ' AND UPPER(payment_method) = UPPER(?)';
+            txParams.push(paymentMethod);
+        }
+        txQ += ' ORDER BY created_at DESC';
+        const pharmacyTxns = await db.prepare(txQ).all(...txParams);
+
+        let posQ = `SELECT id, invoice_id, patient_name, subtotal, discount, total, paid_amount, payment_method,
+                           status, date, items
+                    FROM invoices
+                    WHERE invoice_id LIKE 'INV-POS-%'
+                      AND date >= ? AND date <= ?`;
+        const posParams = [start, end];
+        if (paymentMethod && paymentMethod !== 'ALL') {
+            posQ += ' AND UPPER(payment_method) = UPPER(?)';
+            posParams.push(paymentMethod);
+        }
+        posQ += ' ORDER BY date DESC';
+        const posInvoices = await db.prepare(posQ).all(...posParams);
+
+        let invQ = `SELECT id, invoice_id, patient_name, total, paid_amount, payment_method,
+                           status, date, items
+                    FROM invoices
+                    WHERE invoice_id NOT LIKE 'INV-POS-%'
+                      AND date >= ? AND date <= ?
+                      AND (status = 'paid' OR paid_amount > 0)`;
+        const invParams = [start, end];
+        if (paymentMethod && paymentMethod !== 'ALL') {
+            invQ += ' AND UPPER(payment_method) = UPPER(?)';
+            invParams.push(paymentMethod);
+        }
+        invQ += ' ORDER BY date DESC';
+        const otherInvoices = await db.prepare(invQ).all(...invParams);
+
+        let aeQ = `SELECT ae.id, ae.date, ae.amount, ae.payment_method,
+                          ae.description, ae.category, ae.reference_id,
+                          ae.department, ae.status
+                   FROM account_entries ae
+                   WHERE ae.type = 'income'
+                     AND ae.date >= ? AND ae.date <= ?`;
+        const aeParams = [start, end];
+        if (paymentMethod && paymentMethod !== 'ALL') {
+            aeQ += ' AND UPPER(ae.payment_method) = UPPER(?)';
+            aeParams.push(paymentMethod);
+        }
+        aeQ += ' ORDER BY ae.date DESC';
+        const accountEntries = await db.prepare(aeQ).all(...aeParams);
+
+        const arRows = await db.prepare(`
+            SELECT id, customer_id, full_name, phone,
+                   outstanding_balance, credit_limit, total_credit_taken, total_payments_made
+            FROM credit_customers
+            WHERE outstanding_balance > 0
+            ORDER BY outstanding_balance DESC
+        `).all();
+
+        const pharmTotal  = pharmacyTxns.reduce((s, r) => s + (parseFloat(r.total_amount) || 0), 0);
+        const pharmDiscountTotal = pharmacyTxns.reduce((s, r) => s + (parseFloat(r.discount_amount) || 0), 0);
+        const posTotal    = posInvoices.reduce((s, r) => s + (parseFloat(r.total) || 0), 0);
+        const posDiscountTotal = posInvoices.reduce((s, r) => s + (parseFloat(r.discount) || 0), 0);
+        const invTotal    = otherInvoices.reduce((s, r) => s + (parseFloat(r.paid_amount) || parseFloat(r.total) || 0), 0);
+        const aeTotal     = accountEntries.reduce((s, r) => s + (parseFloat(r.amount) || 0), 0);
+        const hospitalTotal = posTotal + invTotal + aeTotal;
+        const arTotal     = arRows.reduce((s, r) => s + (parseFloat(r.outstanding_balance) || 0), 0);
+        const totalDiscount = pharmDiscountTotal + posDiscountTotal;
+
+        // Calculate transfer total for the period to subtract from grandTotal to avoid double counting
+        const pharmacyTransfersTotal = accountEntries
+            .filter(e => e.category === 'Pharmacy Sales Transfer')
+            .reduce((s, r) => s + (parseFloat(r.amount) || 0), 0);
+
+        // Payment method breakdown (pharmacy + pos invoices)
+        const byMethod = {};
+        [...pharmacyTxns].forEach(t => {
+            const m = (t.payment_method || 'OTHER').toUpperCase();
+            byMethod[m] = (byMethod[m] || 0) + (parseFloat(t.total_amount) || 0);
+        });
+        [...posInvoices, ...otherInvoices].forEach(t => {
+            const m = (t.payment_method || 'OTHER').toUpperCase();
+            byMethod[m] = (byMethod[m] || 0) + (parseFloat(t.paid_amount) || parseFloat(t.total) || 0);
+        });
+
+        res.json({
+            summary: {
+                pharmacyTotal:  parseFloat(pharmTotal.toFixed(2)),
+                hospitalTotal:  parseFloat(hospitalTotal.toFixed(2)),
+                grandTotal:     parseFloat((pharmTotal + hospitalTotal - pharmacyTransfersTotal).toFixed(2)),
+                discountTotal:  parseFloat(totalDiscount.toFixed(2)),
+                arTotal:        parseFloat(arTotal.toFixed(2)),
+                pharmacyTransfersTotal: parseFloat(pharmacyTransfersTotal.toFixed(2)),
+                byMethod
+            },
+            pharmacyTransactions: pharmacyTxns.map(t => ({
+                id:            t.id,
+                invoiceId:     t.invoice_id,
+                patientName:   t.patient_name || 'Walk-In',
+                subtotalAmount: parseFloat(t.subtotal_amount) || parseFloat(t.total_amount) || 0,
+                discountAmount: parseFloat(t.discount_amount) || 0,
+                totalAmount:   parseFloat(t.total_amount)  || 0,
+                paidAmount:    parseFloat(t.paid_amount)   || 0,
+                creditAmount:  parseFloat(t.credit_amount) || 0,
+                paymentMethod: t.payment_method,
+                status:        t.status,
+                itemsSummary:  t.items_summary,
+                date:          t.created_at,
+                isTransferred: t.is_transferred === 1 || t.is_transferred === true,
+                source:        'Pharmacy'
+            })),
+            hospitalIncome: [
+                ...posInvoices.map(e => ({
+                    id:            e.id,
+                    date:          e.date,
+                    subtotalAmount: parseFloat(e.subtotal) || parseFloat(e.total) || 0,
+                    discountAmount: parseFloat(e.discount) || 0,
+                    amount:        parseFloat(e.total) || 0,
+                    paidAmount:    parseFloat(e.paid_amount) || 0,
+                    paymentMethod: e.payment_method,
+                    description:   `POS Sale — ${e.patient_name || 'Walk-In'}`,
+                    category:      'POS Sale',
+                    department:    'Point of Sale',
+                    referenceId:   e.invoice_id,
+                    status:        e.status,
+                    source:        'POS'
+                })),
+                ...otherInvoices.map(e => ({
+                    id:            e.id,
+                    date:          e.date,
+                    amount:        parseFloat(e.paid_amount) || parseFloat(e.total) || 0,
+                    paidAmount:    parseFloat(e.paid_amount) || 0,
+                    paymentMethod: e.payment_method,
+                    description:   `Invoice — ${e.patient_name || 'Patient'}`,
+                    category:      'Invoice',
+                    department:    'Billing',
+                    referenceId:   e.invoice_id,
+                    status:        e.status,
+                    source:        'Billing'
+                })),
+                ...accountEntries.map(e => ({
+                    id:            e.id,
+                    date:          e.date,
+                    amount:        parseFloat(e.amount) || 0,
+                    paidAmount:    parseFloat(e.amount) || 0,
+                    paymentMethod: e.payment_method,
+                    description:   e.description,
+                    category:      e.category,
+                    department:    e.department,
+                    referenceId:   e.reference_id,
+                    status:        e.status,
+                    source:        'Accounts'
+                }))
+            ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
+            accountsReceivable: arRows.map(r => ({
+                id:               r.id,
+                customerId:       r.customer_id,
+                fullName:         r.full_name,
+                phone:            r.phone,
+                outstandingBalance: parseFloat(r.outstanding_balance) || 0,
+                creditLimit:      parseFloat(r.credit_limit)          || 0,
+                totalCreditTaken: parseFloat(r.total_credit_taken)    || 0,
+                totalPaid:        parseFloat(r.total_payments_made)   || 0
+            }))
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 module.exports = router;
+

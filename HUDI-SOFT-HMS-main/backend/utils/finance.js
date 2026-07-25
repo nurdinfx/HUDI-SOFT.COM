@@ -23,28 +23,42 @@ async function recordGranularPayment({
 }) {
     if (paymentAmount <= 0) return;
 
-    // Get invoice items
-    const row = await db.prepare('SELECT items, subtotal, total FROM invoices WHERE id = ?').get(dbInvoiceId);
-    if (!row) return;
-
-    const items = JSON.parse(row.items || '[]');
-    const subtotal = parseFloat(row.subtotal) || 1; // avoid div by zero
-    const total = parseFloat(row.total) || 1;
-
-    // We split the payment based on the item's contribution to the subtotal
-    // If there's a discount, it's applied proportionally.
     const today = new Date().toISOString().split('T')[0];
 
-    for (const item of items) {
-        const itemTotal = parseFloat(item.total) || (parseFloat(item.unitPrice) * parseFloat(item.quantity)) || 0;
-        if (itemTotal <= 0) continue;
+    // Try to get detailed invoice items from the invoices table
+    const row = await db.prepare('SELECT items, subtotal, total FROM invoices WHERE id = ?').get(dbInvoiceId);
 
-        // Proportional share of the payment
-        // (Item Total / Subtotal) * Payment Amount
-        // This handles both partial payments and discounts (if subtotal != total)
-        // Actually, we should use total if we want to include tax/discount in the proportions
-        const share = (itemTotal / subtotal) * paymentAmount;
+    if (row) {
+        // Full granular split across invoice items
+        const items = JSON.parse(row.items || '[]');
+        const subtotal = parseFloat(row.subtotal) || 1;
 
+        for (const item of items) {
+            const itemTotal = parseFloat(item.total) || (parseFloat(item.unitPrice) * parseFloat(item.quantity)) || 0;
+            if (itemTotal <= 0) continue;
+
+            const share = (itemTotal / subtotal) * paymentAmount;
+
+            await db.prepare(`
+                INSERT INTO account_entries (id, date, type, category, description, amount, payment_method, reference_id, department, status, user_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `).run(
+                uuidv4(),
+                today,
+                'income',
+                item.category || 'Service',
+                `Payment for ${item.description} (Inv: ${invoiceId}, Patient: ${patientName})`,
+                Math.round(share * 100) / 100,
+                paymentMethod,
+                invoiceId,
+                item.department || defaultDept,
+                'completed',
+                userId
+            );
+        }
+    } else {
+        // Fallback: invoice may belong to pharmacy_transactions or another table.
+        // Record as a single income entry under the defaultDept.
         await db.prepare(`
             INSERT INTO account_entries (id, date, type, category, description, amount, payment_method, reference_id, department, status, user_id)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -52,12 +66,12 @@ async function recordGranularPayment({
             uuidv4(),
             today,
             'income',
-            item.category || 'Service',
-            `Payment for ${item.description} (Inv: ${invoiceId}, Patient: ${patientName})`,
-            Math.round(share * 100) / 100,
+            'Sales',
+            `Payment received (Inv: ${invoiceId}, Patient: ${patientName || 'Walk-In'})`,
+            Math.round(paymentAmount * 100) / 100,
             paymentMethod,
             invoiceId,
-            item.department || defaultDept,
+            defaultDept,
             'completed',
             userId
         );

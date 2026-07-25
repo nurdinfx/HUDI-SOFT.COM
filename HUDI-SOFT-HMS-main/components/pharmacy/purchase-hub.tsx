@@ -585,6 +585,31 @@ function SupplierRegistry({ suppliers, onRefresh }: { suppliers: Supplier[], onR
   const [editing, setEditing] = useState<Supplier | null>(null)
   const [formData, setFormData] = useState<any>({ name: "", contact_person: "", phone: "", email: "", address: "" })
 
+  // Supplier detail view state
+  const [viewingSupplier, setViewingSupplier] = useState<Supplier | null>(null)
+  const [showDetailDialog, setShowDetailDialog] = useState(false)
+  const [supplierOrders, setSupplierOrders] = useState<PurchaseOrder[]>([])
+  const [supplierReturns, setSupplierReturns] = useState<SupplierReturn[]>([])
+  const [detailLoading, setDetailLoading] = useState(false)
+
+  const handleViewSupplier = async (s: Supplier) => {
+    setViewingSupplier(s)
+    setShowDetailDialog(true)
+    setDetailLoading(true)
+    try {
+      const [orders, returns] = await Promise.all([
+        pharmacyPurchaseApi.getOrdersBySupplier(s.id),
+        pharmacyPurchaseApi.getReturnsBySupplier(s.id),
+      ])
+      setSupplierOrders(orders)
+      setSupplierReturns(returns)
+    } catch (err: any) {
+      toast.error(err.message || "Failed to load supplier data")
+    } finally {
+      setDetailLoading(false)
+    }
+  }
+
   const handleSubmit = async () => {
     if (!formData.name) return toast.error("Supplier name required")
     try {
@@ -598,6 +623,17 @@ function SupplierRegistry({ suppliers, onRefresh }: { suppliers: Supplier[], onR
     } catch (error: any) {
         toast.error(error.message)
     }
+  }
+
+  const fmtDate = (d?: string) => {
+    if (!d) return "—"
+    return new Date(d).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
+  }
+
+  const statusColor: Record<string, string> = {
+    pending: "bg-yellow-100 text-yellow-800",
+    received: "bg-green-100 text-green-800",
+    cancelled: "bg-red-100 text-red-800",
   }
 
   return (
@@ -632,7 +668,10 @@ function SupplierRegistry({ suppliers, onRefresh }: { suppliers: Supplier[], onR
                                 <p className="text-muted-foreground">{s.email}</p>
                             </TableCell>
                             <TableCell className="text-xs text-muted-foreground">{s.address}</TableCell>
-                            <TableCell className="text-right pr-6">
+                            <TableCell className="text-right pr-6 space-x-1">
+                                <Button variant="ghost" size="sm" onClick={() => handleViewSupplier(s)}>
+                                    <Eye className="size-3.5 mr-1" /> View
+                                </Button>
                                 <Button variant="ghost" size="sm" onClick={() => { setEditing(s); setFormData(s); setShowAdd(true); }}>Edit</Button>
                             </TableCell>
                         </TableRow>
@@ -641,6 +680,163 @@ function SupplierRegistry({ suppliers, onRefresh }: { suppliers: Supplier[], onR
             </Table>
         </CardContent>
 
+        {/* ── Supplier Detail Dialog ── */}
+        <Dialog open={showDetailDialog} onOpenChange={(open) => { setShowDetailDialog(open); if (!open) { setViewingSupplier(null); setSupplierOrders([]); setSupplierReturns([]) } }}>
+            <DialogContent className="max-w-3xl max-h-[90vh] flex flex-col p-0 gap-0">
+                {/* Header */}
+                <DialogHeader className="px-6 py-5 border-b bg-gradient-to-r from-slate-900 to-slate-700 rounded-t-xl">
+                    <DialogTitle className="flex items-center gap-2 text-white text-base font-black">
+                        <Truck className="size-4" />
+                        {viewingSupplier?.name}
+                    </DialogTitle>
+                    <DialogDescription className="text-slate-300 text-xs mt-1 flex flex-wrap gap-4">
+                        {viewingSupplier?.phone && <span>📞 {viewingSupplier.phone}</span>}
+                        {viewingSupplier?.address && <span>📍 {viewingSupplier.address}</span>}
+                        {viewingSupplier?.contactPerson && <span>👤 {viewingSupplier.contactPerson}</span>}
+                    </DialogDescription>
+                </DialogHeader>
+
+                <ScrollArea className="flex-1 overflow-y-auto bg-slate-50">
+                    <div className="px-6 py-5 space-y-6">
+                        {detailLoading ? (
+                            <div className="flex items-center justify-center py-16 text-slate-400 text-sm gap-2">
+                                <Activity className="size-4 animate-pulse" /> Loading supplier data…
+                            </div>
+                        ) : (
+                            <>
+                                {/* ── Purchase Orders ── */}
+                                <div>
+                                    <div className="flex items-center gap-2 mb-3">
+                                        <ShoppingCart className="size-4 text-primary" />
+                                        <h3 className="text-sm font-black text-slate-700 uppercase tracking-wider">
+                                            Purchase Orders
+                                        </h3>
+                                        <span className="ml-auto text-xs font-bold text-slate-400 bg-white border border-slate-200 px-2 py-0.5 rounded-full">{supplierOrders.length} order{supplierOrders.length !== 1 ? "s" : ""}</span>
+                                    </div>
+
+                                    {supplierOrders.length === 0 ? (
+                                        <div className="text-center py-8 border-2 border-dashed border-slate-200 rounded-xl text-slate-400 text-sm bg-white">
+                                            No purchase orders found for this supplier.
+                                        </div>
+                                    ) : (
+                                        <div className="space-y-3">
+                                            {supplierOrders.map(order => (
+                                                <div key={order.id} className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
+                                                    {/* Order header row */}
+                                                    <div className="flex flex-wrap items-center gap-x-6 gap-y-1 px-4 py-3 border-b border-slate-100 bg-slate-50">
+                                                        <span className="text-sm font-black text-primary">{order.poNumber}</span>
+                                                        <span className="flex items-center gap-1 text-xs text-slate-500">
+                                                            <Calendar className="size-3" />
+                                                            {fmtDate(order.orderDate)}
+                                                        </span>
+                                                        <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${statusColor[order.status] || "bg-slate-100 text-slate-600"}`}>
+                                                            {order.status?.toUpperCase()}
+                                                        </span>
+                                                        <span className="text-xs text-slate-500 capitalize">💳 {order.payment_type || "cash"}</span>
+                                                        <span className="ml-auto text-sm font-black text-slate-800">${Number(order.totalAmount || 0).toFixed(2)}</span>
+                                                    </div>
+                                                    {/* Items list */}
+                                                    <div className="px-4 py-2">
+                                                        <p className="text-[10px] font-black uppercase text-slate-400 mb-2 tracking-wider">Items Purchased</p>
+                                                        <table className="w-full text-xs">
+                                                            <thead>
+                                                                <tr className="text-slate-400 border-b border-slate-100">
+                                                                    <th className="text-left pb-1 font-bold">#</th>
+                                                                    <th className="text-left pb-1 font-bold">Medicine / Item</th>
+                                                                    <th className="text-center pb-1 font-bold">Qty</th>
+                                                                    <th className="text-right pb-1 font-bold">Unit Price</th>
+                                                                    <th className="text-right pb-1 font-bold">Total</th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody>
+                                                                {order.items && order.items.length > 0 ? order.items.map((item, idx) => (
+                                                                    <tr key={item.id} className="border-b border-slate-50 last:border-0">
+                                                                        <td className="py-1.5 text-slate-400 pr-2">{idx + 1}</td>
+                                                                        <td className="py-1.5 font-semibold text-slate-800">{item.medicineName}</td>
+                                                                        <td className="py-1.5 text-center text-slate-600">{item.quantity}</td>
+                                                                        <td className="py-1.5 text-right text-slate-600">${Number(item.unitPrice || 0).toFixed(2)}</td>
+                                                                        <td className="py-1.5 text-right font-bold text-slate-800">${Number(item.totalPrice || 0).toFixed(2)}</td>
+                                                                    </tr>
+                                                                )) : (
+                                                                    <tr><td colSpan={5} className="py-2 text-center text-slate-400 italic">No items recorded</td></tr>
+                                                                )}
+                                                            </tbody>
+                                                        </table>
+                                                    </div>
+                                                    {order.notes && (
+                                                        <div className="px-4 py-2 border-t border-slate-100 bg-amber-50/60">
+                                                            <p className="text-[10px] font-bold text-amber-600 uppercase">Note:</p>
+                                                            <p className="text-xs text-slate-600">{order.notes}</p>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* ── Returns ── */}
+                                <div>
+                                    <div className="flex items-center gap-2 mb-3">
+                                        <RotateCcw className="size-4 text-rose-500" />
+                                        <h3 className="text-sm font-black text-slate-700 uppercase tracking-wider">
+                                            Returns to Supplier
+                                        </h3>
+                                        <span className="ml-auto text-xs font-bold text-slate-400 bg-white border border-slate-200 px-2 py-0.5 rounded-full">{supplierReturns.length} return{supplierReturns.length !== 1 ? "s" : ""}</span>
+                                    </div>
+
+                                    {supplierReturns.length === 0 ? (
+                                        <div className="text-center py-8 border-2 border-dashed border-slate-200 rounded-xl text-slate-400 text-sm bg-white">
+                                            No returns found for this supplier.
+                                        </div>
+                                    ) : (
+                                        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
+                                            <table className="w-full text-xs">
+                                                <thead>
+                                                    <tr className="bg-slate-50 border-b border-slate-200 text-slate-500">
+                                                        <th className="text-left px-4 py-2.5 font-bold">#</th>
+                                                        <th className="text-left px-4 py-2.5 font-bold">Medicine / Item</th>
+                                                        <th className="text-center px-4 py-2.5 font-bold">Qty</th>
+                                                        <th className="text-right px-4 py-2.5 font-bold">Amount</th>
+                                                        <th className="text-left px-4 py-2.5 font-bold">Return Date</th>
+                                                        <th className="text-left px-4 py-2.5 font-bold">Reason</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {supplierReturns.map((r, idx) => (
+                                                        <tr key={r.id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50">
+                                                            <td className="px-4 py-2.5 text-slate-400">{idx + 1}</td>
+                                                            <td className="px-4 py-2.5 font-semibold text-slate-800">{r.itemName}</td>
+                                                            <td className="px-4 py-2.5 text-center text-slate-600">{r.quantity}</td>
+                                                            <td className="px-4 py-2.5 text-right font-bold text-slate-800">${Number(r.amount || 0).toFixed(2)}</td>
+                                                            <td className="px-4 py-2.5 text-slate-600 whitespace-nowrap">
+                                                                <span className="flex items-center gap-1">
+                                                                    <Calendar className="size-3 text-slate-400" />
+                                                                    {fmtDate(r.returnDate || r.createdAt)}
+                                                                </span>
+                                                            </td>
+                                                            <td className="px-4 py-2.5 text-slate-500 max-w-[180px]">
+                                                                {r.reason || <span className="italic text-slate-300">—</span>}
+                                                            </td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    )}
+                                </div>
+                            </>
+                        )}
+                    </div>
+                </ScrollArea>
+
+                <div className="px-6 py-3 border-t bg-white flex justify-end rounded-b-xl">
+                    <Button variant="outline" size="sm" onClick={() => setShowDetailDialog(false)}>Close</Button>
+                </div>
+            </DialogContent>
+        </Dialog>
+
+        {/* ── Register / Edit Dialog ── */}
         <Dialog open={showAdd} onOpenChange={setShowAdd}>
             <DialogContent>
                 <DialogHeader>

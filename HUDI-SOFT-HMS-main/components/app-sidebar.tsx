@@ -25,6 +25,7 @@ import {
   ShoppingCart,
   DollarSign,
   History,
+  Percent,
 } from "lucide-react"
 import {
   Sidebar,
@@ -78,6 +79,7 @@ const navGroups = [
       { title: "Insurance", href: "/insurance", icon: ShieldCheck, roles: ["admin", "accountant"] },
       { title: "Accounts", href: "/accounts", icon: BookOpen, roles: ["admin", "accountant"] },
       { title: "Customer Credit", href: "/credit", icon: History, roles: ["admin", "accountant", "pharmacist", "receptionist"] },
+      { title: "Discounts", href: "/discounts", icon: Percent, roles: ["admin", "accountant", "pharmacist", "receptionist"] },
       { title: "Reports", href: "/reports", icon: BarChart3, roles: ["admin", "accountant"] },
       { title: "Revenue Analytics", href: "/reports/revenue-analytics", icon: DollarSign, roles: ["admin", "accountant"] },
     ],

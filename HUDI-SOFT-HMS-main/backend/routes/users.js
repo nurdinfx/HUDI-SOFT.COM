@@ -39,16 +39,14 @@ router.post('/', async (req, res) => {
     if (!name || !email || !password || !role) return res.status(400).json({ error: 'name, email, password, role required' });
 
     try {
-        const tenantId = req.tenantId || req.user.tenant_id;
-        const normalizedEmail = email.toLowerCase();
-        const existing = await db.prepare('SELECT id FROM users WHERE email = ? AND tenant_id = ?').get(normalizedEmail, tenantId);
+        const existing = await db.prepare('SELECT id FROM users WHERE email = ?').get(email);
         if (existing) return res.status(409).json({ error: 'Email already exists' });
         const hash = bcrypt.hashSync(password, 10);
         const id = uuidv4();
-        await db.prepare('INSERT INTO users (id, name, email, password_hash, role, phone, department, is_active, tenant_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?)')
-            .run(id, name, normalizedEmail, hash, role, phone || null, department || null, tenantId, new Date().toISOString());
+        await db.prepare('INSERT INTO users (id, name, email, password_hash, role, phone, department, is_active, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?)')
+            .run(id, name, email.toLowerCase(), hash, role, phone || null, department || null, new Date().toISOString());
 
-        logAction(req.user.id, req.user.name, req.user.role, 'CREATE', 'Users', `User created: ${normalizedEmail}`, req.ip);
+        logAction(req.user.id, req.user.name, req.user.role, 'CREATE', 'Users', `User created: ${email}`, req.ip);
         const row = await db.prepare('SELECT * FROM users WHERE id = ?').get(id);
         res.status(201).json(fmt(row));
     } catch (err) {

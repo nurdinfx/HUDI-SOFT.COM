@@ -6,6 +6,141 @@ const { authenticate, authorize } = require('../middleware/auth');
 const router = express.Router();
 router.use(authenticate);
 
+async function getLiveRevenueRows({ startDate, endDate, source }) {
+    const normalizedSource = String(source || 'ALL').toUpperCase();
+    const includePharmacy = normalizedSource === 'ALL' || normalizedSource === 'PHARMACY';
+    const includePos = normalizedSource === 'ALL' || normalizedSource === 'POS';
+    const rows = [];
+
+    if (includePharmacy) {
+        let pharmacyQuery = `
+            SELECT
+                id,
+                invoice_id,
+                patient_name,
+                COALESCE(subtotal_amount, total_amount) AS subtotal_amount,
+                COALESCE(discount_amount, 0) AS discount_amount,
+                total_amount,
+                paid_amount,
+                credit_amount,
+                payment_method,
+                status,
+                created_at AS transaction_date
+            FROM pharmacy_transactions
+            WHERE 1=1
+        `;
+        const pharmacyParams = [];
+        if (startDate) {
+            pharmacyQuery += ' AND DATE(created_at) >= ?';
+            pharmacyParams.push(startDate);
+        }
+        if (endDate) {
+            pharmacyQuery += ' AND DATE(created_at) <= ?';
+            pharmacyParams.push(endDate);
+        }
+        pharmacyQuery += ' ORDER BY created_at DESC';
+
+        const pharmacyRows = await db.prepare(pharmacyQuery).all(...pharmacyParams);
+        rows.push(...pharmacyRows.map(row => ({
+            id: row.id,
+            invoiceId: row.invoice_id,
+            patientName: row.patient_name || 'Walk-In',
+            source: 'Pharmacy',
+            subtotalAmount: parseFloat(row.subtotal_amount) || parseFloat(row.total_amount) || 0,
+            discountAmount: parseFloat(row.discount_amount) || 0,
+            totalAmount: parseFloat(row.total_amount) || 0,
+            paidAmount: parseFloat(row.paid_amount) || 0,
+            outstandingAmount: parseFloat(row.credit_amount) || 0,
+            paymentMethod: row.payment_method,
+            status: row.status,
+            date: row.transaction_date
+        })));
+    }
+
+    if (includePos) {
+        let posQuery = `
+            SELECT
+                id,
+                invoice_id,
+                patient_name,
+                subtotal,
+                discount,
+                total,
+                paid_amount,
+                payment_method,
+                status,
+                date
+            FROM invoices
+            WHERE invoice_id LIKE 'INV-POS-%'
+        `;
+        const posParams = [];
+        if (startDate) {
+            posQuery += ' AND date >= ?';
+            posParams.push(startDate);
+        }
+        if (endDate) {
+            posQuery += ' AND date <= ?';
+            posParams.push(endDate);
+        }
+        posQuery += ' ORDER BY date DESC, created_at DESC';
+
+        const posRows = await db.prepare(posQuery).all(...posParams);
+        rows.push(...posRows.map(row => {
+            const totalAmount = parseFloat(row.total) || 0;
+            const paidAmount = parseFloat(row.paid_amount) || 0;
+            return {
+                id: row.id,
+                invoiceId: row.invoice_id,
+                patientName: row.patient_name || 'Walk-In',
+                source: 'Reception POS',
+                subtotalAmount: parseFloat(row.subtotal) || totalAmount,
+                discountAmount: parseFloat(row.discount) || 0,
+                totalAmount,
+                paidAmount,
+                outstandingAmount: Math.max(0, totalAmount - paidAmount),
+                paymentMethod: row.payment_method,
+                status: row.status,
+                date: row.date
+            };
+        }));
+    }
+
+    return rows.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+}
+
+function buildLiveRevenueSummary(rows) {
+    const summary = {
+        transactionCount: rows.length,
+        totalRevenue: 0,
+        totalDiscount: 0,
+        totalPaid: 0,
+        totalOutstanding: 0,
+        bySource: {},
+        byMethod: {}
+    };
+
+    rows.forEach((row) => {
+        summary.totalRevenue += row.totalAmount || 0;
+        summary.totalDiscount += row.discountAmount || 0;
+        summary.totalPaid += row.paidAmount || 0;
+        summary.totalOutstanding += row.outstandingAmount || 0;
+
+        summary.bySource[row.source] = (summary.bySource[row.source] || 0) + (row.totalAmount || 0);
+        const methodKey = (row.paymentMethod || 'OTHER').toUpperCase();
+        summary.byMethod[methodKey] = (summary.byMethod[methodKey] || 0) + (row.paidAmount || 0);
+    });
+
+    return {
+        transactionCount: summary.transactionCount,
+        totalRevenue: parseFloat(summary.totalRevenue.toFixed(2)),
+        totalDiscount: parseFloat(summary.totalDiscount.toFixed(2)),
+        totalPaid: parseFloat(summary.totalPaid.toFixed(2)),
+        totalOutstanding: parseFloat(summary.totalOutstanding.toFixed(2)),
+        bySource: summary.bySource,
+        byMethod: summary.byMethod
+    };
+}
+
 // ─── DEPARTMENTS ─────────────────────────────────────────────────
 
 // GET /api/revenue-analytics/departments
@@ -192,6 +327,38 @@ router.get('/report', async (req, res) => {
             totalExpenses,
             netIncome: autoNetIncome,
             systemValues
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// GET /api/revenue-analytics/live-report
+router.get('/live-report', async (req, res) => {
+    const { startDate, endDate, source } = req.query;
+
+    try {
+        const rows = await getLiveRevenueRows({ startDate, endDate, source });
+        res.json({
+            summary: buildLiveRevenueSummary(rows),
+            rows
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// GET /api/revenue-analytics/discounts
+router.get('/discounts', async (req, res) => {
+    const { startDate, endDate, source } = req.query;
+
+    try {
+        const rows = (await getLiveRevenueRows({ startDate, endDate, source }))
+            .filter(row => (row.discountAmount || 0) > 0);
+
+        res.json({
+            summary: buildLiveRevenueSummary(rows),
+            rows
         });
     } catch (err) {
         res.status(500).json({ error: err.message });

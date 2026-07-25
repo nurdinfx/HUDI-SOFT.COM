@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from 'next'
 import { Inter, JetBrains_Mono } from 'next/font/google'
-
+import { Analytics } from '@vercel/analytics/next'
 import { ThemeProvider } from '@/components/theme-provider'
 import { AuthProvider } from '@/lib/auth-context'
 import { Toaster } from 'sonner'
@@ -72,13 +72,11 @@ export default function RootLayout({
             <PwaInstallPrompt />
           </AuthProvider>
         </ThemeProvider>
-
+        <Analytics />
         <script
           dangerouslySetInnerHTML={{
             __html: `
-              // Skip service worker in Capacitor native environment
-              var isCapacitor = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
-              if (!isCapacitor && 'serviceWorker' in navigator) {
+              if ('serviceWorker' in navigator) {
                 window.addEventListener('load', function() {
                   navigator.serviceWorker.register('/sw.js').then(
                     function(registration) {
@@ -89,32 +87,24 @@ export default function RootLayout({
                     }
                   );
                 });
-              }
 
-              // Pre-warm the Render backend on Capacitor Android (free tier sleeps after 15 min)
-              if (isCapacitor) {
-                setTimeout(function() {
-                  fetch('https://hudi-soft-com.onrender.com/api/health', { method: 'GET' })
-                    .then(function() { console.log('[WakeUp] Backend server is warm.'); })
-                    .catch(function() { console.warn('[WakeUp] Backend ping failed — server may be cold.'); });
-                }, 500);
-              }
+                // Global suppression for MetaMask and other external extension errors
+                window.addEventListener('unhandledrejection', (event) => {
+                  const msg = event.reason?.message || String(event.reason || '');
+                  if (msg.includes('MetaMask') || msg.includes('inpage.js')) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                  }
+                });
+                window.addEventListener('error', (event) => {
+                  const msg = event.message || '';
+                  if (msg.includes('MetaMask') || (event.filename && event.filename.includes('inpage.js'))) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                  }
+                }, true);
 
-              // Global suppression for MetaMask and other external extension errors
-              window.addEventListener('unhandledrejection', (event) => {
-                const msg = event.reason?.message || String(event.reason || '');
-                if (msg.includes('MetaMask') || msg.includes('inpage.js')) {
-                  event.preventDefault();
-                  event.stopPropagation();
-                }
-              });
-              window.addEventListener('error', (event) => {
-                const msg = event.message || '';
-                if (msg.includes('MetaMask') || (event.filename && event.filename.includes('inpage.js'))) {
-                  event.preventDefault();
-                  event.stopPropagation();
-                }
-              }, true);
+              }
             `,
           }}
         />

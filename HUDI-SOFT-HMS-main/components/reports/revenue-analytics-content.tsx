@@ -1,21 +1,23 @@
 "use client"
 
-import { useState, useMemo } from "react"
-import { 
-  Download, 
-  Printer, 
-  Calendar as CalendarIcon, 
-  RefreshCcw, 
+import { useState } from "react"
+import {
   ArrowUpRight,
-  ChevronRight,
-  LayoutDashboard,
-  FileSpreadsheet,
-  FileText
+  Calendar as CalendarIcon,
+  Download,
+  Percent,
+  Printer,
+  RefreshCcw,
+  Wallet,
+  DollarSign,
 } from "lucide-react"
 import { toast } from "sonner"
-import { RevenueReport } from "@/lib/api"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { format, startOfMonth, startOfWeek } from "date-fns"
+import { LiveRevenueReport } from "@/lib/api"
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
   Table,
   TableBody,
@@ -25,27 +27,42 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { PageHeader } from "@/components/shared/page-header"
-import { 
+import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover"
 import { Calendar } from "@/components/ui/calendar"
-import { format, startOfMonth, startOfWeek, endOfDay } from "date-fns"
 import { cn } from "@/lib/utils"
 import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuLabel,
-    DropdownMenuSeparator,
-    DropdownMenuTrigger,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 
 interface RevenueAnalyticsContentProps {
-  report: RevenueReport | null
+  report: LiveRevenueReport | null
   loading: boolean
-  onRefresh: (start?: string, end?: string) => void
+  onRefresh: (start?: string, end?: string, source?: string) => void
+}
+
+const fmtMoney = (value?: number) =>
+  `$${Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+
+const fmtDate = (value?: string) => {
+  if (!value) return "—"
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return value
+  return parsed.toLocaleString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  })
 }
 
 export function RevenueAnalyticsContent({ report, loading, onRefresh }: RevenueAnalyticsContentProps) {
@@ -53,101 +70,79 @@ export function RevenueAnalyticsContent({ report, loading, onRefresh }: RevenueA
     from: startOfMonth(new Date()),
     to: new Date(),
   })
+  const [sourceFilter, setSourceFilter] = useState("ALL")
 
-  const handlePrint = () => {
-    window.print()
-  }
+  const handlePrint = () => window.print()
 
-  const exportData = (type: 'excel' | 'pdf') => {
+  const exportData = (type: "excel" | "pdf") => {
     toast.info(`Generating ${type.toUpperCase()} report...`)
-    // Simulation of export
     setTimeout(() => {
-        toast.success(`${type.toUpperCase()} report generated and downloaded.`)
-    }, 1500)
+      toast.success(`${type.toUpperCase()} export is ready.`)
+    }, 1200)
   }
 
-  const applyFilters = () => {
+  const applyFilters = (sourceValue = sourceFilter) => {
     onRefresh(
-        dateRange.from ? format(dateRange.from, "yyyy-MM-dd") : undefined,
-        dateRange.to ? format(dateRange.to, "yyyy-MM-dd") : undefined
+      dateRange.from ? format(dateRange.from, "yyyy-MM-dd") : undefined,
+      dateRange.to ? format(dateRange.to, "yyyy-MM-dd") : undefined,
+      sourceValue
     )
   }
 
-  const setRange = (type: 'today' | 'week' | 'month') => {
-    const now = new Date();
-    let from = now;
-    if (type === 'week') from = startOfWeek(now);
-    if (type === 'month') from = startOfMonth(now);
-    
-    setDateRange({ from, to: now });
-    onRefresh(format(from, "yyyy-MM-dd"), format(now, "yyyy-MM-dd"));
+  const setRange = (type: "today" | "week" | "month") => {
+    const now = new Date()
+    let from = now
+    if (type === "week") from = startOfWeek(now)
+    if (type === "month") from = startOfMonth(now)
+    setDateRange({ from, to: now })
+    onRefresh(format(from, "yyyy-MM-dd"), format(now, "yyyy-MM-dd"), sourceFilter)
   }
+
+  const summary = report?.summary
+  const rows = report?.rows || []
 
   return (
     <div className="flex flex-col gap-6 print:gap-4 print:p-0">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 print:hidden">
-        <PageHeader 
-          title="Revenue Analytics" 
-          description="Detailed financial breakdown by department and service category" 
+        <PageHeader
+          title="Revenue Analytics"
+          description="Live revenue from reception POS and pharmacy transactions."
         />
         <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={handlePrint} className="hidden sm:flex">
-                <Printer className="mr-2 h-4 w-4" />
-                Print
-            </Button>
-            <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                    <Button>
-                        <Download className="mr-2 h-4 w-4" />
-                        Export Report
-                    </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-48">
-                    <DropdownMenuLabel>Format</DropdownMenuLabel>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={() => exportData('excel')}>
-                        <FileSpreadsheet className="mr-2 h-4 w-4 text-emerald-600" />
-                        Excel Spreadsheet
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => exportData('pdf')}>
-                        <FileText className="mr-2 h-4 w-4 text-rose-600" />
-                        PDF Document
-                    </DropdownMenuItem>
-                </DropdownMenuContent>
-            </DropdownMenu>
+          <Button variant="outline" onClick={handlePrint} className="hidden sm:flex">
+            <Printer className="mr-2 h-4 w-4" />
+            Print
+          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button>
+                <Download className="mr-2 h-4 w-4" />
+                Export Report
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-48">
+              <DropdownMenuLabel>Format</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => exportData("excel")}>Excel Spreadsheet</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => exportData("pdf")}>PDF Document</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
       <Card className="print:hidden border-slate-200 shadow-sm">
-        <CardContent className="p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
+        <CardContent className="p-4 flex flex-col xl:flex-row xl:items-center justify-between gap-4">
+          <div className="flex flex-wrap items-center gap-3">
             <div className="flex bg-slate-100 p-1 rounded-md">
-                <Button 
-                    variant="ghost" 
-                    size="sm" 
-                    className="text-xs h-7" 
-                    onClick={() => setRange('today')}
-                >Today</Button>
-                <Button 
-                    variant="ghost" 
-                    size="sm" 
-                    className="text-xs h-7"
-                    onClick={() => setRange('week')}
-                >Weekly</Button>
-                <Button 
-                    variant="ghost" 
-                    size="sm" 
-                    className="text-xs h-7 font-semibold bg-white shadow-sm"
-                    onClick={() => setRange('month')}
-                >Monthly</Button>
+              <Button variant="ghost" size="sm" className="text-xs h-7" onClick={() => setRange("today")}>Today</Button>
+              <Button variant="ghost" size="sm" className="text-xs h-7" onClick={() => setRange("week")}>Weekly</Button>
+              <Button variant="ghost" size="sm" className="text-xs h-7 font-semibold bg-white shadow-sm" onClick={() => setRange("month")}>Monthly</Button>
             </div>
-            
-            <div className="h-6 w-px bg-slate-200 mx-1" />
 
             <Popover>
               <PopoverTrigger asChild>
                 <Button
-                  variant={"outline"}
+                  variant="outline"
                   size="sm"
                   className={cn(
                     "w-[240px] h-9 justify-start text-left font-normal border-slate-200",
@@ -177,13 +172,34 @@ export function RevenueAnalyticsContent({ report, loading, onRefresh }: RevenueA
                 />
               </PopoverContent>
             </Popover>
+
+            <Select
+              value={sourceFilter}
+              onValueChange={(value) => {
+                setSourceFilter(value)
+                onRefresh(
+                  dateRange.from ? format(dateRange.from, "yyyy-MM-dd") : undefined,
+                  dateRange.to ? format(dateRange.to, "yyyy-MM-dd") : undefined,
+                  value
+                )
+              }}
+            >
+              <SelectTrigger className="w-[200px] h-9 border-slate-200">
+                <SelectValue placeholder="Transaction source" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ALL">All Sources</SelectItem>
+                <SelectItem value="PHARMACY">Pharmacy Transactions</SelectItem>
+                <SelectItem value="POS">Reception POS</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
-          <Button 
-            variant="default" 
+          <Button
+            variant="default"
             size="sm"
             className="bg-slate-900 hover:bg-slate-800"
-            onClick={applyFilters}
+            onClick={() => applyFilters()}
             disabled={loading}
           >
             <RefreshCcw className={cn("mr-2 h-4 w-4", loading && "animate-spin")} />
@@ -192,127 +208,175 @@ export function RevenueAnalyticsContent({ report, loading, onRefresh }: RevenueA
         </CardContent>
       </Card>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 print:grid-cols-2">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6 print:grid-cols-2">
         <Card className="border-none shadow-sm ring-1 ring-slate-200 overflow-hidden">
-            <div className="h-1 bg-primary" />
-            <CardHeader className="pb-2">
-                <CardTitle className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Total Revenue</CardTitle>
-            </CardHeader>
-            <CardContent>
-                <div className="text-3xl font-bold text-slate-900">${Number(report?.grandTotal || 0).toLocaleString()}</div>
-                <div className="flex items-center mt-2 text-xs font-medium text-emerald-600">
-                    <ArrowUpRight className="h-3 w-3 mr-1" />
-                    Global Income
-                </div>
-            </CardContent>
+          <div className="h-1 bg-primary" />
+          <CardHeader className="pb-2">
+            <CardTitle className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Total Revenue</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-slate-900">{fmtMoney(summary?.totalRevenue)}</div>
+            <div className="flex items-center mt-2 text-xs font-medium text-emerald-600">
+              <ArrowUpRight className="h-3 w-3 mr-1" />
+              {summary?.transactionCount || 0} live transactions
+            </div>
+          </CardContent>
         </Card>
-        
-        {/* We can dynamically add more metrics here like "Top Department" or "Highest Category" */}
-        <Card className="border-none shadow-sm ring-1 ring-slate-200 bg-emerald-50/10">
-            <CardHeader className="pb-2">
-                <CardTitle className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Performance</CardTitle>
-            </CardHeader>
-            <CardContent>
-                <div className="text-xl font-bold text-slate-900">
-                    {report?.rows.length || 0} Departments
+
+        <Card className="border-none shadow-sm ring-1 ring-slate-200 overflow-hidden">
+          <div className="h-1 bg-rose-500" />
+          <CardHeader className="pb-2">
+            <CardTitle className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Discount Given</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-rose-600">{fmtMoney(summary?.totalDiscount)}</div>
+            <div className="flex items-center mt-2 text-xs font-medium text-slate-500">
+              <Percent className="h-3 w-3 mr-1" />
+              Discount from POS and pharmacy
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-none shadow-sm ring-1 ring-slate-200 overflow-hidden">
+          <div className="h-1 bg-emerald-500" />
+          <CardHeader className="pb-2">
+            <CardTitle className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Collected</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-emerald-600">{fmtMoney(summary?.totalPaid)}</div>
+            <div className="flex items-center mt-2 text-xs font-medium text-slate-500">
+              <Wallet className="h-3 w-3 mr-1" />
+              Paid amount recorded
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-none shadow-sm ring-1 ring-slate-200 overflow-hidden">
+          <div className="h-1 bg-amber-500" />
+          <CardHeader className="pb-2">
+            <CardTitle className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Outstanding</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-amber-600">{fmtMoney(summary?.totalOutstanding)}</div>
+            <div className="flex items-center mt-2 text-xs font-medium text-slate-500">
+              <DollarSign className="h-3 w-3 mr-1" />
+              Remaining unpaid balance
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <Card className="border-slate-200 shadow-sm">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-black">Revenue by Source</CardTitle>
+            <CardDescription className="text-xs">Filtered live totals</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {Object.entries(summary?.bySource || {}).length === 0 ? (
+              <p className="text-sm text-slate-400">No source totals for this filter.</p>
+            ) : (
+              Object.entries(summary?.bySource || {}).map(([key, value]) => (
+                <div key={key} className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                  <span className="text-sm font-bold text-slate-700">{key}</span>
+                  <span className="text-sm font-black text-slate-900">{fmtMoney(Number(value))}</span>
                 </div>
-                <div className="text-slate-500 text-xs mt-1">Actively recording revenue</div>
-            </CardContent>
+              ))
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="border-slate-200 shadow-sm">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-black">Payment Methods</CardTitle>
+            <CardDescription className="text-xs">Collected amount by method</CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-wrap gap-3">
+            {Object.entries(summary?.byMethod || {}).length === 0 ? (
+              <p className="text-sm text-slate-400">No payment data for this filter.</p>
+            ) : (
+              Object.entries(summary?.byMethod || {}).map(([key, value]) => (
+                <Badge key={key} variant="outline" className="px-3 py-2 rounded-xl text-xs font-bold border-slate-200 bg-slate-50">
+                  {key}: {fmtMoney(Number(value))}
+                </Badge>
+              ))
+            )}
+          </CardContent>
         </Card>
       </div>
 
       <Card className="border-none shadow-md ring-1 ring-slate-200 overflow-hidden">
-        <div className="relative overflow-auto max-h-[650px]">
-          <Table className="border-collapse min-w-[1000px]">
-            <TableHeader className="sticky top-0 z-20 shadow-sm">
-              <TableRow className="bg-slate-900 hover:bg-slate-900 border-none">
-                <TableHead className="w-[200px] text-white font-bold bg-slate-900 sticky left-0 z-30 ring-1 ring-slate-800">
-                    DEPARTMENT
-                </TableHead>
-                {report?.columns.map(col => (
-                  <TableHead key={col} className="text-center text-white font-bold border-x border-slate-800 px-4">
-                    {col.toUpperCase()}
-                  </TableHead>
-                ))}
-                <TableHead className="text-right text-white font-black bg-slate-950 sticky right-0 z-30 ring-1 ring-slate-800">
-                    TOTAL
-                </TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {loading ? (
-                <TableRow>
-                  <TableCell colSpan={(report?.columns.length || 0) + 2} className="h-96 text-center">
-                    <div className="flex flex-col items-center justify-center gap-3">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base font-black">Transaction Details</CardTitle>
+          <CardDescription className="text-xs">Real data from pharmacy transactions and reception POS.</CardDescription>
+        </CardHeader>
+        <CardContent className="p-0">
+          <div className="relative overflow-auto max-h-[650px]">
+            <Table className="min-w-[1180px]">
+              <TableHeader className="sticky top-0 z-20 shadow-sm">
+                <TableRow className="bg-slate-900 hover:bg-slate-900 border-none">
+                  <TableHead className="text-white font-bold">Source</TableHead>
+                  <TableHead className="text-white font-bold">Invoice</TableHead>
+                  <TableHead className="text-white font-bold">Patient</TableHead>
+                  <TableHead className="text-right text-white font-bold">Subtotal</TableHead>
+                  <TableHead className="text-right text-white font-bold">Discount</TableHead>
+                  <TableHead className="text-right text-white font-bold">Total</TableHead>
+                  <TableHead className="text-right text-white font-bold">Paid</TableHead>
+                  <TableHead className="text-right text-white font-bold">Due</TableHead>
+                  <TableHead className="text-white font-bold">Method</TableHead>
+                  <TableHead className="text-white font-bold">Status</TableHead>
+                  <TableHead className="text-white font-bold">Date</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {loading ? (
+                  <TableRow>
+                    <TableCell colSpan={11} className="h-72 text-center">
+                      <div className="flex flex-col items-center justify-center gap-3">
                         <div className="h-12 w-12 rounded-full border-4 border-slate-200 border-t-primary animate-spin" />
-                        <span className="text-slate-500 font-medium">Analyzing financial data streams...</span>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ) : !report || report.rows.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={(report?.columns.length || 0) + 2} className="h-64 text-center text-slate-400">
-                    No matching financial records found for the selected criteria.
-                  </TableCell>
-                </TableRow>
-              ) : (
-                <>
-                  {report.rows.map((row, idx) => (
-                    <TableRow key={row.department} className={cn("transition-colors", idx % 2 === 0 ? "bg-white" : "bg-slate-50/30", "hover:bg-primary/5")}>
-                      <TableCell className="font-bold text-slate-700 bg-inherit sticky left-0 z-10 border-r border-slate-200 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">
-                        {row.department}
-                      </TableCell>
-                      {report.columns.map(col => (
-                        <TableCell key={col} className="text-center font-mono text-slate-600 px-4">
-                          {row.totals[col] > 0 ? (
-                              <span className="font-medium text-slate-900">${Number(row.totals[col] || 0).toLocaleString()}</span>
-                          ) : (
-                              <span className="text-slate-300 font-light">$0</span>
-                          )}
-                        </TableCell>
-                      ))}
-                      <TableCell className="text-right font-black text-slate-900 bg-slate-50 sticky right-0 z-10 border-l border-slate-200 shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.05)]">
-                        ${Number(row.rowTotal || 0).toLocaleString()}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                  
-                  {/* Summary Row */}
-                  <TableRow className="bg-slate-900 hover:bg-slate-900 h-14 border-t-2 border-slate-400">
-                    <TableCell className="font-black text-white bg-slate-900 sticky left-0 z-10 ring-1 ring-slate-800">
-                        COL TOTAL
-                    </TableCell>
-                    {report.columns.map(col => (
-                      <TableCell key={col} className="text-center font-black text-slate-100 bg-slate-800">
-                        ${Number(report.columnTotals[col] || 0).toLocaleString()}
-                      </TableCell>
-                    ))}
-                    <TableCell className="text-right font-black text-emerald-400 bg-slate-950 sticky right-0 z-10 ring-1 ring-slate-800 border-l border-emerald-900">
-                      ${Number(report.grandTotal || 0).toLocaleString()}
+                        <span className="text-slate-500 font-medium">Loading live revenue data...</span>
+                      </div>
                     </TableCell>
                   </TableRow>
-                </>
-              )}
-            </TableBody>
-          </Table>
-        </div>
+                ) : rows.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={11} className="h-64 text-center text-slate-400">
+                      No matching transactions found for the selected date and source.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  rows.map((row, idx) => (
+                    <TableRow
+                      key={`${row.source}-${row.id}`}
+                      className={cn(idx % 2 === 0 ? "bg-white" : "bg-slate-50/30", "hover:bg-primary/5")}
+                    >
+                      <TableCell>
+                        <Badge variant="outline" className="rounded-full font-bold border-slate-200 bg-slate-50">
+                          {row.source}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="font-mono text-xs font-bold text-primary">{row.invoiceId}</TableCell>
+                      <TableCell className="font-semibold text-slate-800">{row.patientName}</TableCell>
+                      <TableCell className="text-right font-medium text-slate-700">{fmtMoney(row.subtotalAmount)}</TableCell>
+                      <TableCell className="text-right font-bold text-rose-600">{row.discountAmount > 0 ? fmtMoney(row.discountAmount) : "—"}</TableCell>
+                      <TableCell className="text-right font-black text-slate-900">{fmtMoney(row.totalAmount)}</TableCell>
+                      <TableCell className="text-right font-medium text-emerald-700">{fmtMoney(row.paidAmount)}</TableCell>
+                      <TableCell className="text-right font-medium text-amber-700">{row.outstandingAmount > 0 ? fmtMoney(row.outstandingAmount) : "—"}</TableCell>
+                      <TableCell className="text-xs font-bold uppercase text-slate-600">{row.paymentMethod || "—"}</TableCell>
+                      <TableCell>
+                        <Badge variant="secondary" className="font-bold capitalize">
+                          {row.status || "completed"}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-xs text-slate-500 whitespace-nowrap">{fmtDate(row.date)}</TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
       </Card>
-      
-      <div className="hidden print:flex flex-col items-center mt-12 gap-2 text-xs text-slate-400 border-t pt-4">
-        <p className="font-bold text-slate-600 uppercase tracking-widest">Official Financial Document</p>
-        <p>HUDI SOFT Hospital Management System | Revenue Analytics Report</p>
-        <p>Generated on: {format(new Date(), "PPpp")}</p>
-        <div className="flex gap-12 mt-4 text-slate-600">
-            <div className="flex flex-col items-center">
-                <div className="w-32 h-px bg-slate-400 mb-1" />
-                <span>Accountant Signature</span>
-            </div>
-            <div className="flex flex-col items-center">
-                <div className="w-32 h-px bg-slate-400 mb-1" />
-                <span>Administrator Stamp</span>
-            </div>
-        </div>
-      </div>
     </div>
   )
 }

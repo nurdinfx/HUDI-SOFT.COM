@@ -41,15 +41,45 @@ router.put('/suppliers/:id', async (req, res) => {
 });
 
 // ─── Purchase Orders ──────────────────────────────────────────────
+const fmtOrder = (o, items = []) => ({
+    id: o.id,
+    poNumber: o.po_number,
+    supplierId: o.supplier_id,
+    supplierName: o.supplier_name,
+    orderDate: o.order_date,
+    totalAmount: o.total_amount,
+    status: o.status,
+    payment_type: o.payment_type,
+    notes: o.notes,
+    createdBy: o.created_by,
+    createdAt: o.created_at,
+    items: items.map(i => ({
+        id: i.id,
+        poId: i.po_id,
+        medicineId: i.medicine_id,
+        medicineName: i.medicine_name,
+        quantity: i.quantity,
+        unitPrice: i.unit_price,
+        totalPrice: i.total_price,
+    }))
+});
+
 router.get('/orders', async (req, res) => {
     const { status, supplier_id } = req.query;
     let q = 'SELECT o.*, s.name as supplier_name FROM pharmacy_purchase_orders o LEFT JOIN pharmacy_suppliers s ON o.supplier_id = s.id WHERE 1=1';
     const params = [];
     if (status) { q += ' AND status = ?'; params.push(status); }
-    if (supplier_id) { q += ' AND supplier_id = ?'; params.push(supplier_id); }
-    q += ' ORDER BY created_at DESC';
+    if (supplier_id) { q += ' AND o.supplier_id = ?'; params.push(supplier_id); }
+    q += ' ORDER BY o.created_at DESC';
     try {
         const rows = await db.prepare(q).all(...params);
+        if (supplier_id) {
+            const ordersWithItems = await Promise.all(rows.map(async (order) => {
+                const items = await db.prepare('SELECT * FROM pharmacy_purchase_items WHERE po_id = ?').all(order.id);
+                return fmtOrder(order, items);
+            }));
+            return res.json(ordersWithItems);
+        }
         res.json(rows);
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -131,8 +161,9 @@ router.put('/orders/:id/status', async (req, res) => {
             }
             
             // Record as Expense if confirmed
-            await db.prepare('INSERT INTO account_entries (id, type, category, description, amount, department, reference_id, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
-                .run(uuidv4(), 'expense', 'Pharmacy Inventory', `Purchase Order Reception: ${order.po_number}`, order.total_amount, 'Pharmacy', order.po_number, req.user.id);
+            const today = new Date().toISOString().split('T')[0];
+            await db.prepare('INSERT INTO account_entries (id, date, type, category, description, amount, payment_method, department, reference_id, user_id, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+                .run(uuidv4(), today, 'expense', 'Pharmacy Inventory', `Purchase Order Reception: ${order.po_number}`, order.total_amount, 'cash', 'Pharmacy', order.po_number, req.user.id, 'completed');
         }
 
         await db.exec('COMMIT');
@@ -195,7 +226,12 @@ const fmtReturn = (r) => ({
 
 router.get('/returns', async (req, res) => {
     try {
-        const rows = await db.prepare('SELECT r.*, s.name as supplier_name FROM pharmacy_supplier_returns r JOIN pharmacy_suppliers s ON r.supplier_id = s.id ORDER BY r.created_at DESC').all();
+        const { supplier_id } = req.query;
+        let q = 'SELECT r.*, s.name as supplier_name FROM pharmacy_supplier_returns r JOIN pharmacy_suppliers s ON r.supplier_id = s.id WHERE 1=1';
+        const params = [];
+        if (supplier_id) { q += ' AND r.supplier_id = ?'; params.push(supplier_id); }
+        q += ' ORDER BY r.created_at DESC';
+        const rows = await db.prepare(q).all(...params);
         res.json(rows.map(fmtReturn));
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -238,8 +274,9 @@ router.post('/returns', async (req, res) => {
         await db.prepare('UPDATE medicines SET quantity = ?, status = ? WHERE id = ?').run(newQty, newStatus, medicine_id);
 
         // 4. Record as Income/Financial entry (reclaiming money from supplier)
-        await db.prepare('INSERT INTO account_entries (id, type, category, description, amount, department, reference_id, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
-            .run(uuidv4(), 'income', 'Supplier Return', `Return processed: ${med.name} (x${quantity})`, amount, 'Pharmacy', returnId, req.user.id);
+        const entryDate = new Date().toISOString().split('T')[0];
+        await db.prepare('INSERT INTO account_entries (id, date, type, category, description, amount, payment_method, department, reference_id, user_id, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+            .run(uuidv4(), entryDate, 'income', 'Supplier Return', `Return processed: ${med.name} (x${quantity})`, amount, 'cash', 'Pharmacy', returnId, req.user.id, 'completed');
 
         await db.exec('COMMIT');
         logAction(req.user.id, req.user.name, req.user.role, 'CREATE', 'PharmacyPurchase', `Supplier return processed: ${quantity} units of ${med.name}`, req.ip);
