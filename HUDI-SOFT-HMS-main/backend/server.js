@@ -97,6 +97,7 @@ const dbModule = require('./database');
 dbModule.promise.then(async () => {
     console.log('📦 Running Database Migrations...');
     try {
+        await require('./init_schema')();
         await require('./migrate_license')();
         await require('./migrate_tenants')();
         await require('./migrate_revenue_analytics')();
