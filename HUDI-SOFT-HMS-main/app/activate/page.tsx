@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import React, { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -34,7 +34,7 @@ export default function ActivationPage() {
       .finally(() => setCheckingStatus(false))
   }, [])
 
-  async function handleActivate(e: React.FormEvent) {
+  async function handleActivate(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
     if (!licenseKey.trim()) {
       toast.error("Please enter a valid license key")
