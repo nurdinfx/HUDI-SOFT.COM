@@ -786,6 +786,15 @@ export const realApi = {
   }
 };
 
+// ─── Migration Center API ────────────────────────────────────────────────────
+export const migrationAPI = {
+  getDashboardStats: () => api.get('/migration/dashboard'),
+  preview: (payload) => api.post('/migration/preview', payload),
+  execute: (payload) => api.post('/migration/execute', payload, { timeout: 300000 }), // 5 min timeout for large imports
+  getLogs: () => api.get('/migration/logs'),
+  rollback: (backupId) => api.post(`/migration/rollback/${backupId}`),
+};
+
 // For compatibility
 export const demoLocalAPI = {
   simulateDelay: () => new Promise(resolve => setTimeout(resolve, 0)),

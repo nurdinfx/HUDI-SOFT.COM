@@ -130,6 +130,7 @@ import employeeRoutes from './routes/employees.js';
 import qrRoutes from './routes/qr.js';
 import attendanceRoutes from './routes/attendance.js';
 import hotelRoutes from './routes/hotel.js';
+import migrationRoutes from './routes/migration.js';
 
 // Simple File Upload Setup
 import multer from 'multer';
@@ -219,6 +220,7 @@ app.use('/api/v1/employees', employeeRoutes);
 app.use('/api/v1/qr', qrRoutes);
 app.use('/api/v1/attendance', attendanceRoutes);
 app.use('/api/v1/hotel', hotelRoutes);
+app.use('/api/v1/migration', migrationRoutes);
 
 // Protect sensitive routes with license check
 app.use(['/api/v1/orders', '/api/v1/products', '/api/v1/customers', '/api/v1/tables', '/api/v1/expenses', '/api/v1/dashboard', '/api/v1/users', '/api/v1/settings', '/api/v1/purchases', '/api/v1/purchase-orders', '/api/v1/suppliers', '/api/v1/finance', '/api/v1/reports', '/api/v1/inventory', '/api/v1/employees', '/api/v1/attendance', '/api/v1/hotel'], licenseCheck);

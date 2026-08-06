@@ -31,6 +31,7 @@ import WaiterDashboard from './pages/waiter-dashboard';
 import QRManagement from './pages/qr-management';
 import Attendance from './pages/attendance';
 import EmployeeAttendance from './pages/employee-attendance';
+import DataMigration from './pages/data-migration';
 
 // Hotel Pages
 import HotelRoute from './components/HotelRoute';
@@ -197,6 +198,12 @@ function App() {
                           <AdminLicenseDashboard />
                         </ProtectedRoute>
                       } />
+
+                       <Route path="migration" element={
+                         <ProtectedRoute requiredRoles={['admin', 'manager']}>
+                           <DataMigration />
+                         </ProtectedRoute>
+                       } />
 
                       {/* ── Hotel Management Routes (inside Layout) ── */}
                       <Route path="hotel/dashboard" element={

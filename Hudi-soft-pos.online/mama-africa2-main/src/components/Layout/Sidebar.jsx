@@ -28,7 +28,8 @@ import {
   Bed,
   CalendarDays,
   ConciergeBell,
-  Brush
+  Brush,
+  Database
 } from 'lucide-react';
 
 const Sidebar = ({ isOpen, setIsOpen }) => {
@@ -67,6 +68,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
     { name: 'Employees', href: '/employees', icon: Briefcase, roles: ['admin', 'manager'] },
     { name: 'Attendance', href: '/attendance', icon: CalendarCheck, roles: ['admin', 'manager'] },
     { name: 'Reports', href: '/reports', icon: TrendingUp, roles: ['admin', 'manager'] },
+    { name: 'Data Migration', href: '/migration', icon: Database, roles: ['admin', 'manager'] },
     { name: 'Settings', href: '/settings', icon: Settings, roles: ['admin', 'manager'] },
     { name: 'License Mgmt', href: '/admin/licensing', icon: Shield, roles: ['admin'] },
   ];
