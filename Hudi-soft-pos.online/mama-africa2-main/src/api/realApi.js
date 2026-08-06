@@ -556,7 +556,14 @@ export const attendanceAPI = {
   registerVerify: (data) => api.post('/attendance/public/register-verify', data),
   loginOptions: (data) => api.post('/attendance/public/login-options', data),
   loginVerify: (data) => api.post('/attendance/public/login-verify', data),
-  pinFallback: (data) => api.post('/attendance/public/pin-fallback', data)
+  pinFallback: (data) => api.post('/attendance/public/pin-fallback', data),
+
+  // Fingerprint Biometric APIs
+  getFingerprintEmployees: () => api.get('/attendance/fingerprint/employees'),
+  enrollFingerprint: (data) => api.post('/attendance/fingerprint/enroll', data),
+  updateFingerprint: (data) => api.put('/attendance/fingerprint/update', data),
+  deleteFingerprint: (id) => api.delete(`/attendance/fingerprint/${id}`),
+  processFingerprintScan: (data) => api.post('/attendance/fingerprint/scan', data)
 };
 
 // ========== HOTEL API ==========

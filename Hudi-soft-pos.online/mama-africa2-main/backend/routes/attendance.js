@@ -23,7 +23,12 @@ import {
   registerVerify,
   loginOptions,
   loginVerify,
-  pinVerifyFallback
+  pinVerifyFallback,
+  getFingerprintEmployees,
+  enrollFingerprint,
+  updateFingerprint,
+  deleteFingerprint,
+  processFingerprintScan
 } from '../controllers/attendanceController.js';
 
 const router = express.Router();
@@ -69,5 +74,12 @@ router.put('/settings', updateSettings);
 
 // Audit Trails
 router.get('/audit-logs', getAuditLogs);
+
+// Fingerprint Biometric Attendance Routes
+router.get('/fingerprint/employees', getFingerprintEmployees);
+router.post('/fingerprint/enroll', enrollFingerprint);
+router.put('/fingerprint/update', updateFingerprint);
+router.delete('/fingerprint/:employeeId', deleteFingerprint);
+router.post('/fingerprint/scan', processFingerprintScan);
 
 export default router;

@@ -12,7 +12,14 @@ const employeeSchema = new mongoose.Schema({
   shift: { type: mongoose.Schema.Types.ObjectId, ref: 'AttendanceShift' },
   photoUrl: { type: String, default: '' },
   department: { type: String, default: 'General' },
-  employeeId: { type: String, unique: true, sparse: true }
+  employeeId: { type: String, unique: true, sparse: true },
+  fingerprint: {
+    template: { type: String, default: null },
+    enrolledAt: { type: Date, default: null },
+    enrollmentStatus: { type: String, enum: ['Enrolled', 'Not Enrolled'], default: 'Not Enrolled' },
+    lastVerifiedAt: { type: Date, default: null },
+    deviceName: { type: String, default: 'USB Biometric Scanner' }
+  }
 }, { timestamps: true });
 
 // Ensure unique phone number per employee per branch

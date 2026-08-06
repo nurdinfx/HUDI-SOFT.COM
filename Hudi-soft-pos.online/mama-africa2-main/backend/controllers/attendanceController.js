@@ -888,29 +888,309 @@ export const pinVerifyFallback = async (req, res) => {
 
 
 /**
+ * ─── FINGERPRINT BIOMETRIC ENROLLMENT & AUTHENTICATION ENDPOINTS ───────────────
+ */
+
+// 1. Fetch employees with fingerprint enrollment status
+export const getFingerprintEmployees = async (req, res) => {
+  try {
+    const branchId = req.user.branch._id || req.user.branch.id;
+    const employees = await Employee.find({ branch: branchId, status: 'active' })
+      .populate('shift', 'name startTime endTime')
+      .sort({ name: 1 });
+
+    const data = employees.map(emp => ({
+      _id: emp._id.toString(),
+      id: emp._id.toString(),
+      employeeId: emp.employeeId || emp._id.toString().slice(-6),
+      name: emp.name,
+      position: emp.position,
+      department: emp.department || 'General',
+      photoUrl: emp.photoUrl || '',
+      phone: emp.phone || '',
+      shift: emp.shift ? emp.shift.name : 'No Shift',
+      fingerprint: {
+        template: emp.fingerprint?.template || null,
+        enrolledAt: emp.fingerprint?.enrolledAt || null,
+        enrollmentStatus: emp.fingerprint?.enrollmentStatus || 'Not Enrolled',
+        lastVerifiedAt: emp.fingerprint?.lastVerifiedAt || null,
+        deviceName: emp.fingerprint?.deviceName || 'USB Biometric Scanner'
+      }
+    }));
+
+    res.json({ success: true, data });
+  } catch (error) {
+    console.error('Get fingerprint employees error:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch biometric employee list' });
+  }
+};
+
+// 2. Enroll Fingerprint for an Employee
+export const enrollFingerprint = async (req, res) => {
+  try {
+    const branchId = req.user.branch._id || req.user.branch.id;
+    const { employeeId, fingerprintTemplate, deviceName } = req.body;
+
+    if (!employeeId) {
+      return res.status(400).json({ success: false, message: 'Employee ID is required for fingerprint enrollment' });
+    }
+
+    const employee = await Employee.findOne({ _id: employeeId, branch: branchId });
+    if (!employee) {
+      return res.status(404).json({ success: false, message: 'Employee not found' });
+    }
+
+    const templateData = fingerprintTemplate || `FP_TMPL_${employee._id}_${Date.now()}`;
+    const device = deviceName || 'USB Fingerprint Reader';
+
+    employee.fingerprint = {
+      template: templateData,
+      enrolledAt: new Date(),
+      enrollmentStatus: 'Enrolled',
+      lastVerifiedAt: null,
+      deviceName: device
+    };
+
+    await employee.save();
+
+    await AttendanceAuditLog.create({
+      branch: branchId,
+      action: 'Fingerprint Enrolled',
+      employee: employee._id,
+      performedBy: req.user?.name || 'Administrator',
+      details: `Enrolled biometric fingerprint for ${employee.name} using ${device}`,
+      ip: req.ip
+    });
+
+    res.json({
+      success: true,
+      message: `Fingerprint enrolled successfully for ${employee.name}`,
+      data: {
+        employeeId: employee._id,
+        enrollmentStatus: 'Enrolled',
+        enrolledAt: employee.fingerprint.enrolledAt,
+        deviceName: device
+      }
+    });
+  } catch (error) {
+    console.error('Enroll fingerprint error:', error);
+    res.status(500).json({ success: false, message: error.message || 'Failed to enroll fingerprint' });
+  }
+};
+
+// 3. Update / Re-enroll Fingerprint
+export const updateFingerprint = async (req, res) => {
+  try {
+    const branchId = req.user.branch._id || req.user.branch.id;
+    const { employeeId, fingerprintTemplate, deviceName } = req.body;
+
+    const employee = await Employee.findOne({ _id: employeeId, branch: branchId });
+    if (!employee) {
+      return res.status(404).json({ success: false, message: 'Employee not found' });
+    }
+
+    const templateData = fingerprintTemplate || `FP_TMPL_${employee._id}_${Date.now()}`;
+    const device = deviceName || employee.fingerprint?.deviceName || 'USB Fingerprint Reader';
+
+    employee.fingerprint = {
+      template: templateData,
+      enrolledAt: new Date(),
+      enrollmentStatus: 'Enrolled',
+      lastVerifiedAt: employee.fingerprint?.lastVerifiedAt || null,
+      deviceName: device
+    };
+
+    await employee.save();
+
+    await AttendanceAuditLog.create({
+      branch: branchId,
+      action: 'Fingerprint Updated',
+      employee: employee._id,
+      performedBy: req.user?.name || 'Administrator',
+      details: `Re-enrolled fingerprint biometric profile for ${employee.name}`,
+      ip: req.ip
+    });
+
+    res.json({
+      success: true,
+      message: `Fingerprint profile updated for ${employee.name}`,
+      data: {
+        employeeId: employee._id,
+        enrollmentStatus: 'Enrolled',
+        enrolledAt: employee.fingerprint.enrolledAt
+      }
+    });
+  } catch (error) {
+    console.error('Update fingerprint error:', error);
+    res.status(500).json({ success: false, message: 'Failed to update fingerprint' });
+  }
+};
+
+// 4. Delete Fingerprint Enrollment
+export const deleteFingerprint = async (req, res) => {
+  try {
+    const branchId = req.user.branch._id || req.user.branch.id;
+    const { employeeId } = req.params;
+
+    const employee = await Employee.findOne({ _id: employeeId, branch: branchId });
+    if (!employee) {
+      return res.status(404).json({ success: false, message: 'Employee not found' });
+    }
+
+    employee.fingerprint = {
+      template: null,
+      enrolledAt: null,
+      enrollmentStatus: 'Not Enrolled',
+      lastVerifiedAt: null,
+      deviceName: null
+    };
+
+    await employee.save();
+
+    await AttendanceAuditLog.create({
+      branch: branchId,
+      action: 'Fingerprint Deleted',
+      employee: employee._id,
+      performedBy: req.user?.name || 'Administrator',
+      details: `Deleted fingerprint enrollment for ${employee.name}`,
+      ip: req.ip
+    });
+
+    res.json({
+      success: true,
+      message: `Fingerprint enrollment deleted for ${employee.name}`
+    });
+  } catch (error) {
+    console.error('Delete fingerprint error:', error);
+    res.status(500).json({ success: false, message: 'Failed to delete fingerprint enrollment' });
+  }
+};
+
+// 5. Automatic Fingerprint Scan Processing
+export const processFingerprintScan = async (req, res) => {
+  try {
+    const branchId = req.user.branch._id || req.user.branch.id;
+    const { fingerprintData, employeeId, location, browser, os } = req.body;
+
+    let employee = null;
+
+    if (employeeId) {
+      employee = await Employee.findOne({ _id: employeeId, branch: branchId, status: 'active' }).populate('shift');
+    } else if (fingerprintData) {
+      employee = await Employee.findOne({
+        branch: branchId,
+        status: 'active',
+        $or: [
+          { 'fingerprint.template': fingerprintData },
+          { employeeId: fingerprintData }
+        ]
+      }).populate('shift');
+
+      if (!employee && typeof fingerprintData === 'string' && fingerprintData.includes('FP_TMPL_')) {
+        const parts = fingerprintData.split('_');
+        if (parts.length >= 3) {
+          const empIdPart = parts[2];
+          if (mongoose.Types.ObjectId.isValid(empIdPart)) {
+            employee = await Employee.findOne({ _id: empIdPart, branch: branchId }).populate('shift');
+          }
+        }
+      }
+    }
+
+    if (!employee) {
+      return res.status(404).json({
+        success: false,
+        message: 'Fingerprint not recognized or employee profile not enrolled.'
+      });
+    }
+
+    if (!employee.fingerprint || employee.fingerprint.enrollmentStatus !== 'Enrolled') {
+      employee.fingerprint = {
+        template: fingerprintData || `FP_TMPL_${employee._id}`,
+        enrolledAt: new Date(),
+        enrollmentStatus: 'Enrolled',
+        deviceName: 'USB Fingerprint Scanner'
+      };
+    }
+
+    employee.fingerprint.lastVerifiedAt = new Date();
+    await employee.save();
+
+    const logDetails = await performCheckAction(employee, location, {
+      browser: browser || 'Biometric Web API',
+      os: os || 'Fingerprint Device SDK',
+      ip: req.ip
+    }, true, 'Fingerprint');
+
+    const todayStr = new Date().toISOString().split('T')[0];
+    const activeEmployeesCount = await Employee.countDocuments({ branch: branchId, status: 'active' });
+    const todayLogs = await AttendanceLog.find({ branch: branchId, date: todayStr });
+
+    const presentCount = todayLogs.filter(log => log.checkInTime).length;
+    const checkedOutCount = todayLogs.filter(log => log.checkOutTime).length;
+    const lateCount = todayLogs.filter(log => log.status === 'Late').length;
+    const absentCount = Math.max(0, activeEmployeesCount - presentCount);
+
+    let totalWorkingHours = 0;
+    let totalOvertimeHours = 0;
+    todayLogs.forEach(l => {
+      totalWorkingHours += l.totalHours || 0;
+      if (l.status === 'Overtime' && l.totalHours > 8) {
+        totalOvertimeHours += (l.totalHours - 8);
+      }
+    });
+
+    res.json({
+      success: true,
+      message: `${logDetails.data.action === 'CHECK_IN' ? 'Check In Successful' : 'Check Out Successful'}: ${employee.name}`,
+      data: {
+        employee: {
+          id: employee._id,
+          name: employee.name,
+          position: employee.position,
+          department: employee.department,
+          photoUrl: employee.photoUrl || ''
+        },
+        action: logDetails.data.action,
+        attendanceType: logDetails.data.action === 'CHECK_IN' ? 'Check In' : 'Check Out',
+        authMethod: 'Fingerprint',
+        timestamp: logDetails.data.timestamp,
+        status: logDetails.data.status,
+        log: logDetails.data.log,
+        stats: {
+          employeesPresentToday: presentCount,
+          employeesAbsentToday: absentCount,
+          employeesLateToday: lateCount,
+          employeesCheckedOutToday: checkedOutCount,
+          totalWorkingHours: parseFloat(totalWorkingHours.toFixed(2)),
+          overtimeHours: parseFloat(totalOvertimeHours.toFixed(2))
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Process fingerprint scan error:', error);
+    res.status(500).json({ success: false, message: error.message || 'Fingerprint verification failed' });
+  }
+};
+
+/**
  * ─── CORE ATTENDANCE ENGINE (CHECK IN & CHECK OUT FLOW) ───
  */
-async function performCheckAction(employee, location, clientInfo, isBiometric) {
+async function performCheckAction(employee, location, clientInfo, isBiometric, authMethod = 'QR Code') {
   const branchId = employee.branch;
   const todayStr = new Date().toISOString().split('T')[0];
 
-  // 1. Fetch Branch Shift & Defaults
   const settings = await AttendanceSettings.findOne({ branch: branchId });
   const shift = employee.shift;
 
-  // Defaults
   const shiftStart = shift ? shift.startTime : (settings?.officeStartTime || '08:00');
   const shiftEnd = shift ? shift.endTime : (settings?.officeEndTime || '17:00');
   const graceMinutes = shift ? shift.gracePeriod : (settings?.gracePeriod || 15);
 
-  // Check if log exists for today
   let log = await AttendanceLog.findOne({ employee: employee._id, date: todayStr });
 
   if (!log) {
-    // ────────────── CHECK IN FLOW ──────────────
     const checkInTime = new Date();
-
-    // Calculate Late status
     const [startH, startM] = shiftStart.split(':').map(Number);
     const scheduledIn = new Date();
     scheduledIn.setHours(startH, startM, 0, 0);
@@ -928,6 +1208,8 @@ async function performCheckAction(employee, location, clientInfo, isBiometric) {
       date: todayStr,
       checkInTime,
       status,
+      authMethod: authMethod || 'QR Code',
+      attendanceType: 'Check In',
       isBiometricVerified: isBiometric,
       deviceInfo: {
         browser: clientInfo.browser,

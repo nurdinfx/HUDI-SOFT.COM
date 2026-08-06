@@ -7,7 +7,9 @@ const attendanceLogSchema = new mongoose.Schema({
   checkInTime: { type: Date, required: true },
   checkOutTime: { type: Date },
   totalHours: { type: Number, default: 0 },
-  status: { type: String, enum: ['Present', 'Late', 'Absent', 'Half Day', 'Overtime', 'Early Departure'], default: 'Present' },
+  status: { type: String, enum: ['Present', 'Late', 'Absent', 'Half Day', 'Overtime', 'Early Departure', 'Break'], default: 'Present' },
+  authMethod: { type: String, enum: ['QR Code', 'Fingerprint', 'Manual'], default: 'QR Code' },
+  attendanceType: { type: String, enum: ['Check In', 'Check Out', 'Break Start', 'Break End', 'Overtime'], default: 'Check In' },
   deviceInfo: {
     browser: { type: String },
     os: { type: String },

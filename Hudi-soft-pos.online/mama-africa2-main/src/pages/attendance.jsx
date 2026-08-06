@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { realApi } from '../api/realApi';
 import { useAuth } from '../contexts/AuthContext';
+import { fingerprintService } from '../services/fingerprintService';
 import { QRCodeSVG } from 'qrcode.react';
 import { toast } from 'react-hot-toast';
 import { 
@@ -25,7 +26,15 @@ import {
   Briefcase,
   UserMinus,
   Check,
-  Smartphone
+  Smartphone,
+  Fingerprint,
+  ShieldCheck,
+  Zap,
+  Activity,
+  Wifi,
+  CheckCircle2,
+  XCircle,
+  RotateCcw
 } from 'lucide-react';
 
 const SummaryCard = ({ title, value, color, icon: Icon }) => (
@@ -116,6 +125,19 @@ const Attendance = () => {
   const [reportEmployeeId, setReportEmployeeId] = useState('');
   const [reportDate, setReportDate] = useState(new Date().toISOString().split('T')[0]);
   const [reportData, setReportData] = useState([]);
+
+  // Fingerprint Device & Enrollment States
+  const [fpDeviceConnected, setFpDeviceConnected] = useState(true);
+  const [fpDeviceInfo, setFpDeviceInfo] = useState({ deviceName: 'USB Fingerprint Reader', status: 'Ready' });
+  const [fpEmployees, setFpEmployees] = useState([]);
+  const [fpScanning, setFpScanning] = useState(false);
+  const [lastScanResult, setLastScanResult] = useState(null);
+  const [scanEmpSelect, setScanEmpSelect] = useState('');
+
+  // Fingerprint Enrollment Modal States
+  const [showEnrollModal, setShowEnrollModal] = useState(false);
+  const [enrollingEmp, setEnrollingEmp] = useState(null);
+  const [enrollStep, setEnrollStep] = useState('idle');
 
   // Fetch initial dashboard data
   const loadDashboardData = async () => {
@@ -221,10 +243,31 @@ const Attendance = () => {
     }
   };
 
+  const loadFingerprintEmployees = async () => {
+    try {
+      const res = await realApi.attendance.getFingerprintEmployees();
+      if (res.success) {
+        setFpEmployees(res.data);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  // Subscribe to real-time fingerprint device connection status
+  useEffect(() => {
+    const unsubscribe = fingerprintService.subscribeDeviceStatus((connected, info) => {
+      setFpDeviceConnected(connected);
+      setFpDeviceInfo(info);
+    });
+    return () => unsubscribe();
+  }, []);
+
   useEffect(() => {
     loadEmployees();
     loadShifts();
     loadDashboardData();
+    loadFingerprintEmployees();
   }, []);
 
   useEffect(() => {
@@ -234,6 +277,8 @@ const Attendance = () => {
       loadMonitorData();
     } else if (activeTab === 'logs') {
       loadLogs();
+    } else if (activeTab === 'fingerprint') {
+      loadFingerprintEmployees();
     } else if (activeTab === 'shifts') {
       loadShifts();
     } else if (activeTab === 'stations') {
@@ -250,6 +295,106 @@ const Attendance = () => {
       loadLogs();
     }
   }, [logStartDate, logEndDate, logEmployeeId, logStatus, logSearch]);
+
+  /**
+   * ─── FINGERPRINT AUTOMATIC ATTENDANCE SCAN WORKFLOW ───────────────────────
+   */
+  const handleProcessFingerprintScan = async (targetEmpId = null) => {
+    if (!fpDeviceConnected) {
+      return toast.error('Fingerprint scanner is disconnected. Please connect device.');
+    }
+
+    try {
+      setFpScanning(true);
+      toast.loading('Reading fingerprint hardware scanner...', { id: 'fp-scan' });
+
+      const empIdToScan = targetEmpId || scanEmpSelect || (fpEmployees[0] ? fpEmployees[0]._id : null);
+      const scanData = await fingerprintService.captureFingerprint(empIdToScan);
+
+      const res = await realApi.attendance.processFingerprintScan({
+        fingerprintData: scanData.fingerprintData,
+        employeeId: empIdToScan
+      });
+
+      if (res.success) {
+        toast.success(res.message, { id: 'fp-scan' });
+        setLastScanResult(res.data);
+
+        // Update statistics instantly without page refresh
+        if (res.data.stats) {
+          setStats(res.data.stats);
+        }
+        loadDashboardData();
+        loadLogs();
+        loadMonitorData();
+        loadFingerprintEmployees();
+      } else {
+        toast.error(res.message || 'Fingerprint scan failed', { id: 'fp-scan' });
+      }
+    } catch (err) {
+      toast.error(err.message || 'Scanner error', { id: 'fp-scan' });
+    } finally {
+      setFpScanning(false);
+    }
+  };
+
+  /**
+   * ─── FINGERPRINT ENROLLMENT ACTIONS ─────────────────────────────────────────
+   */
+  const handleEnrollFingerprint = (employee) => {
+    setEnrollingEmp(employee);
+    setEnrollStep('ready');
+    setShowEnrollModal(true);
+  };
+
+  const handleStartEnrollScan = async () => {
+    if (!enrollingEmp) return;
+    try {
+      setEnrollStep('scanning');
+      const scanData = await fingerprintService.captureFingerprint(enrollingEmp._id || enrollingEmp.id);
+
+      const res = await realApi.attendance.enrollFingerprint({
+        employeeId: enrollingEmp._id || enrollingEmp.id,
+        fingerprintTemplate: scanData.fingerprintData,
+        deviceName: fpDeviceInfo.deviceName || 'USB Fingerprint Reader'
+      });
+
+      if (res.success) {
+        toast.success(res.message);
+        setEnrollStep('success');
+        loadFingerprintEmployees();
+        setTimeout(() => {
+          setShowEnrollModal(false);
+          setEnrollingEmp(null);
+          setEnrollStep('idle');
+        }, 1200);
+      } else {
+        toast.error(res.message || 'Enrollment failed');
+        setEnrollStep('ready');
+      }
+    } catch (err) {
+      toast.error(err.message || 'Enrollment error');
+      setEnrollStep('ready');
+    }
+  };
+
+  const handleDeleteFingerprint = async (employeeId, name) => {
+    if (!window.confirm(`Are you sure you want to delete fingerprint enrollment for ${name}?`)) return;
+    try {
+      setLoading(true);
+      const res = await realApi.attendance.deleteFingerprint(employeeId);
+      if (res.success) {
+        toast.success(res.message);
+        loadFingerprintEmployees();
+      } else {
+        toast.error(res.message || 'Failed to delete fingerprint');
+      }
+    } catch (err) {
+      toast.error(err.message || 'An error occurred');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   /**
    * ─── MANUAL LOGS OVERRIDE ──────────────────────────────────────────────────
@@ -770,61 +915,91 @@ const Attendance = () => {
       <div className="card bg-gradient-to-r from-[#1e4c82] to-[#122e50] text-white border-0 shadow-lg p-6 rounded-2xl">
         <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold mb-1 tracking-tight flex items-center gap-2">
-              <QrCode size={28} className="text-blue-300" />
-              QR Attendance Tracking
-            </h1>
-            <p className="text-blue-100 text-sm">Monitor shifts, create QR check-in stations, and review biometric attendance records</p>
+            <div className="flex flex-wrap items-center gap-3 mb-1">
+              <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
+                <QrCode size={28} className="text-blue-300" />
+                QR & Fingerprint Attendance System
+              </h1>
+              <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 text-xs px-3 py-1 rounded-full font-bold flex items-center gap-1.5 shadow-sm">
+                <Zap size={13} /> Dual Auth Mode Active
+              </span>
+            </div>
+            <p className="text-blue-100 text-sm">Monitor shifts, create QR check-in stations, and perform automatic fingerprint biometric attendance</p>
           </div>
-          <div className="flex gap-2">
+
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+            {/* Device Connection Real-time Indicator */}
+            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-extrabold shadow-inner ${
+              fpDeviceConnected 
+                ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30' 
+                : 'bg-rose-500/10 text-rose-300 border-rose-500/30'
+            }`}>
+              <span className={`w-2.5 h-2.5 rounded-full ${fpDeviceConnected ? 'bg-emerald-400 animate-pulse' : 'bg-rose-500'}`}></span>
+              {fpDeviceConnected ? '🟢 Fingerprint Device Connected' : '🔴 Fingerprint Device Disconnected'}
+            </div>
+
             <button
               onClick={() => {
-                if (activeTab === 'dashboard') loadDashboardData();
-                else if (activeTab === 'monitor') loadMonitorData();
-                else if (activeTab === 'logs') loadLogs();
-                else if (activeTab === 'shifts') loadShifts();
-                else if (activeTab === 'stations') loadStations();
+                const newState = fingerprintService.toggleSimulatedDevice();
+                toast(newState ? '🟢 Biometric scanner connected' : '🔴 Biometric scanner disconnected');
               }}
-              className="p-2.5 bg-white/10 hover:bg-white/20 text-white rounded-lg transition-colors border border-white/10"
-              title="Refresh Data"
+              className="text-[11px] font-bold underline text-blue-200 hover:text-white transition-colors"
+              title="Click to simulate USB device plug/unplug"
             >
-              <RefreshCw size={18} className={loading ? 'animate-spin' : ''} />
+              {fpDeviceConnected ? 'Simulate Disconnect' : 'Simulate Connect'}
             </button>
-            {activeTab === 'logs' && (
+
+            <div className="flex gap-2">
               <button
-                onClick={handleOpenManualLog}
-                className="flex items-center gap-2 bg-white text-[#1e4c82] font-bold px-4 py-2.5 rounded-lg shadow hover:bg-slate-100 transition-colors text-sm"
+                onClick={() => {
+                  if (activeTab === 'dashboard') loadDashboardData();
+                  else if (activeTab === 'monitor') loadMonitorData();
+                  else if (activeTab === 'logs') loadLogs();
+                  else if (activeTab === 'fingerprint') loadFingerprintEmployees();
+                  else if (activeTab === 'shifts') loadShifts();
+                  else if (activeTab === 'stations') loadStations();
+                }}
+                className="p-2.5 bg-white/10 hover:bg-white/20 text-white rounded-lg transition-colors border border-white/10"
+                title="Refresh Data"
               >
-                <Plus size={16} />
-                Adjust Log
+                <RefreshCw size={18} className={loading ? 'animate-spin' : ''} />
               </button>
-            )}
-            {activeTab === 'shifts' && (
-              <div className="flex gap-2">
+              {activeTab === 'logs' && (
                 <button
-                  onClick={() => setShowAssignShiftModal(true)}
-                  className="flex items-center gap-2 bg-white/10 text-white font-bold px-4 py-2.5 rounded-lg border border-white/20 hover:bg-white/20 transition-colors text-sm"
-                >
-                  Assign Shift
-                </button>
-                <button
-                  onClick={handleOpenCreateShift}
+                  onClick={handleOpenManualLog}
                   className="flex items-center gap-2 bg-white text-[#1e4c82] font-bold px-4 py-2.5 rounded-lg shadow hover:bg-slate-100 transition-colors text-sm"
                 >
                   <Plus size={16} />
-                  Add Shift
+                  Adjust Log
                 </button>
-              </div>
-            )}
-            {activeTab === 'stations' && (
-              <button
-                onClick={() => setShowStationModal(true)}
-                className="flex items-center gap-2 bg-white text-[#1e4c82] font-bold px-4 py-2.5 rounded-lg shadow hover:bg-slate-100 transition-colors text-sm"
-              >
-                <Plus size={16} />
-                Create Station
-              </button>
-            )}
+              )}
+              {activeTab === 'shifts' && (
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setShowAssignShiftModal(true)}
+                    className="flex items-center gap-2 bg-white/10 text-white font-bold px-4 py-2.5 rounded-lg border border-white/20 hover:bg-white/20 transition-colors text-sm"
+                  >
+                    Assign Shift
+                  </button>
+                  <button
+                    onClick={handleOpenCreateShift}
+                    className="flex items-center gap-2 bg-white text-[#1e4c82] font-bold px-4 py-2.5 rounded-lg shadow hover:bg-slate-100 transition-colors text-sm"
+                  >
+                    <Plus size={16} />
+                    Add Shift
+                  </button>
+                </div>
+              )}
+              {activeTab === 'stations' && (
+                <button
+                  onClick={() => setShowStationModal(true)}
+                  className="flex items-center gap-2 bg-white text-[#1e4c82] font-bold px-4 py-2.5 rounded-lg shadow hover:bg-slate-100 transition-colors text-sm"
+                >
+                  <Plus size={16} />
+                  Create Station
+                </button>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -835,6 +1010,7 @@ const Attendance = () => {
           { id: 'dashboard', label: 'Overview Dashboard', icon: TrendingUp },
           { id: 'monitor', label: 'Live Monitor', icon: UserCheck },
           { id: 'logs', label: 'Attendance Logs', icon: Clock },
+          { id: 'fingerprint', label: 'Fingerprint Enrollment', icon: Fingerprint },
           { id: 'shifts', label: 'Shift Scheduler', icon: Briefcase },
           { id: 'stations', label: 'QR Sign Stations', icon: QrCode },
           { id: 'reports', label: 'Reports Maker', icon: FileText },
@@ -868,6 +1044,90 @@ const Attendance = () => {
             <SummaryCard title="Late Today" value={stats.employeesLateToday} color="#f59e0b" icon={Clock} />
             <SummaryCard title="Absent Today" value={stats.employeesAbsentToday} color="#ef4444" icon={UserMinus} />
             <SummaryCard title="Checked Out" value={stats.employeesCheckedOutToday} color="#6366f1" icon={Users} />
+          </div>
+
+          {/* Live Automatic USB Fingerprint Scanner Station Card */}
+          <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-[#1e4c82] text-white p-6 rounded-2xl shadow-md border border-slate-700/50 flex flex-col md:flex-row items-center justify-between gap-6">
+            <div className="flex flex-col gap-3 max-w-lg">
+              <div className="flex items-center gap-2">
+                <span className="p-2 bg-emerald-500/20 text-emerald-400 rounded-lg border border-emerald-500/30">
+                  <Fingerprint size={24} />
+                </span>
+                <div>
+                  <h2 className="text-lg font-black tracking-tight">Live USB Fingerprint Scanner Station</h2>
+                  <p className="text-xs text-slate-300">Touch or scan enrolled employee finger to record attendance instantly</p>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-3 mt-2">
+                <div className="flex items-center gap-2 bg-slate-950/60 px-3 py-1.5 rounded-lg border border-slate-700 text-xs">
+                  <label className="text-slate-400 font-bold text-[11px] uppercase">Select Staff (Test / Scanner):</label>
+                  <select
+                    value={scanEmpSelect}
+                    onChange={(e) => setScanEmpSelect(e.target.value)}
+                    className="bg-transparent text-white text-xs font-semibold outline-none cursor-pointer"
+                  >
+                    <option value="" className="bg-slate-800 text-white">-- Auto Identify (Enrolled Staff) --</option>
+                    {fpEmployees.map(emp => (
+                      <option key={emp._id} value={emp._id} className="bg-slate-800 text-white">
+                        {emp.name} ({emp.fingerprint?.enrollmentStatus === 'Enrolled' ? '🟢 Enrolled' : '🔴 Not Enrolled'})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <button
+                  onClick={() => handleProcessFingerprintScan()}
+                  disabled={fpScanning || !fpDeviceConnected}
+                  className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-sm shadow-lg transition-all ${
+                    !fpDeviceConnected
+                      ? 'bg-slate-700 text-slate-400 cursor-not-allowed'
+                      : fpScanning
+                      ? 'bg-amber-500 text-white animate-pulse'
+                      : 'bg-emerald-500 hover:bg-emerald-600 text-white hover:scale-105'
+                  }`}
+                >
+                  <Fingerprint size={18} className={fpScanning ? 'animate-spin' : ''} />
+                  {fpScanning ? 'Scanning Fingerprint...' : 'Scan Fingerprint Now'}
+                </button>
+              </div>
+            </div>
+
+            {/* Scanner Visualizer & Last Scan Card */}
+            <div className="flex items-center gap-4 bg-slate-950/50 p-4 rounded-xl border border-slate-700/60 w-full md:w-auto min-w-[280px]">
+              <div className={`relative p-4 rounded-2xl flex items-center justify-center transition-all ${
+                fpScanning ? 'bg-amber-500/20 text-amber-400 ring-4 ring-amber-500/40 animate-pulse' :
+                lastScanResult ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40' :
+                'bg-slate-800/80 text-blue-400 border border-slate-700'
+              }`}>
+                <Fingerprint size={42} />
+              </div>
+
+              <div className="flex flex-col text-xs">
+                {lastScanResult ? (
+                  <>
+                    <span className="text-[10px] text-emerald-400 font-extrabold uppercase tracking-wider flex items-center gap-1">
+                      <CheckCircle2 size={12} /> Scan Verified ({lastScanResult.authMethod})
+                    </span>
+                    <span className="text-sm font-black text-white mt-0.5">{lastScanResult.employee?.name}</span>
+                    <span className="text-slate-300 font-semibold mt-0.5">
+                      {lastScanResult.attendanceType} · <span className="font-mono text-emerald-300">{lastScanResult.timestamp}</span>
+                    </span>
+                    <span className="inline-block mt-1 bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded text-[10px] font-bold w-fit">
+                      Status: {lastScanResult.status}
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Scanner Hardware Status</span>
+                    <span className="text-xs font-bold text-white mt-1">
+                      {fpDeviceConnected ? '🟢 Scanner Connected & Ready' : '🔴 Scanner Disconnected'}
+                    </span>
+                    <span className="text-[11px] text-slate-400 mt-1">Place finger on scanner surface</span>
+                  </>
+                )}
+              </div>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -1038,7 +1298,7 @@ const Attendance = () => {
                     <th className="px-6 py-4">Check Out</th>
                     <th className="px-6 py-4">Hours Worked</th>
                     <th className="px-6 py-4 text-center">Status</th>
-                    <th className="px-6 py-4 text-center">Auth Type</th>
+                    <th className="px-6 py-4 text-center">Auth Method</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -1076,15 +1336,143 @@ const Attendance = () => {
                             {log.status}
                           </span>
                         </td>
-                        <td className="px-6 py-4 text-center text-xs text-gray-500 font-medium">
-                          {log.isBiometricVerified ? (
-                            <span className="text-emerald-600 flex items-center justify-center gap-1">🟢 Biometric</span>
+                        <td className="px-6 py-4 text-center text-xs font-medium">
+                          {log.authMethod === 'Fingerprint' || log.isBiometricVerified ? (
+                            <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-700 border border-emerald-200 px-2.5 py-1 rounded-lg font-bold">
+                              <Fingerprint size={13} /> Fingerprint
+                            </span>
+                          ) : log.authMethod === 'QR Code' ? (
+                            <span className="inline-flex items-center gap-1 bg-indigo-50 text-indigo-700 border border-indigo-200 px-2.5 py-1 rounded-lg font-bold">
+                              <QrCode size={13} /> QR Code
+                            </span>
                           ) : (
-                            <span className="text-gray-400 flex items-center justify-center gap-1">🔧 Manual/PIN</span>
+                            <span className="inline-flex items-center gap-1 bg-amber-50 text-amber-700 border border-amber-200 px-2.5 py-1 rounded-lg font-bold">
+                              ✏️ Manual
+                            </span>
                           )}
                         </td>
                       </tr>
                     ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 3.5. FINGERPRINT BIOMETRIC ENROLLMENT DIRECTORY */}
+      {activeTab === 'fingerprint' && (
+        <div className="flex flex-col gap-6">
+          <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+            <div>
+              <h2 className="text-lg font-black text-gray-900 tracking-tight flex items-center gap-2">
+                <Fingerprint className="text-blue-600" size={24} />
+                Employee Fingerprint Enrollment Profiles
+              </h2>
+              <p className="text-xs text-gray-500 mt-1">
+                Manage biometric fingerprint templates for staff authentication. Enrolled employees can use any USB fingerprint reader.
+              </p>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="text-xs font-bold text-gray-600 bg-slate-100 px-3 py-1.5 rounded-lg">
+                Total Staff: {fpEmployees.length} | Enrolled: {fpEmployees.filter(e => e.fingerprint?.enrollmentStatus === 'Enrolled').length}
+              </span>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-slate-50 border-b border-gray-100 text-gray-500 text-xs uppercase tracking-wider font-semibold">
+                    <th className="px-6 py-4">Employee Profile</th>
+                    <th className="px-6 py-4">Job Position</th>
+                    <th className="px-6 py-4">Shift</th>
+                    <th className="px-6 py-4 text-center">Enrollment Status</th>
+                    <th className="px-6 py-4">Enrollment Date</th>
+                    <th className="px-6 py-4">Last Verified</th>
+                    <th className="px-6 py-4">Device Used</th>
+                    <th className="px-6 py-4 text-center">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {fpEmployees.length === 0 ? (
+                    <tr>
+                      <td colSpan="8" className="px-6 py-12 text-center text-gray-400">
+                        No active employees found.
+                      </td>
+                    </tr>
+                  ) : (
+                    fpEmployees.map(emp => {
+                      const isEnrolled = emp.fingerprint?.enrollmentStatus === 'Enrolled';
+                      return (
+                        <tr key={emp._id} className="hover:bg-slate-50/50 transition-colors">
+                          <td className="px-6 py-4">
+                            <div className="flex items-center gap-3">
+                              {emp.photoUrl ? (
+                                <img src={emp.photoUrl} alt={emp.name} className="w-9 h-9 rounded-full object-cover border" />
+                              ) : (
+                                <div className="w-9 h-9 rounded-full bg-blue-100 flex items-center justify-center text-xs font-bold text-blue-700">
+                                  {emp.name.charAt(0).toUpperCase()}
+                                </div>
+                              )}
+                              <div>
+                                <span className="font-bold text-gray-900 text-sm block">{emp.name}</span>
+                                <span className="text-[11px] text-gray-400 font-mono">ID: {emp.employeeId || emp._id.slice(-6)}</span>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 text-gray-600 text-sm font-medium">{emp.position}</td>
+                          <td className="px-6 py-4 text-gray-600 text-sm font-medium">{emp.shift}</td>
+                          <td className="px-6 py-4 text-center">
+                            <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold ${
+                              isEnrolled ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' : 'bg-rose-100 text-rose-800 border border-rose-200'
+                            }`}>
+                              {isEnrolled ? '🟢 Enrolled' : '🔴 Not Enrolled'}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 text-gray-600 text-xs font-mono">
+                            {emp.fingerprint?.enrolledAt ? new Date(emp.fingerprint.enrolledAt).toLocaleDateString() : '—'}
+                          </td>
+                          <td className="px-6 py-4 text-gray-600 text-xs font-mono">
+                            {emp.fingerprint?.lastVerifiedAt ? new Date(emp.fingerprint.lastVerifiedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}
+                          </td>
+                          <td className="px-6 py-4 text-gray-500 text-xs font-medium">
+                            {emp.fingerprint?.deviceName || 'USB Biometric Reader'}
+                          </td>
+                          <td className="px-6 py-4 text-center">
+                            <div className="flex items-center justify-center gap-2">
+                              {!isEnrolled ? (
+                                <button
+                                  onClick={() => handleEnrollFingerprint(emp)}
+                                  className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-3 py-1.5 rounded-lg shadow-sm transition-colors"
+                                >
+                                  <Fingerprint size={14} /> Enroll Fingerprint
+                                </button>
+                              ) : (
+                                <>
+                                  <button
+                                    onClick={() => handleEnrollFingerprint(emp)}
+                                    className="flex items-center gap-1 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold text-xs px-2.5 py-1.5 rounded-lg transition-colors border border-blue-200"
+                                    title="Re-enroll fingerprint"
+                                  >
+                                    <RotateCcw size={13} /> Re-enroll
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteFingerprint(emp._id, emp.name)}
+                                    className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg transition-colors border border-rose-200"
+                                    title="Delete Fingerprint Profile"
+                                  >
+                                    <Trash2 size={14} />
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
                   )}
                 </tbody>
               </table>
@@ -1716,6 +2104,95 @@ const Attendance = () => {
                 <RefreshCw size={12} /> Regenerate Secure QR Code
               </button>
 
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Fingerprint Enrollment Biometric Capture Modal */}
+      {showEnrollModal && enrollingEmp && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden border border-slate-200">
+            <div className="bg-gradient-to-r from-emerald-700 to-teal-800 text-white px-6 py-4 flex items-center justify-between">
+              <h3 className="font-extrabold text-sm uppercase tracking-wider flex items-center gap-2">
+                <Fingerprint size={20} /> Fingerprint Enrollment Station
+              </h3>
+              <button 
+                onClick={() => {
+                  setShowEnrollModal(false);
+                  setEnrollingEmp(null);
+                }} 
+                className="text-white/80 hover:text-white text-2xl font-bold"
+              >
+                &times;
+              </button>
+            </div>
+
+            <div className="p-6 flex flex-col items-center gap-5 text-center">
+              <div className="flex items-center gap-3 w-full bg-slate-50 p-3 rounded-xl border border-slate-200 text-left">
+                {enrollingEmp.photoUrl ? (
+                  <img src={enrollingEmp.photoUrl} alt={enrollingEmp.name} className="w-12 h-12 rounded-full object-cover border" />
+                ) : (
+                  <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center text-base font-bold text-blue-700">
+                    {enrollingEmp.name.charAt(0).toUpperCase()}
+                  </div>
+                )}
+                <div>
+                  <h4 className="font-extrabold text-gray-900 text-base">{enrollingEmp.name}</h4>
+                  <p className="text-xs text-gray-500 font-medium">{enrollingEmp.position} · {enrollingEmp.department || 'General'}</p>
+                  <p className="text-[11px] text-emerald-600 font-mono font-bold mt-0.5">
+                    {enrollingEmp.fingerprint?.enrollmentStatus === 'Enrolled' ? 'Re-enrollment Mode' : 'New Enrollment'}
+                  </p>
+                </div>
+              </div>
+
+              {/* Sensor Scanner Visualizer */}
+              <div className={`p-6 rounded-full border-4 transition-all duration-500 ${
+                enrollStep === 'scanning' ? 'bg-amber-50 border-amber-400 text-amber-500 animate-pulse ring-8 ring-amber-100' :
+                enrollStep === 'success' ? 'bg-emerald-50 border-emerald-500 text-emerald-600 ring-8 ring-emerald-100' :
+                'bg-slate-50 border-blue-500 text-blue-600'
+              }`}>
+                <Fingerprint size={64} />
+              </div>
+
+              <div className="space-y-1">
+                <h5 className="font-extrabold text-gray-900 text-sm">
+                  {enrollStep === 'scanning' ? 'Scanning Fingerprint Sensor...' :
+                   enrollStep === 'success' ? 'Fingerprint Registered Successfully!' :
+                   'Place Finger on USB Scanner'}
+                </h5>
+                <p className="text-xs text-gray-500 max-w-xs">
+                  {enrollStep === 'scanning' ? 'Keep finger still on the sensor while template hash is captured.' :
+                   enrollStep === 'success' ? 'Biometric credential saved to employee profile.' :
+                   'Ensure USB Fingerprint Scanner is connected to device port.'}
+                </p>
+              </div>
+
+              <div className="flex gap-3 w-full border-t pt-4 mt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowEnrollModal(false);
+                    setEnrollingEmp(null);
+                  }}
+                  className="flex-1 py-2.5 border border-gray-300 rounded-xl text-xs font-bold text-gray-600 hover:bg-slate-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleStartEnrollScan}
+                  disabled={enrollStep === 'scanning' || !fpDeviceConnected}
+                  className={`flex-1 py-2.5 rounded-xl text-xs font-extrabold text-white shadow transition-all flex items-center justify-center gap-1.5 ${
+                    !fpDeviceConnected ? 'bg-slate-400 cursor-not-allowed' :
+                    enrollStep === 'scanning' ? 'bg-amber-500 animate-pulse' :
+                    'bg-emerald-600 hover:bg-emerald-700'
+                  }`}
+                >
+                  <Fingerprint size={16} />
+                  {enrollStep === 'scanning' ? 'Scanning...' : 'Capture Fingerprint'}
+                </button>
+              </div>
             </div>
           </div>
         </div>
