@@ -28,11 +28,15 @@ function ActivationContent() {
   }, [keyParam])
 
   useEffect(() => {
-    fetch("/api/license/status")
-      .then((res) => res.json())
+    const url = keyParam ? `/api/license/status?key=${encodeURIComponent(keyParam)}` : "/api/license/status"
+    fetch(url)
+      .then((res) => {
+        if (!res.ok) throw new Error(`HTTP error ${res.status}`)
+        return res.json()
+      })
       .then((data) => {
         setLicenseInfo(data)
-        if (data.hospitalName) {
+        if (data?.hospitalName) {
           setHospitalName(data.hospitalName)
         }
       })
@@ -40,7 +44,7 @@ function ActivationContent() {
         console.error("License check error:", err)
       })
       .finally(() => setCheckingStatus(false))
-  }, [])
+  }, [keyParam])
 
   async function handleActivate(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()

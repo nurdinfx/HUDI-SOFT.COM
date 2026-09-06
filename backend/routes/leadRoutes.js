@@ -29,6 +29,7 @@ router.post('/', async (req, res) => {
         if (lowerSystemType.includes('pos online')) productType = 'POS_ONLINE';
         else if (lowerSystemType.includes('pos desktop') || lowerSystemType.includes('pos offline')) productType = 'POS_OFFLINE';
         else if (lowerSystemType.includes('detail care') || lowerSystemType.includes('datel care') || lowerSystemType.includes('dental') || lowerSystemType.includes('clinic') || lowerSystemType.includes('datel clinic')) productType = 'DATEL_CLINIC';
+        else if (lowerSystemType.includes('school') || lowerSystemType.includes('sms')) productType = 'SMS';
         else if (lowerSystemType.includes('inventory') || lowerSystemType.includes('hospital') || lowerSystemType.includes('hms')) productType = 'HMS';
         else if (lowerSystemType.includes('desktop')) productType = 'POS_OFFLINE'; // Fallback for general desktop requests
 

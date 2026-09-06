@@ -92,7 +92,13 @@ app.get('/api/health', (req, res) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString(), uptime: process.uptime(), version: '1.2.0', features: ['pharmacy-transfer', 'daily-sales-closure', 'end-of-day-ledger', 'multi-tenant-license'] });
 });
 
-// Wait for DB to be ready, then start listening
+// Start Express server immediately to prevent Render deployment & proxy timeouts
+const server = app.listen(PORT, () => {
+    console.log(`\n🏥 Hospital Management API ready at http://localhost:${PORT}`);
+    console.log(`   Health: http://localhost:${PORT}/api/health`);
+});
+
+// Run Database Migrations in background
 const dbModule = require('./database');
 dbModule.promise.then(async () => {
     console.log('📦 Running Database Migrations...');
@@ -109,21 +115,12 @@ dbModule.promise.then(async () => {
         await require('./migrate_pharmacy_accounts')();
         await require('./migrate_vitals')();
         await require('./migrate_pharmacy_transfer')();
+        console.log('✅ Database Migrations completed successfully.');
     } catch (err) {
         console.error('⚠️ Migration warning:', err.message);
     }
-
-
-    app.listen(PORT, () => {
-        console.log(`\n🏥 Hospital Management API ready at http://localhost:${PORT}`);
-        console.log(`   Health: http://localhost:${PORT}/api/health`);
-    });
 }).catch(err => {
-    console.error('❌ Failed to connect to database:', err);
-    // Still listen so we can return errors/health status
-    app.listen(PORT, () => {
-        console.log(`\n⚠️ API running in ERROR mode (No DB) at http://localhost:${PORT}`);
-    });
+    console.error('❌ Failed to connect to database:', err.message);
 });
 
 // 404 handler

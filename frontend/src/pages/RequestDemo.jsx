@@ -88,6 +88,8 @@ const RequestDemo = () => {
                                     ? "Launch your cloud retail environment immediately. Your security key has been registered on our servers."
                                     : formData.systemType === 'Hospital Management System (HMS)'
                                     ? "Launch your specialized Hospital Management PWA instance to begin activating clinic, pharmacy, and billing panels."
+                                    : formData.systemType === 'School Management System (SMS)'
+                                    ? "Launch your Enterprise School Management System instance to activate student, teacher, academic, and finance modules."
                                     : formData.systemType === 'Detail Care'
                                     ? "Launch your specialized EHR Detail Care sandbox immediately. Your secure clinical login is generated."
                                     : `Download your ${formData.systemType} package below. Use the security key below to bind your device.`}
@@ -132,10 +134,12 @@ const RequestDemo = () => {
                                         ? `https://hudi-soft-com-online-pos.onrender.com/activation?key=${trialInfo.licenseKey}` 
                                         : formData.systemType === 'Hospital Management System (HMS)'
                                         ? `https://daryeel-hms-com.vercel.app/activate?key=${trialInfo.licenseKey}`
+                                        : formData.systemType === 'School Management System (SMS)'
+                                        ? `http://localhost:3000/activate?key=${trialInfo.licenseKey}`
                                         : formData.systemType === 'Detail Care'
                                         ? `https://hudisoftdatel.vercel.app/login?key=${trialInfo.licenseKey}`
                                         : trialInfo.downloadUrl}
-                                    target={formData.systemType === 'POS Online' || formData.systemType === 'Hospital Management System (HMS)' || formData.systemType === 'Detail Care' ? "_blank" : "_self"}
+                                    target={formData.systemType === 'POS Online' || formData.systemType === 'Hospital Management System (HMS)' || formData.systemType === 'School Management System (SMS)' || formData.systemType === 'Detail Care' ? "_blank" : "_self"}
                                     rel="noopener noreferrer"
                                     className="w-full py-4.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-black text-center text-xs uppercase tracking-[0.2em] transition-all shadow-xl shadow-blue-600/20 flex items-center justify-center gap-2 cursor-pointer"
                                 >
@@ -144,13 +148,15 @@ const RequestDemo = () => {
                                         ? 'Launch Cloud Environment' 
                                         : formData.systemType === 'Hospital Management System (HMS)'
                                         ? 'Launch HMS PWA'
+                                        : formData.systemType === 'School Management System (SMS)'
+                                        ? 'Launch School SMS Platform'
                                         : formData.systemType === 'Detail Care' 
                                         ? 'Launch Detail Care PWA' 
                                         : 'Download Installer'}
                                 </motion.a>
                                 
                                 <p className="text-[10px] text-slate-500 text-center font-bold uppercase tracking-widest leading-relaxed">
-                                    {formData.systemType === 'POS Online' || formData.systemType === 'Detail Care' || formData.systemType === 'Hospital Management System (HMS)'
+                                    {formData.systemType === 'POS Online' || formData.systemType === 'Detail Care' || formData.systemType === 'Hospital Management System (HMS)' || formData.systemType === 'School Management System (SMS)'
                                         ? "Install as a native application by clicking 'Install' inside your browser address bar."
                                         : "Our technical team will reach out shortly for installer setup and support."}
                                 </p>
@@ -272,6 +278,7 @@ const RequestDemo = () => {
                                         { value: 'POS Online', label: 'Cloud POS Solution' },
                                         { value: 'POS Desktop', label: 'Desktop Enterprise' },
                                         { value: 'Hospital Management System (HMS)', label: 'HMS PWA Demo' },
+                                        { value: 'School Management System (SMS)', label: 'School Management System (SMS)' },
                                         { value: 'Detail Care', label: 'Detail Care Clinic PWA' }
                                     ].map((option) => (
                                         <label 

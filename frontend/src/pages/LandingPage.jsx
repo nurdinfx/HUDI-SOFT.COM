@@ -174,7 +174,7 @@ const LandingPage = () => {
                 { title: 'HUDI IQ', desc: 'The AI Assistant that takes action.', badge: 'New', image: '/images/ONE.jpg', link: '/request-demo' }
             ],
             columns: [
-                { title: 'Operations Suite', links: [{ name: 'Point of sale', url: 'https://hudi-soft-com-online-pos.onrender.com' }, { name: 'Hospital Management (HMS)', url: 'https://daryeel-hms-com.vercel.app/', isNew: true }, { name: 'Detail Care Clinic PWA', url: 'https://hudisoftdatel.vercel.app/login', isNew: true }, { name: 'Catering & events', url: '#' }, { name: 'HUDI Mobile Order', url: '#', isNew: true }, { name: 'Payment processing', url: '#' }] },
+                { title: 'Operations Suite', links: [{ name: 'Point of sale', url: 'https://hudi-soft-com-online-pos.onrender.com' }, { name: 'Hospital Management (HMS)', url: 'https://daryeel-hms-com.vercel.app/', isNew: true }, { name: 'School Management (SMS)', url: 'http://localhost:3000', isNew: true }, { name: 'Detail Care Clinic PWA', url: 'https://hudisoftdatel.vercel.app/login', isNew: true }, { name: 'Catering & events', url: '#' }, { name: 'HUDI Mobile Order', url: '#', isNew: true }, { name: 'Payment processing', url: '#' }] },
                 { title: 'Digital Storefront', links: [{ name: 'Online ordering', url: '#' }, { name: 'Websites', url: '#' }, { name: 'Branded mobile app', url: '#' }, { name: 'HUDI Delivery Services', url: '#' }] },
                 { title: 'Marketing Suite', links: [{ name: 'Advertising', url: '#' }, { name: 'Loyalty', url: '#' }, { name: 'Email marketing', url: '#' }, { name: 'HUDI Tables', url: '#' }] },
                 { title: 'Hardware', links: [{ name: 'All hardware', url: '#' }, { name: 'Handheld POS', url: '#' }, { name: 'Self-ordering kiosk', url: '#' }, { name: 'Kitchen display system', url: '#' }] }
@@ -573,6 +573,60 @@ const LandingPage = () => {
                                 </a>
                                 <Link to="/request-demo" className="px-8 py-4 bg-transparent border-2 border-white/20 text-white rounded-2xl font-black text-lg hover:bg-white/10 transition-colors inline-block">
                                     Get Trial License
+                                </Link>
+                            </div>
+                        </motion.div>
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.9 }}
+                            whileInView={{ opacity: 1, scale: 1 }}
+                            viewport={{ once: true }}
+                            className="bg-white/5 rounded-[3rem] p-8 backdrop-blur-sm border border-white/10 overflow-hidden"
+                        >
+                            <motion.img
+                                whileHover={{ scale: 1.05 }}
+                                src="/images/office.png"
+                                className="rounded-3xl w-full h-[400px] object-cover shadow-2xl"
+                            />
+                {/* School Management System */}
+                <div className="max-w-7xl mx-auto px-6 bg-gradient-to-r from-indigo-900 via-blue-900 to-slate-900 py-32 lg:rounded-[4rem] text-white my-12 shadow-2xl">
+                    <div className="grid lg:grid-cols-2 gap-20 items-center">
+                        <motion.div
+                            initial={{ opacity: 0, x: -30 }}
+                            whileInView={{ opacity: 1, x: 0 }}
+                            viewport={{ once: true }}
+                            className="space-y-8"
+                        >
+                            <div className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-500/20 border border-indigo-400/30 text-indigo-300 rounded-full text-xs font-black uppercase tracking-widest">
+                                <Zap size={14} fill="currentColor" /> Enterprise SaaS Solution
+                            </div>
+                            <h2 className="text-5xl md:text-6xl font-black leading-tight">
+                                Enterprise Multi-Tenant <br /> <span className="text-indigo-400">School System (SMS).</span>
+                            </h2>
+                            <p className="text-xl text-indigo-100 font-light leading-relaxed">
+                                Complete multi-tenant school lifecycle platform. Manage students, academic terms, online exams, fee billing, payroll, library, transport, and parent communications with military-grade isolation.
+                            </p>
+                            <ul className="space-y-4">
+                                {[
+                                    'Multi-tenant DB isolation & 18 Role-Based Access Control levels',
+                                    'Student QR/Barcode ID cards & instant mobile scanner attendance',
+                                    'CAT/Midterm/Final exam engine with GPA auto-grading & transcripts',
+                                    'Tuition fee invoicing, installment tracking & automated parent SMS alerts'
+                                ].map((feature, i) => (
+                                    <li key={i} className="flex gap-3 items-start">
+                                        <div className="mt-1.5 w-5 h-5 rounded-full bg-indigo-400 flex items-center justify-center flex-shrink-0">
+                                            <ShieldCheck size={12} className="text-slate-900" />
+                                        </div>
+                                        <span className="font-bold text-indigo-50">{feature}</span>
+                                    </li>
+                                ))}
+                            </ul>
+                            <div className="pt-6 flex flex-wrap gap-4">
+                                <a href="http://localhost:3000" target="_blank" rel="noopener noreferrer" className="px-8 py-4 bg-indigo-500 text-white rounded-2xl font-black text-lg hover:bg-indigo-400 transition-colors shadow-xl shadow-indigo-500/30 inline-flex items-center gap-2">
+                                    <Play size={20} fill="currentColor" />
+                                    Launch School SMS
+                                </a>
+                                <Link to="/request-demo" className="px-8 py-4 bg-transparent border-2 border-white/20 text-white rounded-2xl font-black text-lg hover:bg-white/10 transition-colors inline-block">
+                                    Request School Demo
                                 </Link>
                             </div>
                         </motion.div>
