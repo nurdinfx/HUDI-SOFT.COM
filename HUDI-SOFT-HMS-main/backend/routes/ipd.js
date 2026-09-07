@@ -7,13 +7,35 @@ const router = express.Router();
 router.use(authenticate);
 router.use(authorize(['doctor', 'nurse', 'admin']));
 
+const safeJsonParse = (val, fallback = {}) => {
+    if (!val) return fallback;
+    if (typeof val === 'object') return val;
+    try {
+        const parsed = JSON.parse(val);
+        return typeof parsed === 'object' && parsed !== null ? parsed : fallback;
+    } catch {
+        return fallback;
+    }
+};
+
+const safeArrayParse = (val) => {
+    if (!val) return [];
+    if (Array.isArray(val)) return val;
+    try {
+        const parsed = JSON.parse(val);
+        return Array.isArray(parsed) ? parsed : [String(parsed)];
+    } catch {
+        return [String(val)];
+    }
+};
+
 // Formatters
 const fmtAdm = (a) => ({
     id: a.id, admissionId: a.admission_id, patientId: a.patient_id, patientName: a.patient_name,
     doctorId: a.doctor_id, doctorName: a.doctor_name, department: a.department,
     ward: a.ward, bedNumber: a.bed_number, admissionDate: a.admission_date,
     dischargeDate: a.discharge_date, diagnosis: a.diagnosis, status: a.status,
-    nursingNotes: JSON.parse(a.nursing_notes || '[]')
+    nursingNotes: safeArrayParse(a.nursing_notes)
 });
 
 const fmtBed = (b) => ({
@@ -29,15 +51,15 @@ const fmtWard = (w) => ({
 
 const fmtNurseNote = (n) => ({
     id: n.id, admissionId: n.admission_id, patientId: n.patient_id, patientName: n.patient_name,
-    nurseId: n.nurse_id, nurseName: n.nurse_name, vitals: JSON.parse(n.vitals || '{}'),
-    observations: n.observations, medications: JSON.parse(n.medications || '[]'),
+    nurseId: n.nurse_id, nurseName: n.nurse_name, vitals: safeJsonParse(n.vitals, {}),
+    observations: n.observations, medications: safeArrayParse(n.medications),
     shift: n.shift, createdAt: n.created_at
 });
 
 const fmtDoctorRound = (d) => ({
     id: d.id, admissionId: d.admission_id, patientId: d.patient_id, patientName: d.patient_name,
     doctorId: d.doctor_id, doctorName: d.doctor_name, observations: d.observations,
-    treatmentUpdates: d.treatment_updates, procedureOrders: JSON.parse(d.procedure_orders || '[]'),
+    treatmentUpdates: d.treatment_updates, procedureOrders: safeArrayParse(d.procedure_orders),
     timestamp: d.timestamp
 });
 
@@ -48,7 +70,7 @@ router.get('/admissions', async (req, res) => {
     let q = `
         SELECT a.*, w.name as ward_name 
         FROM ipd_admissions a
-        LEFT JOIN wards w ON a.ward = w.id
+        LEFT JOIN wards w ON (a.ward::text = w.id::text OR a.ward::text = w.name)
         WHERE a.tenant_id = ?
     `;
     const p = [tenantId];
@@ -80,13 +102,22 @@ router.post('/admissions', async (req, res) => {
         const bed = await db.prepare('SELECT * FROM beds WHERE bed_number = ? AND tenant_id = ?').get(bedNumber, tenantId);
         if (bed && bed.status === 'occupied') return res.status(400).json({ error: 'Bed is already occupied' });
 
-        const maxAdmData = await db.prepare('SELECT admission_id FROM ipd_admissions WHERE tenant_id = ? ORDER BY admission_id DESC LIMIT 1').get(tenantId);
+        const maxAdmData = await db.query('SELECT admission_id FROM ipd_admissions WHERE tenant_id = $1 ORDER BY LENGTH(admission_id) DESC, admission_id DESC LIMIT 1', [tenantId]);
         let nextAdmNumber = 1;
-        if (maxAdmData && maxAdmData.admission_id) {
-            const lastAdmNumber = parseInt(maxAdmData.admission_id.split('-').pop());
+        if (maxAdmData.rows[0]?.admission_id) {
+            const digits = maxAdmData.rows[0].admission_id.replace(/\D/g, '');
+            const lastAdmNumber = parseInt(digits, 10);
             if (!isNaN(lastAdmNumber)) nextAdmNumber = lastAdmNumber + 1;
         }
-        const admId = `IPD-${String(nextAdmNumber).padStart(4, '0')}`;
+        let admId = `IPD-${String(nextAdmNumber).padStart(4, '0')}`;
+        let admCheck = 0;
+        while (admCheck < 500) {
+            const exists = await db.query('SELECT 1 FROM ipd_admissions WHERE admission_id = $1 LIMIT 1', [admId]);
+            if (exists.rows.length === 0) break;
+            nextAdmNumber++;
+            admId = `IPD-${String(nextAdmNumber).padStart(4, '0')}`;
+            admCheck++;
+        }
         const id = uuidv4();
         const today = new Date().toISOString().split('T')[0];
 

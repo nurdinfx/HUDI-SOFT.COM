@@ -7,6 +7,28 @@ const router = express.Router();
 router.use(authenticate);
 router.use(authorize(['doctor', 'receptionist', 'admin']));
 
+const safeJsonParse = (val, fallback = {}) => {
+    if (!val) return fallback;
+    if (typeof val === 'object') return val;
+    try {
+        const parsed = JSON.parse(val);
+        return typeof parsed === 'object' && parsed !== null ? parsed : fallback;
+    } catch {
+        return fallback;
+    }
+};
+
+const safeArrayParse = (val) => {
+    if (!val) return [];
+    if (Array.isArray(val)) return val;
+    try {
+        const parsed = JSON.parse(val);
+        return Array.isArray(parsed) ? parsed : [String(parsed)];
+    } catch {
+        return [String(val)];
+    }
+};
+
 const fmt = (v) => ({
     id: v.id, visitId: v.visit_id, patientId: v.patient_id, patientName: v.patient_name,
     doctorId: v.doctor_id, doctorName: v.doctor_name, department: v.department,
@@ -14,7 +36,7 @@ const fmt = (v) => ({
     historyIllness: v.history_illness, pastHistory: v.past_history,
     familyHistory: v.family_history, physicalExamination: v.physical_examination,
     clinicalNotes: v.clinical_notes,
-    vitals: JSON.parse(v.vitals || '{}'), diagnosis: v.diagnosis,
+    vitals: safeJsonParse(v.vitals, {}), diagnosis: v.diagnosis,
     status: v.status, tokenNumber: v.token_number,
     visitType: v.visit_type || 'New'
 });
@@ -23,12 +45,12 @@ router.get('/stats', async (req, res) => {
     const today = new Date().toISOString().split('T')[0];
     const tenantId = req.tenantId;
     try {
-        const todayVisits = (await db.prepare('SELECT COUNT(*) as c FROM opd_visits WHERE date = ? AND tenant_id = ?').get(today, tenantId)).c;
-        const waitingCount = (await db.prepare("SELECT COUNT(*) as c FROM opd_visits WHERE date = ? AND status = 'waiting' AND tenant_id = ?").get(today, tenantId)).c;
-        const consultingCount = (await db.prepare("SELECT COUNT(*) as c FROM opd_visits WHERE date = ? AND status = 'in-consultation' AND tenant_id = ?").get(today, tenantId)).c;
-        const completedCount = (await db.prepare("SELECT COUNT(*) as c FROM opd_visits WHERE date = ? AND status = 'completed' AND tenant_id = ?").get(today, tenantId)).c;
-        const departmentStats = await db.prepare('SELECT department, COUNT(*) as count FROM opd_visits WHERE date = ? AND tenant_id = ? GROUP BY department').all(today, tenantId);
-        const queueStatus = await db.prepare('SELECT visit_id as "visitId", patient_name as "patientName", token_number as token, status FROM opd_visits WHERE date = ? AND tenant_id = ? ORDER BY token_number ASC').all(today, tenantId);
+        const todayVisits = (await db.prepare('SELECT COUNT(*) as c FROM opd_visits WHERE date = ? AND tenant_id = ?').get(today, tenantId))?.c || 0;
+        const waitingCount = (await db.prepare("SELECT COUNT(*) as c FROM opd_visits WHERE date = ? AND status = 'waiting' AND tenant_id = ?").get(today, tenantId))?.c || 0;
+        const consultingCount = (await db.prepare("SELECT COUNT(*) as c FROM opd_visits WHERE date = ? AND status = 'in-consultation' AND tenant_id = ?").get(today, tenantId))?.c || 0;
+        const completedCount = (await db.prepare("SELECT COUNT(*) as c FROM opd_visits WHERE date = ? AND status = 'completed' AND tenant_id = ?").get(today, tenantId))?.c || 0;
+        const departmentStats = (await db.prepare('SELECT department, COUNT(*) as count FROM opd_visits WHERE date = ? AND tenant_id = ? GROUP BY department').all(today, tenantId)) || [];
+        const queueStatus = (await db.prepare('SELECT visit_id as "visitId", patient_name as "patientName", token_number as token, status FROM opd_visits WHERE date = ? AND tenant_id = ? ORDER BY token_number ASC').all(today, tenantId)) || [];
 
         res.json({
             todayVisits: parseInt(todayVisits),
@@ -80,14 +102,30 @@ router.post('/', async (req, res) => {
         const doctor = await db.prepare('SELECT * FROM doctors WHERE id = ? AND tenant_id = ?').get(doctorId, tenantId);
         const today = new Date().toISOString().split('T')[0];
         const tokenCountData = await db.prepare("SELECT COUNT(*) as c FROM opd_visits WHERE date = ? AND tenant_id = ?").get(today, tenantId);
-        const tokenCount = parseInt(tokenCountData.c);
-        const maxVisitData = await db.prepare('SELECT visit_id FROM opd_visits WHERE tenant_id = ? ORDER BY visit_id DESC LIMIT 1').get(tenantId);
+        const tokenCount = parseInt(tokenCountData?.c || 0);
+
+        // Find max numerical visit number for this tenant
+        const maxVisitData = await db.query(
+            'SELECT visit_id FROM opd_visits WHERE tenant_id = $1 ORDER BY LENGTH(visit_id) DESC, visit_id DESC LIMIT 1',
+            [tenantId]
+        );
         let nextVisitNumber = 1;
-        if (maxVisitData && maxVisitData.visit_id) {
-            const lastVisitNumber = parseInt(maxVisitData.visit_id.split('-').pop());
+        if (maxVisitData.rows[0]?.visit_id) {
+            const digits = maxVisitData.rows[0].visit_id.replace(/\D/g, '');
+            const lastVisitNumber = parseInt(digits, 10);
             if (!isNaN(lastVisitNumber)) nextVisitNumber = lastVisitNumber + 1;
         }
-        const visitId = `OPD-${String(nextVisitNumber).padStart(4, '0')}`;
+
+        // Ensure visit_id does not collide with existing records
+        let visitId = `OPD-${String(nextVisitNumber).padStart(4, '0')}`;
+        let colCheck = 0;
+        while (colCheck < 500) {
+            const exists = await db.query('SELECT 1 FROM opd_visits WHERE visit_id = $1 LIMIT 1', [visitId]);
+            if (exists.rows.length === 0) break;
+            nextVisitNumber++;
+            visitId = `OPD-${String(nextVisitNumber).padStart(4, '0')}`;
+            colCheck++;
+        }
         const id = uuidv4();
 
         await db.prepare(`INSERT INTO opd_visits (id, visit_id, patient_id, patient_name, doctor_id, doctor_name, department, date, time, chief_complaint, vitals, status, token_number, visit_type, tenant_id)
@@ -98,6 +136,7 @@ router.post('/', async (req, res) => {
         const row = await db.prepare('SELECT * FROM opd_visits WHERE id = ?').get(id);
         res.status(201).json(fmt(row));
     } catch (err) {
+        console.error('OPD Visit Create Error:', err.message);
         res.status(500).json({ error: err.message });
     }
 });
@@ -142,9 +181,9 @@ router.get('/:id/patient-summary', async (req, res) => {
         const visitCountData = await db.prepare("SELECT COUNT(*) as c FROM opd_visits WHERE patient_id = ? AND status = 'completed' AND tenant_id = ?").get(visit.patient_id, tenantId);
 
         res.json({
-            allergies: JSON.parse(patient?.allergies || '[]'),
-            chronicConditions: JSON.parse(patient?.chronic_conditions || '[]'),
-            previousVisitCount: parseInt(visitCountData.c)
+            allergies: safeArrayParse(patient?.allergies),
+            chronicConditions: safeArrayParse(patient?.chronic_conditions),
+            previousVisitCount: parseInt(visitCountData?.c || 0)
         });
     } catch (err) {
         res.status(500).json({ error: err.message });

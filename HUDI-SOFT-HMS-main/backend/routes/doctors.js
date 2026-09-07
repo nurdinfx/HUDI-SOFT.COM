@@ -97,13 +97,22 @@ router.post('/', async (req, res) => {
     const tenantId = req.tenantId;
     if (!name || !email || !specialization || !department) return res.status(400).json({ error: 'name, email, specialization, department required' });
     try {
-        const maxIdRes = await db.query('SELECT doctor_id FROM doctors WHERE tenant_id = $1 ORDER BY doctor_id DESC LIMIT 1', [tenantId]);
+        const maxIdRes = await db.query('SELECT doctor_id FROM doctors WHERE tenant_id = $1 ORDER BY LENGTH(doctor_id) DESC, doctor_id DESC LIMIT 1', [tenantId]);
         let nextNumber = 1;
         if (maxIdRes.rows[0]?.doctor_id) {
-            const lastNumber = parseInt(maxIdRes.rows[0].doctor_id.split('-')[1]);
+            const digits = maxIdRes.rows[0].doctor_id.replace(/\D/g, '');
+            const lastNumber = parseInt(digits, 10);
             if (!isNaN(lastNumber)) nextNumber = lastNumber + 1;
         }
-        const doctorId = `DOC-${String(nextNumber).padStart(3, '0')}`;
+        let doctorId = `DOC-${String(nextNumber).padStart(3, '0')}`;
+        let colCheck = 0;
+        while (colCheck < 500) {
+            const exists = await db.query('SELECT 1 FROM doctors WHERE doctor_id = $1 LIMIT 1', [doctorId]);
+            if (exists.rows.length === 0) break;
+            nextNumber++;
+            doctorId = `DOC-${String(nextNumber).padStart(3, '0')}`;
+            colCheck++;
+        }
         const id = uuidv4();
 
         await db.query(

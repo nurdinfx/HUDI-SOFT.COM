@@ -8,14 +8,25 @@ const router = express.Router();
 router.use(authenticate);
 router.use(authorize(['admin', 'doctor', 'nurse', 'receptionist', 'lab_tech', 'pharmacist', 'accountant']));
 
-const fmt = (p) => ({
-    id: p.id, patientId: p.patient_id, firstName: p.first_name, lastName: p.last_name,
-    dateOfBirth: p.date_of_birth, gender: p.gender, bloodGroup: p.blood_group,
-    phone: p.phone, email: p.email, address: p.address, city: p.city,
-    emergencyContact: p.emergency_contact, emergencyPhone: p.emergency_phone,
-    insuranceProvider: p.insurance_provider, insurancePolicyNumber: p.insurance_policy_number,
-    allergies: JSON.parse(p.allergies || '[]'), chronicConditions: JSON.parse(p.chronic_conditions || '[]'),
-    status: p.status, registeredAt: p.registered_at, lastVisit: p.last_visit, notes: p.notes
+const safeArrayParse = (val) => {
+    if (!val) return [];
+    if (Array.isArray(val)) return val;
+    try {
+        const parsed = JSON.parse(val);
+        return Array.isArray(parsed) ? parsed : [String(parsed)];
+    } catch {
+        return [String(val)];
+    }
+};
+
+const fmt = (p = {}) => ({
+    id: p?.id, patientId: p?.patient_id, firstName: p?.first_name, lastName: p?.last_name,
+    dateOfBirth: p?.date_of_birth, gender: p?.gender, bloodGroup: p?.blood_group,
+    phone: p?.phone, email: p?.email, address: p?.address, city: p?.city,
+    emergencyContact: p?.emergency_contact, emergencyPhone: p?.emergency_phone,
+    insuranceProvider: p?.insurance_provider, insurancePolicyNumber: p?.insurance_policy_number,
+    allergies: safeArrayParse(p?.allergies), chronicConditions: safeArrayParse(p?.chronic_conditions),
+    status: p?.status, registeredAt: p?.registered_at, lastVisit: p?.last_visit, notes: p?.notes
 });
 
 // GET all patients
@@ -31,11 +42,12 @@ router.get('/', async (req, res) => {
         idx += 4; params.push(s, s, s, s);
     }
     if (status) { q += ` AND status = $${idx++}`; params.push(status); }
-    q += ' ORDER BY registered_at DESC';
+    q += ' ORDER BY registered_at DESC NULLS LAST';
     try {
         const result = await db.query(q, params);
         res.json(result.rows.map(fmt));
     } catch (err) {
+        console.error('Patients GET error:', err.message);
         res.status(500).json({ error: err.message });
     }
 });
@@ -60,13 +72,25 @@ router.post('/', async (req, res) => {
         return res.status(400).json({ error: 'Required fields: firstName, lastName, gender, phone' });
     }
     try {
-        const maxIdRes = await db.query('SELECT patient_id FROM patients WHERE tenant_id = $1 ORDER BY patient_id DESC LIMIT 1', [tenantId]);
+        const maxIdRes = await db.query(
+            'SELECT patient_id FROM patients WHERE tenant_id = $1 ORDER BY LENGTH(patient_id) DESC, patient_id DESC LIMIT 1',
+            [tenantId]
+        );
         let nextNumber = 1;
         if (maxIdRes.rows[0]?.patient_id) {
-            const lastNumber = parseInt(maxIdRes.rows[0].patient_id.split('-')[1]);
+            const digits = maxIdRes.rows[0].patient_id.replace(/\D/g, '');
+            const lastNumber = parseInt(digits, 10);
             if (!isNaN(lastNumber)) nextNumber = lastNumber + 1;
         }
-        const patientId = `PAT-${String(nextNumber).padStart(4, '0')}`;
+        let patientId = `PAT-${String(nextNumber).padStart(4, '0')}`;
+        let colCheck = 0;
+        while (colCheck < 500) {
+            const exists = await db.query('SELECT 1 FROM patients WHERE patient_id = $1 LIMIT 1', [patientId]);
+            if (exists.rows.length === 0) break;
+            nextNumber++;
+            patientId = `PAT-${String(nextNumber).padStart(4, '0')}`;
+            colCheck++;
+        }
         const id = uuidv4();
 
         await db.query(
@@ -85,6 +109,7 @@ router.post('/', async (req, res) => {
 
         res.status(201).json(fmt(row.rows[0]));
     } catch (err) {
+        console.error('Patient create error:', err.message);
         res.status(500).json({ error: err.message });
     }
 });

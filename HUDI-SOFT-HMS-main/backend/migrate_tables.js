@@ -15,7 +15,7 @@ const CORE_TABLES = [
   'pharmacy_transactions', 'pharmacy_transaction_items', 'pharmacy_returns',
   'beds', 'nurse_notes', 'doctor_rounds', 'prescriptions',
   'insurance_claims', 'patient_insurance_policies', 'patient_credits',
-  'lab_audit_logs', 'audit_logs', 'procedures',
+  'lab_audit_logs', 'audit_logs', 'procedures', 'wards', 'hospital_settings'
 ];
 
 module.exports = async function migrateTables() {
@@ -189,6 +189,61 @@ module.exports = async function migrateTables() {
     try {
       await db.query(`ALTER TABLE appointments ADD COLUMN IF NOT EXISTS is_viewed_by_doctor BOOLEAN DEFAULT FALSE;`);
     } catch(e) { /* ignore */ }
+
+    // ─── 12. hospital_settings sequence in PostgreSQL ─────────────────────────
+    try {
+      await db.query(`CREATE SEQUENCE IF NOT EXISTS hospital_settings_id_seq;`);
+      await db.query(`ALTER TABLE hospital_settings ALTER COLUMN id SET DEFAULT nextval('hospital_settings_id_seq');`);
+      await db.query(`SELECT setval('hospital_settings_id_seq', GREATEST(COALESCE((SELECT MAX(id) FROM hospital_settings), 0) + 1, 1), false);`);
+    } catch(e) {
+      console.warn('⚠️  Could not set hospital_settings sequence:', e.message);
+    }
+
+    // ─── 13. Drop global unique constraints that violate multi-tenancy ───────
+    const globalConstraints = [
+      { table: 'opd_visits', constraint: 'opd_visits_visit_id_key' },
+      { table: 'patients', constraint: 'patients_patient_id_key' },
+      { table: 'appointments', constraint: 'appointments_appointment_id_key' },
+      { table: 'ipd_admissions', constraint: 'ipd_admissions_admission_id_key' },
+      { table: 'doctors', constraint: 'doctors_doctor_id_key' },
+      { table: 'beds', constraint: 'beds_bed_number_key' },
+    ];
+    for (const item of globalConstraints) {
+      try {
+        await db.query(`ALTER TABLE ${item.table} DROP CONSTRAINT IF EXISTS ${item.constraint};`);
+      } catch(e) { /* ignore */ }
+    }
+
+    // Add per-tenant unique constraints so each hospital is unique within its tenant
+    const tenantConstraints = [
+      { table: 'opd_visits', name: 'opd_visits_tenant_visit_unique', cols: 'tenant_id, visit_id' },
+      { table: 'patients', name: 'patients_tenant_patient_unique', cols: 'tenant_id, patient_id' },
+      { table: 'appointments', name: 'appointments_tenant_appointment_unique', cols: 'tenant_id, appointment_id' },
+      { table: 'ipd_admissions', name: 'ipd_admissions_tenant_admission_unique', cols: 'tenant_id, admission_id' },
+      { table: 'doctors', name: 'doctors_tenant_doctor_unique', cols: 'tenant_id, doctor_id' },
+      { table: 'beds', name: 'beds_tenant_bed_unique', cols: 'tenant_id, bed_number' },
+    ];
+    for (const item of tenantConstraints) {
+      try {
+        await db.query(`ALTER TABLE ${item.table} ADD CONSTRAINT ${item.name} UNIQUE (${item.cols});`);
+      } catch(e) { /* ignore if duplicates or already added */ }
+    }
+
+    // ─── 14. Ensure core table columns exist ─────────────────────────────────
+    const tableColumns = [
+      { table: 'patients', cols: ['allergies TEXT DEFAULT \'[]\'', 'chronic_conditions TEXT DEFAULT \'[]\'', 'emergency_contact TEXT', 'emergency_phone TEXT', 'insurance_provider TEXT', 'insurance_policy_number TEXT', 'blood_group TEXT', 'city TEXT', 'registered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP', 'last_visit TIMESTAMP', 'notes TEXT'] },
+      { table: 'hospital_settings', cols: ['tenant_id TEXT', 'logo TEXT', 'currency TEXT DEFAULT \'USD\'', 'tax_rate NUMERIC DEFAULT 10', 'zaad TEXT', 'sahal TEXT', 'edahab TEXT', 'mycash TEXT', 'pharmacy_zaad TEXT', 'pharmacy_sahal TEXT', 'pharmacy_edahab TEXT', 'pharmacy_mycash TEXT'] },
+      { table: 'lab_tests', cols: ['tenant_id TEXT', 'admission_id UUID', 'ordered_by TEXT', 'clinical_notes TEXT', 'is_billed INTEGER DEFAULT 0', 'invoice_id UUID', 'sample_barcode TEXT', 'sample_collected_at TIMESTAMP', 'sample_collected_by TEXT', 'result_entered_by TEXT', 'result_entered_at TIMESTAMP', 'critical_flag INTEGER DEFAULT 0'] },
+      { table: 'wards', cols: ['tenant_id TEXT', 'daily_rate NUMERIC DEFAULT 0', 'total_beds INTEGER DEFAULT 0'] },
+      { table: 'beds', cols: ['tenant_id TEXT', 'ward_id UUID', 'daily_rate NUMERIC DEFAULT 0'] }
+    ];
+    for (const item of tableColumns) {
+      for (const col of item.cols) {
+        try {
+          await db.query(`ALTER TABLE ${item.table} ADD COLUMN IF NOT EXISTS ${col};`);
+        } catch(e) { /* ignore */ }
+      }
+    }
 
     console.log('✅ [Migration] All tables & multi-tenant columns verified/created successfully.');
   } catch (err) {

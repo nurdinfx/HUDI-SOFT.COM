@@ -63,13 +63,22 @@ router.post('/', async (req, res) => {
         if (!patient) return res.status(404).json({ error: 'Patient not found' });
         if (!doctor) return res.status(404).json({ error: 'Doctor not found' });
 
-        const maxIdRes = await db.query('SELECT appointment_id FROM appointments WHERE tenant_id = $1 ORDER BY appointment_id DESC LIMIT 1', [tenantId]);
+        const maxIdRes = await db.query('SELECT appointment_id FROM appointments WHERE tenant_id = $1 ORDER BY LENGTH(appointment_id) DESC, appointment_id DESC LIMIT 1', [tenantId]);
         let nextNumber = 1;
         if (maxIdRes.rows[0]?.appointment_id) {
-            const lastNumber = parseInt(maxIdRes.rows[0].appointment_id.split('-')[1]);
+            const digits = maxIdRes.rows[0].appointment_id.replace(/\D/g, '');
+            const lastNumber = parseInt(digits, 10);
             if (!isNaN(lastNumber)) nextNumber = lastNumber + 1;
         }
-        const apptId = `APT-${String(nextNumber).padStart(4, '0')}`;
+        let apptId = `APT-${String(nextNumber).padStart(4, '0')}`;
+        let colCheck = 0;
+        while (colCheck < 500) {
+            const exists = await db.query('SELECT 1 FROM appointments WHERE appointment_id = $1 LIMIT 1', [apptId]);
+            if (exists.rows.length === 0) break;
+            nextNumber++;
+            apptId = `APT-${String(nextNumber).padStart(4, '0')}`;
+            colCheck++;
+        }
         const id = uuidv4();
 
         await db.query(

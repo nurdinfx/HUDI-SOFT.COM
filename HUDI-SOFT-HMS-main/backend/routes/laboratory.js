@@ -79,16 +79,24 @@ router.get('/stats', async (req, res) => {
     const today = new Date().toISOString().split('T')[0];
     const tenantId = req.tenantId;
     try {
+        const totalTodayRes = await db.prepare("SELECT COUNT(*) as c FROM lab_tests WHERE ordered_at::text LIKE ? AND tenant_id = ?").get(today + '%', tenantId);
+        const pendingRes = await db.prepare("SELECT COUNT(*) as c FROM lab_tests WHERE status = 'ordered' AND tenant_id = ?").get(tenantId);
+        const inProgressRes = await db.prepare("SELECT COUNT(*) as c FROM lab_tests WHERE status IN ('sample-collected', 'in-progress') AND tenant_id = ?").get(tenantId);
+        const completedRes = await db.prepare("SELECT COUNT(*) as c FROM lab_tests WHERE status = 'completed' AND ordered_at::text LIKE ? AND tenant_id = ?").get(today + '%', tenantId);
+        const criticalRes = await db.prepare("SELECT COUNT(*) as c FROM lab_tests WHERE critical_flag = 1 AND tenant_id = ?").get(tenantId);
+        const revRes = await db.prepare("SELECT SUM(cost) as s FROM lab_tests WHERE ordered_at::text LIKE ? AND tenant_id = ?").get(today + '%', tenantId);
+
         const stats = {
-            totalToday: (await db.prepare("SELECT COUNT(*) as c FROM lab_tests WHERE ordered_at::text LIKE ? AND tenant_id = ?").get(today + '%', tenantId)).c,
-            pending: (await db.prepare("SELECT COUNT(*) as c FROM lab_tests WHERE status = 'ordered' AND tenant_id = ?").get(tenantId)).c,
-            inProgress: (await db.prepare("SELECT COUNT(*) as c FROM lab_tests WHERE status IN ('sample-collected', 'in-progress') AND tenant_id = ?").get(tenantId)).c,
-            completed: (await db.prepare("SELECT COUNT(*) as c FROM lab_tests WHERE status = 'completed' AND ordered_at::text LIKE ? AND tenant_id = ?").get(today + '%', tenantId)).c,
-            critical: (await db.prepare("SELECT COUNT(*) as c FROM lab_tests WHERE critical_flag = 1 AND tenant_id = ?").get(tenantId)).c,
-            revenueToday: (await db.prepare("SELECT SUM(cost) as s FROM lab_tests WHERE ordered_at::text LIKE ? AND tenant_id = ?").get(today + '%', tenantId)).s || 0
+            totalToday: parseInt(totalTodayRes?.c || 0),
+            pending: parseInt(pendingRes?.c || 0),
+            inProgress: parseInt(inProgressRes?.c || 0),
+            completed: parseInt(completedRes?.c || 0),
+            critical: parseInt(criticalRes?.c || 0),
+            revenueToday: parseFloat(revRes?.s || 0)
         };
         res.json(stats);
     } catch (err) {
+        console.error('Laboratory stats error:', err.message);
         res.status(500).json({ error: err.message });
     }
 });
@@ -162,26 +170,27 @@ router.get('/', async (req, res) => {
     let q = `
         SELECT lt.*, a.ward, a.bed_number, w.name as ward_name
         FROM lab_tests lt
-        LEFT JOIN ipd_admissions a ON lt.admission_id = a.id
-        LEFT JOIN wards w ON a.ward = w.id
+        LEFT JOIN ipd_admissions a ON lt.admission_id::text = a.id::text
+        LEFT JOIN wards w ON (a.ward::text = w.id::text OR a.ward::text = w.name)
         WHERE lt.tenant_id = ?
     `;
     const p = [tenantId];
     if (search) {
-        q += ` AND (lt.patient_name LIKE ? OR lt.test_name LIKE ? OR lt.test_id LIKE ?)`;
+        q += ` AND (lt.patient_name ILIKE ? OR lt.test_name ILIKE ? OR lt.test_id ILIKE ?)`;
         const s = `%${search}%`;
         p.push(s, s, s);
     }
     if (status) { q += ' AND lt.status = ?'; p.push(status); }
     if (priority) { q += ' AND lt.priority = ?'; p.push(priority); }
     if (patientId) { q += ' AND lt.patient_id = ?'; p.push(patientId); }
-    if (admissionId) { q += ' AND lt.admission_id = ?'; p.push(admissionId); }
+    if (admissionId) { q += ' AND lt.admission_id::text = ?'; p.push(admissionId); }
     if (critical === '1' || critical === 'true') { q += ' AND lt.critical_flag = 1'; }
-    q += ' ORDER BY lt.ordered_at DESC';
+    q += ' ORDER BY lt.ordered_at DESC NULLS LAST';
     try {
         const rows = await db.prepare(q).all(...p);
         res.json(rows.map(fmt));
     } catch (err) {
+        console.error('Laboratory GET error:', err.message);
         res.status(500).json({ error: err.message });
     }
 });
@@ -210,13 +219,22 @@ router.post('/', async (req, res) => {
         const safeDoctorId = (doctorId && doctorId.trim() !== '') ? doctorId : null;
         const doctor = safeDoctorId ? await db.prepare('SELECT * FROM doctors WHERE id = ? AND tenant_id = ?').get(safeDoctorId, tenantId) : null;
 
-        const maxIdData = await db.prepare('SELECT test_id FROM lab_tests WHERE tenant_id = ? ORDER BY test_id DESC LIMIT 1').get(tenantId);
+        const maxIdData = await db.query('SELECT test_id FROM lab_tests WHERE tenant_id = $1 ORDER BY LENGTH(test_id) DESC, test_id DESC LIMIT 1', [tenantId]);
         let nextNumber = 1;
-        if (maxIdData && maxIdData.test_id) {
-            const lastNumber = parseInt(maxIdData.test_id.split('-')[1]);
+        if (maxIdData.rows[0]?.test_id) {
+            const digits = maxIdData.rows[0].test_id.replace(/\D/g, '');
+            const lastNumber = parseInt(digits, 10);
             if (!isNaN(lastNumber)) nextNumber = lastNumber + 1;
         }
-        const testId = `LAB-${String(nextNumber).padStart(4, '0')}`;
+        let testId = `LAB-${String(nextNumber).padStart(4, '0')}`;
+        let colCount = 0;
+        while (colCount < 200) {
+            const exists = await db.query('SELECT 1 FROM lab_tests WHERE test_id = $1 LIMIT 1', [testId]);
+            if (exists.rows.length === 0) break;
+            nextNumber++;
+            testId = `LAB-${String(nextNumber).padStart(4, '0')}`;
+            colCount++;
+        }
         const id = uuidv4();
 
         let invoiceId = null;
@@ -255,8 +273,8 @@ router.post('/', async (req, res) => {
         const row = await db.prepare(`
             SELECT lt.*, a.ward, a.bed_number, w.name as ward_name
             FROM lab_tests lt
-            LEFT JOIN ipd_admissions a ON lt.admission_id = a.id
-            LEFT JOIN wards w ON a.ward = w.id
+            LEFT JOIN ipd_admissions a ON lt.admission_id::text = a.id::text
+            LEFT JOIN wards w ON (a.ward::text = w.id::text OR a.ward::text = w.name)
             WHERE lt.id = ?
         `).get(id);
         res.status(201).json(fmt(row));
@@ -322,8 +340,8 @@ router.put('/:id', async (req, res) => {
         const updatedRow = await db.prepare(`
             SELECT lt.*, a.ward, a.bed_number, w.name as ward_name
             FROM lab_tests lt
-            LEFT JOIN ipd_admissions a ON lt.admission_id = a.id
-            LEFT JOIN wards w ON a.ward = w.id
+            LEFT JOIN ipd_admissions a ON lt.admission_id::text = a.id::text
+            LEFT JOIN wards w ON (a.ward::text = w.id::text OR a.ward::text = w.name)
             WHERE lt.id = ?
         `).get(req.params.id);
         res.json(fmt(updatedRow));

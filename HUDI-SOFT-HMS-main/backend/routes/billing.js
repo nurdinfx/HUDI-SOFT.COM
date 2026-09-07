@@ -8,12 +8,23 @@ const router = express.Router();
 router.use(authenticate);
 router.use(authorize(['receptionist', 'admin', 'accountant', 'doctor']));
 
-const fmt = (i) => ({
-    id: i.id, invoiceId: i.invoice_id, patientId: i.patient_id, patientName: i.patient_name,
-    date: i.date, dueDate: i.due_date, items: JSON.parse(i.items || '[]'),
-    subtotal: i.subtotal, tax: i.tax, discount: i.discount, total: i.total,
-    paidAmount: i.paid_amount, status: i.status, paymentMethod: i.payment_method,
-    insuranceClaim: i.insurance_claim, notes: i.notes
+const safeJsonParse = (val, fallback = []) => {
+    if (!val) return fallback;
+    if (typeof val === 'object') return val;
+    try {
+        const parsed = JSON.parse(val);
+        return typeof parsed === 'object' && parsed !== null ? parsed : fallback;
+    } catch {
+        return fallback;
+    }
+};
+
+const fmt = (i = {}) => ({
+    id: i?.id, invoiceId: i?.invoice_id, patientId: i?.patient_id, patientName: i?.patient_name,
+    date: i?.date, dueDate: i?.due_date, items: safeJsonParse(i?.items, []),
+    subtotal: i?.subtotal, tax: i?.tax, discount: i?.discount, total: i?.total,
+    paidAmount: i?.paid_amount, status: i?.status, paymentMethod: i?.payment_method,
+    insuranceClaim: i?.insurance_claim, notes: i?.notes
 });
 
 router.get('/patient/:id/history', async (req, res) => {

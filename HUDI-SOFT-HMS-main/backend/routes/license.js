@@ -237,10 +237,12 @@ router.post('/activate', async (req, res) => {
     try {
       const existingSettings = await db.query('SELECT id FROM hospital_settings WHERE tenant_id = $1', [tenantId]);
       if (existingSettings.rows.length === 0) {
+        const maxIdRes = await db.query('SELECT COALESCE(MAX(id), 0) + 1 AS next_id FROM hospital_settings');
+        const nextId = parseInt(maxIdRes.rows[0]?.next_id || 1);
         await db.query(`
-          INSERT INTO hospital_settings (name, tagline, address, phone, email, website, currency, tax_rate, tenant_id)
-          VALUES ($1, 'Excellence in Healthcare', '', '', $2, '', 'USD', 10, $3)
-        `, [hospitalName || 'My Hospital', finalAdminEmail, tenantId]);
+          INSERT INTO hospital_settings (id, name, tagline, address, phone, email, website, currency, tax_rate, tenant_id)
+          VALUES ($1, $2, 'Excellence in Healthcare', '', '', $3, '', 'USD', 10, $4)
+        `, [nextId, hospitalName || 'My Hospital', finalAdminEmail, tenantId]);
       } else if (hospitalName) {
         await db.query('UPDATE hospital_settings SET name = $1 WHERE tenant_id = $2', [hospitalName, tenantId]);
       }
@@ -300,10 +302,12 @@ router.post('/demo', async (req, res) => {
 
     // Initialize default hospital_settings for this demo tenant
     try {
+      const maxIdRes = await db.query('SELECT COALESCE(MAX(id), 0) + 1 AS next_id FROM hospital_settings');
+      const nextId = parseInt(maxIdRes.rows[0]?.next_id || 1);
       await db.query(`
-        INSERT INTO hospital_settings (name, tagline, address, phone, email, website, currency, tax_rate, tenant_id)
-        VALUES ($1, 'Excellence in Healthcare (Demo)', '', '', $2, '', 'USD', 10, $3)
-      `, [finalHospitalName, finalAdminEmail, tenantId]);
+        INSERT INTO hospital_settings (id, name, tagline, address, phone, email, website, currency, tax_rate, tenant_id)
+        VALUES ($1, $2, 'Excellence in Healthcare (Demo)', '', '', $3, '', 'USD', 10, $4)
+      `, [nextId, finalHospitalName, finalAdminEmail, tenantId]);
     } catch (settErr) {
       console.warn('[License] Could not init demo settings:', settErr.message);
     }
