@@ -14,7 +14,7 @@ const getBaseUrl = () => {
 
 console.log(`🚀 HMS Frontend Engine active. API Base: ${getBaseUrl()}`);
 
-// ─── Token management ────────────────────────────────────────────
+// ─── Token & Multi-Tenant License management ──────────────────────
 function getToken(): string | null {
     if (typeof window === 'undefined') return null;
     return localStorage.getItem('hms_token');
@@ -28,6 +28,23 @@ export function clearToken() {
     if (typeof window !== 'undefined') localStorage.removeItem('hms_token');
 }
 
+export function getLicenseKey(): string | null {
+    if (typeof window === 'undefined') return null;
+    return localStorage.getItem('hms_license_key');
+}
+
+export function setLicenseKey(key: string) {
+    if (typeof window !== 'undefined') localStorage.setItem('hms_license_key', key.trim().toUpperCase());
+}
+
+export function clearLicenseKey() {
+    if (typeof window !== 'undefined') {
+        localStorage.removeItem('hms_license_key');
+        localStorage.removeItem('hms_tenant_id');
+        localStorage.removeItem('hms_hospital_name');
+    }
+}
+
 // ─── Core fetch wrapper ──────────────────────────────────────────
 interface ApiOptions extends Omit<RequestInit, 'body'> {
     body?: any;
@@ -35,11 +52,13 @@ interface ApiOptions extends Omit<RequestInit, 'body'> {
 
 async function apiFetch<T>(path: string, options: ApiOptions = {}): Promise<T> {
     const token = getToken();
+    const licenseKey = getLicenseKey();
     const headers: Record<string, string> = {
         'Content-Type': 'application/json',
         ...(options.headers as Record<string, string>),
     };
     if (token) headers['Authorization'] = `Bearer ${token}`;
+    if (licenseKey) headers['X-License-Key'] = licenseKey;
 
     const { body, ...rest } = options;
     const fetchOptions: RequestInit = {
@@ -66,7 +85,12 @@ const del = <T>(path: string) => apiFetch<T>(path, { method: 'DELETE' });
 
 // ─── Auth ────────────────────────────────────────────────────────
 export const authApi = {
-    login: (email: string, password: string) => post<{ token: string; user: User }>('/auth/login', { email, password }),
+    login: (email: string, password: string, licenseKey?: string) => 
+        post<{ token: string; user: User; license?: any }>('/auth/login', { 
+            email, 
+            password, 
+            licenseKey: (licenseKey || getLicenseKey() || '').trim().toUpperCase() 
+        }),
     me: () => get<User>('/auth/me'),
     logout: () => post('/auth/logout', {}),
 };

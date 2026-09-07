@@ -9,21 +9,23 @@ const router = express.Router();
 router.use(authenticate);
 router.use(authorize(['pharmacist', 'admin', 'doctor']));
 
-// â”€â”€ Table Initialization â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Table Initialization ──────────────────────────────────────────
 async function initTables() {
     try {
         await db.query(`
             CREATE TABLE IF NOT EXISTS medicine_categories (
                 id UUID PRIMARY KEY,
-                name TEXT UNIQUE NOT NULL,
+                name TEXT NOT NULL,
+                tenant_id UUID,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         `);
+        try { await db.query('ALTER TABLE medicine_categories ADD COLUMN IF NOT EXISTS tenant_id UUID'); } catch (e) {}
         
         await db.query(`
             CREATE TABLE IF NOT EXISTS pharmacy_transactions (
                 id UUID PRIMARY KEY,
-                invoice_id TEXT UNIQUE NOT NULL,
+                invoice_id TEXT NOT NULL,
                 patient_id UUID,
                 patient_name TEXT,
                 subtotal_amount DECIMAL(15,2) DEFAULT 0,
@@ -35,12 +37,14 @@ async function initTables() {
                 status TEXT,
                 created_by TEXT,
                 items_summary TEXT,
+                tenant_id UUID,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         `);
-        try { await db.query('ALTER TABLE pharmacy_transactions ADD COLUMN items_summary TEXT'); } catch (e) {}
-        try { await db.query('ALTER TABLE pharmacy_transactions ADD COLUMN subtotal_amount DECIMAL(15,2) DEFAULT 0'); } catch (e) {}
-        try { await db.query('ALTER TABLE pharmacy_transactions ADD COLUMN discount_amount DECIMAL(15,2) DEFAULT 0'); } catch (e) {}
+        try { await db.query('ALTER TABLE pharmacy_transactions ADD COLUMN IF NOT EXISTS tenant_id UUID'); } catch (e) {}
+        try { await db.query('ALTER TABLE pharmacy_transactions ADD COLUMN IF NOT EXISTS items_summary TEXT'); } catch (e) {}
+        try { await db.query('ALTER TABLE pharmacy_transactions ADD COLUMN IF NOT EXISTS subtotal_amount DECIMAL(15,2) DEFAULT 0'); } catch (e) {}
+        try { await db.query('ALTER TABLE pharmacy_transactions ADD COLUMN IF NOT EXISTS discount_amount DECIMAL(15,2) DEFAULT 0'); } catch (e) {}
 
         await db.query(`
             CREATE TABLE IF NOT EXISTS pharmacy_transaction_items (
@@ -50,18 +54,22 @@ async function initTables() {
                 medicine_name TEXT,
                 quantity INTEGER,
                 unit_price DECIMAL(15,2),
-                total_price DECIMAL(15,2)
+                total_price DECIMAL(15,2),
+                tenant_id UUID
             )
         `);
+        try { await db.query('ALTER TABLE pharmacy_transaction_items ADD COLUMN IF NOT EXISTS tenant_id UUID'); } catch (e) {}
 
         await db.query(`
             CREATE TABLE IF NOT EXISTS patient_credits (
                 id UUID PRIMARY KEY,
-                patient_id UUID UNIQUE,
+                patient_id UUID,
                 balance DECIMAL(15,2) DEFAULT 0,
+                tenant_id UUID,
                 last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         `);
+        try { await db.query('ALTER TABLE patient_credits ADD COLUMN IF NOT EXISTS tenant_id UUID'); } catch (e) {}
 
         await db.query(`
             CREATE TABLE IF NOT EXISTS pharmacy_returns (
@@ -70,29 +78,31 @@ async function initTables() {
                 item_id UUID REFERENCES pharmacy_transaction_items(id),
                 quantity INTEGER,
                 amount DECIMAL(15,2),
+                tenant_id UUID,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         `);
+        try { await db.query('ALTER TABLE pharmacy_returns ADD COLUMN IF NOT EXISTS tenant_id UUID'); } catch (e) {}
 
         // Seed initial categories if none exist
-        const countRes = await db.query('SELECT COUNT(*) as count FROM medicine_categories');
+        const countRes = await db.query('SELECT COUNT(*) as count FROM medicine_categories WHERE tenant_id IS NULL');
         if (parseInt(countRes.rows[0].count) === 0) {
             const defaults = ['Tablet', 'Syrup', 'Injection', 'Ointment', 'Capsule'];
             for (const name of defaults) {
-                await db.prepare('INSERT INTO medicine_categories (id, name) VALUES (?, ?)').run(uuidv4(), name);
+                await db.prepare('INSERT INTO medicine_categories (id, name, tenant_id) VALUES (?, ?, NULL)').run(uuidv4(), name);
             }
         }
     } catch (err) {
-        console.error('âŒ Pharmacy Table Init Error:', err.message);
+        console.error('❌ Pharmacy Table Init Error:', err.message);
     }
 }
 initTables();
 
-// â”€â”€ Transactions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Transactions ───────────────────────────────────────────────────
 router.get('/transactions', async (req, res) => {
     const { patientId, status, paymentMethod, startDate, endDate } = req.query;
-    let q = 'SELECT * FROM pharmacy_transactions WHERE 1=1';
-    const params = [];
+    let q = 'SELECT * FROM pharmacy_transactions WHERE tenant_id = ?';
+    const params = [req.tenantId];
 
     if (patientId) { q += ' AND patient_id = ?'; params.push(patientId); }
     if (status) { q += ' AND status = ?'; params.push(status); }
@@ -113,6 +123,9 @@ router.get('/transactions', async (req, res) => {
 
 router.get('/transactions/:id/items', async (req, res) => {
     try {
+        const tx = await db.prepare('SELECT id FROM pharmacy_transactions WHERE id = ? AND tenant_id = ?').get(req.params.id, req.tenantId);
+        if (!tx) return res.status(404).json({ error: 'Transaction not found' });
+
         const items = await db.prepare(`
             SELECT ti.*,
                    COALESCE(r.returned_qty, 0) AS returned_quantity,
@@ -124,11 +137,12 @@ router.get('/transactions/:id/items', async (req, res) => {
             LEFT JOIN (
                 SELECT item_id, COALESCE(SUM(quantity), 0) AS returned_qty
                 FROM pharmacy_returns
+                WHERE tenant_id = ?
                 GROUP BY item_id
             ) r ON r.item_id = ti.id
-            WHERE ti.transaction_id = ?
+            WHERE ti.transaction_id = ? AND ti.tenant_id = ?
             ORDER BY ti.medicine_name ASC
-        `).all(req.params.id);
+        `).all(req.tenantId, req.params.id, req.tenantId);
         res.json(items);
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -144,7 +158,7 @@ router.post('/transactions', async (req, res) => {
     
     try {
         const txId = uuidv4();
-        const maxInvData = await db.prepare("SELECT invoice_id FROM pharmacy_transactions ORDER BY LENGTH(invoice_id) DESC, invoice_id DESC LIMIT 1").get();
+        const maxInvData = await db.prepare("SELECT invoice_id FROM pharmacy_transactions WHERE tenant_id = ? ORDER BY LENGTH(invoice_id) DESC, invoice_id DESC LIMIT 1").get(req.tenantId);
         let nextInvNumber = 1;
         if (maxInvData && maxInvData.invoice_id) {
             const parts = maxInvData.invoice_id.split('-');
@@ -176,8 +190,8 @@ router.post('/transactions', async (req, res) => {
 
         // Insert Transaction
         await db.prepare(`INSERT INTO pharmacy_transactions 
-            (id, invoice_id, patient_id, patient_name, subtotal_amount, discount_amount, total_amount, paid_amount, credit_amount, payment_method, status, created_by, items_summary)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+            (id, invoice_id, patient_id, patient_name, subtotal_amount, discount_amount, total_amount, paid_amount, credit_amount, payment_method, status, created_by, items_summary, tenant_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
             .run(
                 txId,
                 invoiceId,
@@ -191,7 +205,8 @@ router.post('/transactions', async (req, res) => {
                 paymentMethod,
                 status || 'Completed',
                 req.user.name,
-                itemsSummary
+                itemsSummary,
+                req.tenantId
             );
 
         const isValidUUID = (str) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
@@ -203,32 +218,32 @@ router.post('/transactions', async (req, res) => {
             const finalMedId = isValidUUID(resolvedMedId) ? resolvedMedId : null;
 
             await db.prepare(`INSERT INTO pharmacy_transaction_items 
-                (id, transaction_id, medicine_id, medicine_name, quantity, unit_price, total_price)
-                VALUES (?, ?, ?, ?, ?, ?, ?)`)
-                .run(itemId, txId, finalMedId, item.medicineName || item.name, item.quantity, item.unitPrice, item.totalPrice || (item.unitPrice * item.quantity));
+                (id, transaction_id, medicine_id, medicine_name, quantity, unit_price, total_price, tenant_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
+                .run(itemId, txId, finalMedId, item.medicineName || item.name, item.quantity, item.unitPrice, item.totalPrice || (item.unitPrice * item.quantity), req.tenantId);
 
             // 1. Linked Prescription Update
             if (item.prescriptionId) {
-                await db.prepare('UPDATE prescriptions SET status = ?, is_billed = 1, invoice_id = ? WHERE id = ?')
-                    .run('dispensed', txId, item.prescriptionId);
+                await db.prepare('UPDATE prescriptions SET status = ?, is_billed = 1, invoice_id = ? WHERE id = ? AND tenant_id = ?')
+                    .run('dispensed', txId, item.prescriptionId, req.tenantId);
             }
 
             // 2. Linked Lab Test Update
             if (item.labTestId) {
-                await db.prepare('UPDATE lab_tests SET status = ?, is_billed = 1, invoice_id = ? WHERE id = ?')
-                    .run('sample-collected', txId, item.labTestId);
+                await db.prepare('UPDATE lab_tests SET status = ?, is_billed = 1, invoice_id = ? WHERE id = ? AND tenant_id = ?')
+                    .run('sample-collected', txId, item.labTestId, req.tenantId);
             }
 
             // 3. Linked OPD Visit Update
             if (item.visitId) {
-                await db.prepare('UPDATE opd_visits SET is_billed = 1, invoice_id = ? WHERE id = ?')
-                    .run(txId, item.visitId);
+                await db.prepare('UPDATE opd_visits SET is_billed = 1, invoice_id = ? WHERE id = ? AND tenant_id = ?')
+                    .run(txId, item.visitId, req.tenantId);
             }
 
             // 4. Stock Check & Update (only for medicines)
             if (item.type === 'medicine' || (!item.type && finalMedId)) {
                 if (finalMedId) {
-                    const med = await db.prepare('SELECT quantity, reorder_level FROM medicines WHERE id = ?').get(finalMedId);
+                    const med = await db.prepare('SELECT quantity, reorder_level FROM medicines WHERE id = ? AND tenant_id = ?').get(finalMedId, req.tenantId);
                     if (med) {
                         if (med.quantity < item.quantity) {
                             throw new Error(`Insufficient stock for ${item.medicineName || item.name}`);
@@ -248,8 +263,8 @@ router.post('/transactions', async (req, res) => {
                         // Update overall quantity
                         const newQty = med.quantity - item.quantity;
                         const newStatus = newQty === 0 ? 'out-of-stock' : newQty <= med.reorder_level ? 'low-stock' : 'in-stock';
-                        await db.prepare('UPDATE medicines SET quantity = ?, status = ? WHERE id = ?')
-                            .run(newQty, newStatus, finalMedId);
+                        await db.prepare('UPDATE medicines SET quantity = ?, status = ? WHERE id = ? AND tenant_id = ?')
+                            .run(newQty, newStatus, finalMedId, req.tenantId);
                     }
                 }
             }
@@ -257,7 +272,7 @@ router.post('/transactions', async (req, res) => {
 
         // Handle Credit Module Integration
         if (pmLower === 'credit' && creditCustomerId) {
-            const customer = await db.prepare('SELECT * FROM credit_customers WHERE id = ?').get(creditCustomerId);
+            const customer = await db.prepare('SELECT * FROM credit_customers WHERE id = ? AND tenant_id = ?').get(creditCustomerId, req.tenantId);
             if (!customer) throw new Error('Credit Customer not found');
 
             // ── Credit Limit Check ──────────────────────────────────
@@ -279,12 +294,12 @@ router.post('/transactions', async (req, res) => {
             const remainingBalance = saleOnCredit;
 
             await db.prepare(`
-                INSERT INTO credit_transactions (id, transaction_id, customer_id, invoice_id, invoice_number, items_summary, total_amount, amount_paid, remaining_balance, status, staff_id, staff_name)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO credit_transactions (id, transaction_id, customer_id, invoice_id, invoice_number, items_summary, total_amount, amount_paid, remaining_balance, status, staff_id, staff_name, tenant_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             `).run(
                 transactionId, transactionUID, creditCustomerId, txId, invoiceId, itemsSummary,
                 netTotalAmount, resolvedPaidAmount, remainingBalance, remainingBalance <= 0 ? 'paid' : 'unpaid',
-                req.user.id, req.user.name
+                req.user.id, req.user.name, req.tenantId
             );
 
             // Update Customer Balance
@@ -294,20 +309,20 @@ router.post('/transactions', async (req, res) => {
             await db.prepare(`
                 UPDATE credit_customers 
                 SET outstanding_balance = ?, total_credit_taken = ?, updated_at = CURRENT_TIMESTAMP
-                WHERE id = ?
-            `).run(newBalance, newTotalCredit, creditCustomerId);
+                WHERE id = ? AND tenant_id = ?
+            `).run(newBalance, newTotalCredit, creditCustomerId, req.tenantId);
 
             // Add to Ledger
             await db.prepare(`
-                INSERT INTO credit_ledger (id, customer_id, date, description, type, amount, running_balance, reference_id)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO credit_ledger (id, customer_id, date, description, type, amount, running_balance, reference_id, tenant_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             `).run(
                 uuidv4(), creditCustomerId, new Date().toISOString().split('T')[0], `Pharmacy POS Credit Purchase: ${invoiceId}`,
-                'debit', netTotalAmount, newBalance, transactionUID
+                'debit', netTotalAmount, newBalance, transactionUID, req.tenantId
             );
         } else if (pmLower === 'employee_credit' && creditCustomerId) {
             // Handle Employee Credit Integration
-            const employee = await db.prepare('SELECT * FROM employees WHERE id = ?').get(creditCustomerId);
+            const employee = await db.prepare('SELECT * FROM employees WHERE id = ? AND tenant_id = ?').get(creditCustomerId, req.tenantId);
             if (!employee) throw new Error('Employee not found');
 
             const remainingBalance = totalToReconcile - resolvedPaidAmount;
@@ -316,35 +331,40 @@ router.post('/transactions', async (req, res) => {
             const expenseId = uuidv4();
             const today = new Date().toISOString().split('T')[0];
             await db.prepare(`
-                INSERT INTO employee_expenses (id, employee_id, type, amount, date, notes, status, recorded_by)
-                VALUES (?, ?, ?, ?, ?, ?, 'pending', ?)
-            `).run(expenseId, creditCustomerId, 'advance', remainingBalance, today, `Pharmacy Purchase: ${invoiceId}`, req.user.id);
+                INSERT INTO employee_expenses (id, employee_id, type, amount, date, notes, status, recorded_by, tenant_id)
+                VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?)
+            `).run(expenseId, creditCustomerId, 'advance', remainingBalance, today, `Pharmacy Purchase: ${invoiceId}`, req.user.id, req.tenantId);
 
             // 2. Update employee's outstanding_balance
             const newBalance = parseFloat(employee.outstanding_balance || 0) + remainingBalance;
             await db.prepare(`
                 UPDATE employees 
                 SET outstanding_balance = ? 
-                WHERE id = ?
-            `).run(newBalance, creditCustomerId);
+                WHERE id = ? AND tenant_id = ?
+            `).run(newBalance, creditCustomerId, req.tenantId);
 
             // 3. Insert into employee_ledger
             await db.prepare(`
-                INSERT INTO employee_ledger (id, employee_id, date, description, type, amount, reference_id)
-                VALUES (?, ?, ?, ?, 'debit', ?, ?)
-            `).run(uuidv4(), creditCustomerId, today, `Pharmacy Purchase: ${invoiceId}`, remainingBalance, expenseId);
+                INSERT INTO employee_ledger (id, employee_id, date, description, type, amount, reference_id, tenant_id)
+                VALUES (?, ?, ?, ?, 'debit', ?, ?, ?)
+            `).run(uuidv4(), creditCustomerId, today, `Pharmacy Purchase: ${invoiceId}`, remainingBalance, expenseId, req.tenantId);
 
         } else if (patientId) {
             // Internal Patient Credit Fallback
             if (safeAppliedCredit > 0) {
-                await db.prepare('UPDATE patient_credits SET balance = patient_credits.balance - ?, last_updated = CURRENT_TIMESTAMP WHERE patient_id = ?')
-                    .run(safeAppliedCredit, patientId);
+                await db.prepare('UPDATE patient_credits SET balance = patient_credits.balance - ?, last_updated = CURRENT_TIMESTAMP WHERE patient_id = ? AND tenant_id = ?')
+                    .run(safeAppliedCredit, patientId, req.tenantId);
             }
             if (creditAmount > 0 && pmLower !== 'credit' && pmLower !== 'employee_credit') {
-                await db.prepare(`INSERT INTO patient_credits (id, patient_id, balance) 
-                    VALUES (?, ?, ?) 
-                    ON CONFLICT(patient_id) DO UPDATE SET balance = patient_credits.balance + ?, last_updated = CURRENT_TIMESTAMP`)
-                    .run(uuidv4(), patientId, creditAmount, creditAmount);
+                const existingCredit = await db.prepare('SELECT id, balance FROM patient_credits WHERE patient_id = ? AND tenant_id = ?').get(patientId, req.tenantId);
+                if (existingCredit) {
+                    await db.prepare('UPDATE patient_credits SET balance = balance + ?, last_updated = CURRENT_TIMESTAMP WHERE id = ? AND tenant_id = ?')
+                        .run(creditAmount, existingCredit.id, req.tenantId);
+                } else {
+                    await db.prepare(`INSERT INTO patient_credits (id, patient_id, balance, tenant_id) 
+                        VALUES (?, ?, ?, ?)`)
+                        .run(uuidv4(), patientId, creditAmount, req.tenantId);
+                }
             }
         }
 
@@ -386,7 +406,7 @@ router.post('/transactions/:id/return', async (req, res) => {
     const { items, exchangeItems, paymentMethod } = req.body; 
     
     try {
-        const tx = await db.prepare('SELECT * FROM pharmacy_transactions WHERE id = ?').get(req.params.id);
+        const tx = await db.prepare('SELECT * FROM pharmacy_transactions WHERE id = ? AND tenant_id = ?').get(req.params.id, req.tenantId);
         if (!tx) return res.status(404).json({ error: 'Transaction not found' });
 
         const returnItems = Array.isArray(items) ? items.filter(item => (parseInt(item?.quantity, 10) || 0) > 0) : [];
@@ -406,7 +426,7 @@ router.post('/transactions/:id/return', async (req, res) => {
 
         // 1. Process Returns
         for (const rItem of returnItems) {
-            const item = await db.prepare('SELECT * FROM pharmacy_transaction_items WHERE id = ? AND transaction_id = ?').get(rItem.itemId, req.params.id);
+            const item = await db.prepare('SELECT * FROM pharmacy_transaction_items WHERE id = ? AND transaction_id = ? AND tenant_id = ?').get(rItem.itemId, req.params.id, req.tenantId);
             if (!item) throw new Error('Transaction item not found');
 
             const requestedQty = Math.max(0, parseInt(rItem.quantity, 10) || 0);
@@ -415,8 +435,8 @@ router.post('/transactions/:id/return', async (req, res) => {
             const previouslyReturned = await db.prepare(`
                 SELECT COALESCE(SUM(quantity), 0) AS returned_qty
                 FROM pharmacy_returns
-                WHERE item_id = ?
-            `).get(rItem.itemId);
+                WHERE item_id = ? AND tenant_id = ?
+            `).get(rItem.itemId, req.tenantId);
 
             const soldQty = Math.max(0, parseInt(item.quantity, 10) || 0);
             const alreadyReturnedQty = Math.max(0, parseInt(previouslyReturned?.returned_qty, 10) || 0);
@@ -429,19 +449,19 @@ router.post('/transactions/:id/return', async (req, res) => {
             const unitPrice = Math.max(0, parseFloat(item.unit_price) || 0);
             const returnAmount = Number((requestedQty * unitPrice).toFixed(2));
             const returnId = uuidv4();
-            await db.prepare('INSERT INTO pharmacy_returns (id, transaction_id, item_id, quantity, amount) VALUES (?, ?, ?, ?, ?)')
-                .run(returnId, req.params.id, rItem.itemId, requestedQty, returnAmount);
+            await db.prepare('INSERT INTO pharmacy_returns (id, transaction_id, item_id, quantity, amount, tenant_id) VALUES (?, ?, ?, ?, ?, ?)')
+                .run(returnId, req.params.id, rItem.itemId, requestedQty, returnAmount, req.tenantId);
 
             // Increase Stock (Old Item)
             const medicine = item.medicine_id
-                ? await db.prepare('SELECT quantity, reorder_level FROM medicines WHERE id = ?').get(item.medicine_id)
+                ? await db.prepare('SELECT quantity, reorder_level FROM medicines WHERE id = ? AND tenant_id = ?').get(item.medicine_id, req.tenantId)
                 : null;
 
             if (medicine) {
                 const updatedQty = (parseInt(medicine.quantity, 10) || 0) + requestedQty;
                 const reorderLevel = parseInt(medicine.reorder_level, 10) || 0;
                 const updatedStatus = updatedQty === 0 ? 'out-of-stock' : updatedQty <= reorderLevel ? 'low-stock' : 'in-stock';
-                await db.prepare('UPDATE medicines SET quantity = ?, status = ? WHERE id = ?').run(updatedQty, updatedStatus, item.medicine_id);
+                await db.prepare('UPDATE medicines SET quantity = ?, status = ? WHERE id = ? AND tenant_id = ?').run(updatedQty, updatedStatus, item.medicine_id, req.tenantId);
             }
         }
 
@@ -449,7 +469,7 @@ router.post('/transactions/:id/return', async (req, res) => {
         let totalExchangeAmount = 0;
         if (safeExchangeItems.length > 0) {
             const exchangeTxId = uuidv4();
-            const maxExcData = await db.prepare("SELECT invoice_id FROM pharmacy_transactions WHERE invoice_id LIKE 'PHARM-EXC-%' ORDER BY invoice_id DESC LIMIT 1").get();
+            const maxExcData = await db.prepare("SELECT invoice_id FROM pharmacy_transactions WHERE invoice_id LIKE 'PHARM-EXC-%' AND tenant_id = ? ORDER BY invoice_id DESC LIMIT 1").get(req.tenantId);
             let nextExcNumber = 1;
             if (maxExcData && maxExcData.invoice_id) {
                 const lastExcNumber = parseInt(maxExcData.invoice_id.split('-').pop());
@@ -464,12 +484,12 @@ router.post('/transactions/:id/return', async (req, res) => {
             const itemsSummaryText = safeExchangeItems.map(i => `${i.medicineName} (x${i.quantity})`).join(', ');
             
             await db.prepare(`INSERT INTO pharmacy_transactions 
-                (id, invoice_id, patient_id, patient_name, total_amount, paid_amount, credit_amount, payment_method, status, created_by, items_summary, is_transferred)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`)
-                .run(exchangeTxId, exchangeInvoiceId, tx.patient_id, tx.patient_name, totalExchangeAmount, totalExchangeAmount, 0, paymentMethod || tx.payment_method, 'Exchange', req.user.name, `EXC for ${tx.invoice_id}: ${itemsSummaryText}`);
+                (id, invoice_id, patient_id, patient_name, total_amount, paid_amount, credit_amount, payment_method, status, created_by, items_summary, is_transferred, tenant_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`)
+                .run(exchangeTxId, exchangeInvoiceId, tx.patient_id, tx.patient_name, totalExchangeAmount, totalExchangeAmount, 0, paymentMethod || tx.payment_method, 'Exchange', req.user.name, `EXC for ${tx.invoice_id}: ${itemsSummaryText}`, req.tenantId);
 
             for (const eItem of safeExchangeItems) {
-                const med = await db.prepare('SELECT quantity, reorder_level FROM medicines WHERE id = ?').get(eItem.medicineId);
+                const med = await db.prepare('SELECT quantity, reorder_level FROM medicines WHERE id = ? AND tenant_id = ?').get(eItem.medicineId, req.tenantId);
                 if (!med || med.quantity < eItem.quantity) {
                     throw new Error(`Insufficient stock for exchange item: ${eItem.medicineName}`);
                 }
@@ -485,23 +505,23 @@ router.post('/transactions/:id/return', async (req, res) => {
 
                 const newQty = med.quantity - eItem.quantity;
                 const newStatus = newQty === 0 ? 'out-of-stock' : newQty <= med.reorder_level ? 'low-stock' : 'in-stock';
-                await db.prepare('UPDATE medicines SET quantity = ?, status = ? WHERE id = ?').run(newQty, newStatus, eItem.medicineId);
+                await db.prepare('UPDATE medicines SET quantity = ?, status = ? WHERE id = ? AND tenant_id = ?').run(newQty, newStatus, eItem.medicineId, req.tenantId);
 
                 const exchangeItemId = uuidv4();
                 await db.prepare(`INSERT INTO pharmacy_transaction_items 
-                    (id, transaction_id, medicine_id, medicine_name, quantity, unit_price, total_price)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)`)
-                    .run(exchangeItemId, exchangeTxId, eItem.medicineId, eItem.medicineName, eItem.quantity, eItem.unitPrice, eItem.totalPrice);
+                    (id, transaction_id, medicine_id, medicine_name, quantity, unit_price, total_price, tenant_id)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
+                    .run(exchangeItemId, exchangeTxId, eItem.medicineId, eItem.medicineName, eItem.quantity, eItem.unitPrice, eItem.totalPrice, req.tenantId);
             }
         }
 
-        const originalItems = await db.prepare('SELECT * FROM pharmacy_transaction_items WHERE transaction_id = ?').all(req.params.id);
+        const originalItems = await db.prepare('SELECT * FROM pharmacy_transaction_items WHERE transaction_id = ? AND tenant_id = ?').all(req.params.id, req.tenantId);
         const returnedQtyRows = await db.prepare(`
             SELECT item_id, COALESCE(SUM(quantity), 0) AS returned_qty
             FROM pharmacy_returns
-            WHERE transaction_id = ?
+            WHERE transaction_id = ? AND tenant_id = ?
             GROUP BY item_id
-        `).all(req.params.id);
+        `).all(req.params.id, req.tenantId);
 
         const returnedQtyMap = new Map(
             returnedQtyRows.map(row => [row.item_id, Math.max(0, parseInt(row.returned_qty, 10) || 0)])
@@ -549,7 +569,7 @@ router.post('/transactions/:id/return', async (req, res) => {
                 credit_amount = ?,
                 status = ?,
                 items_summary = ?
-            WHERE id = ?
+            WHERE id = ? AND tenant_id = ?
         `).run(
             updatedSubtotalAmount,
             updatedDiscountAmount,
@@ -558,7 +578,8 @@ router.post('/transactions/:id/return', async (req, res) => {
             updatedCreditAmount,
             updatedStatus,
             updatedItemsSummary,
-            req.params.id
+            req.params.id,
+            req.tenantId
         );
 
         const refundableBalance = Number(Math.max(0, originalPaidAmount - updatedPaidAmount).toFixed(2));
@@ -566,8 +587,8 @@ router.post('/transactions/:id/return', async (req, res) => {
         if (tx.is_transferred === 1 && refundableBalance > 0) {
             const todayStr = new Date().toISOString().split('T')[0];
             await db.prepare(`
-                INSERT INTO account_entries (id, date, type, category, description, amount, payment_method, reference_id, department, status, user_id)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO account_entries (id, date, type, category, description, amount, payment_method, reference_id, department, status, user_id, tenant_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             `).run(
                 uuidv4(),
                 todayStr,
@@ -579,17 +600,23 @@ router.post('/transactions/:id/return', async (req, res) => {
                 `PHARM-REFUND-${tx.invoice_id}`,
                 'Pharmacy',
                 'completed',
-                req.user.id
+                req.user.id,
+                req.tenantId
             );
         }
 
         const balanceChange = Number((refundableBalance - totalExchangeAmount).toFixed(2));
         
         if (tx.patient_id && balanceChange !== 0 && !isReturnOnlyFlow) {
-            await db.prepare(`INSERT INTO patient_credits (id, patient_id, balance) 
-                VALUES (?, ?, ?) 
-                ON CONFLICT(patient_id) DO UPDATE SET balance = patient_credits.balance + ?, last_updated = CURRENT_TIMESTAMP`)
-                .run(uuidv4(), tx.patient_id, balanceChange, balanceChange);
+            const existingCredit = await db.prepare('SELECT id, balance FROM patient_credits WHERE patient_id = ? AND tenant_id = ?').get(tx.patient_id, req.tenantId);
+            if (existingCredit) {
+                await db.prepare('UPDATE patient_credits SET balance = balance + ?, last_updated = CURRENT_TIMESTAMP WHERE id = ? AND tenant_id = ?')
+                    .run(balanceChange, existingCredit.id, req.tenantId);
+            } else {
+                await db.prepare(`INSERT INTO patient_credits (id, patient_id, balance, tenant_id) 
+                    VALUES (?, ?, ?, ?)`)
+                    .run(uuidv4(), tx.patient_id, balanceChange, req.tenantId);
+            }
         }
 
         await db.run('COMMIT');
@@ -607,14 +634,15 @@ router.post('/transactions/:id/return', async (req, res) => {
 
 router.get('/stats/revenue', async (req, res) => {
     try {
+        const tenantId = req.tenantId;
         const stats = {
-            totalSales: (await db.prepare("SELECT SUM(total_amount) as s FROM pharmacy_transactions WHERE DATE(created_at) = CURRENT_DATE AND COALESCE(status, '') <> 'Cancelled'").get()).s || 0,
-            totalDiscount: (await db.prepare("SELECT SUM(discount_amount) as s FROM pharmacy_transactions WHERE DATE(created_at) = CURRENT_DATE AND COALESCE(status, '') <> 'Cancelled'").get()).s || 0,
-            totalPaid: (await db.prepare("SELECT SUM(paid_amount) as s FROM pharmacy_transactions WHERE DATE(created_at) = CURRENT_DATE AND COALESCE(status, '') <> 'Cancelled'").get()).s || 0,
-            totalReturns: (await db.prepare("SELECT SUM(amount) as s FROM pharmacy_returns WHERE DATE(created_at) = CURRENT_DATE").get()).s || 0,
-            transactionCount: (await db.prepare("SELECT COUNT(*) as c FROM pharmacy_transactions WHERE DATE(created_at) = CURRENT_DATE AND COALESCE(status, '') <> 'Cancelled'").get()).c || 0,
-            outstandingCredit: (await db.query("SELECT SUM(patient_credits.balance) as s FROM patient_credits")).rows[0].s || 0,
-            breakdown: await db.prepare("SELECT payment_method, SUM(paid_amount) as amount FROM pharmacy_transactions WHERE DATE(created_at) = CURRENT_DATE AND COALESCE(status, '') <> 'Cancelled' GROUP BY payment_method").all()
+            totalSales: (await db.prepare("SELECT SUM(total_amount) as s FROM pharmacy_transactions WHERE DATE(created_at) = CURRENT_DATE AND COALESCE(status, '') <> 'Cancelled' AND tenant_id = ?").get(tenantId))?.s || 0,
+            totalDiscount: (await db.prepare("SELECT SUM(discount_amount) as s FROM pharmacy_transactions WHERE DATE(created_at) = CURRENT_DATE AND COALESCE(status, '') <> 'Cancelled' AND tenant_id = ?").get(tenantId))?.s || 0,
+            totalPaid: (await db.prepare("SELECT SUM(paid_amount) as s FROM pharmacy_transactions WHERE DATE(created_at) = CURRENT_DATE AND COALESCE(status, '') <> 'Cancelled' AND tenant_id = ?").get(tenantId))?.s || 0,
+            totalReturns: (await db.prepare("SELECT SUM(amount) as s FROM pharmacy_returns WHERE DATE(created_at) = CURRENT_DATE AND tenant_id = ?").get(tenantId))?.s || 0,
+            transactionCount: (await db.prepare("SELECT COUNT(*) as c FROM pharmacy_transactions WHERE DATE(created_at) = CURRENT_DATE AND COALESCE(status, '') <> 'Cancelled' AND tenant_id = ?").get(tenantId))?.c || 0,
+            outstandingCredit: (await db.prepare("SELECT SUM(balance) as s FROM patient_credits WHERE tenant_id = ?").get(tenantId))?.s || 0,
+            breakdown: await db.prepare("SELECT payment_method, SUM(paid_amount) as amount FROM pharmacy_transactions WHERE DATE(created_at) = CURRENT_DATE AND COALESCE(status, '') <> 'Cancelled' AND tenant_id = ? GROUP BY payment_method").all(tenantId)
         };
         res.json(stats);
     } catch (err) {
@@ -624,32 +652,8 @@ router.get('/stats/revenue', async (req, res) => {
 
 router.get('/credits/:patientId', async (req, res) => {
     try {
-        const row = await db.prepare('SELECT * FROM patient_credits WHERE patient_id = ?').get(req.params.patientId);
+        const row = await db.prepare('SELECT * FROM patient_credits WHERE patient_id = ? AND tenant_id = ?').get(req.params.patientId, req.tenantId);
         res.json(row || { balance: 0 });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-router.get('/transactions/:id/items', async (req, res) => {
-    try {
-        const rows = await db.prepare(`
-            SELECT ti.*,
-                   COALESCE(r.returned_qty, 0) AS returned_quantity,
-                   CASE
-                       WHEN ti.quantity - COALESCE(r.returned_qty, 0) > 0 THEN ti.quantity - COALESCE(r.returned_qty, 0)
-                       ELSE 0
-                   END AS remaining_quantity
-            FROM pharmacy_transaction_items ti
-            LEFT JOIN (
-                SELECT item_id, COALESCE(SUM(quantity), 0) AS returned_qty
-                FROM pharmacy_returns
-                GROUP BY item_id
-            ) r ON r.item_id = ti.id
-            WHERE ti.transaction_id = ?
-            ORDER BY ti.medicine_name ASC
-        `).all(req.params.id);
-        res.json(rows);
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -657,7 +661,7 @@ router.get('/transactions/:id/items', async (req, res) => {
 
 router.get('/categories', async (req, res) => {
     try {
-        const rows = await db.prepare('SELECT * FROM medicine_categories ORDER BY name').all();
+        const rows = await db.prepare('SELECT * FROM medicine_categories WHERE tenant_id = ? ORDER BY name').all(req.tenantId);
         res.json(rows.map(r => ({ id: r.id, name: r.name })));
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -669,7 +673,7 @@ router.post('/categories', async (req, res) => {
     if (!name) return res.status(400).json({ error: 'Category name required' });
     try {
         const id = uuidv4();
-        await db.prepare('INSERT INTO medicine_categories (id, name) VALUES (?, ?)').run(id, name);
+        await db.prepare('INSERT INTO medicine_categories (id, name, tenant_id) VALUES (?, ?, ?)').run(id, name, req.tenantId);
         res.status(201).json({ id, name });
     } catch (err) {
         if (err.message.includes('unique constraint')) {
@@ -688,7 +692,8 @@ const fmtMed = (m) => ({
 
 router.get('/medicines', async (req, res) => {
     const { search, category, status } = req.query;
-    let q = 'SELECT * FROM medicines WHERE 1=1'; const p = [];
+    const tenantId = req.tenantId;
+    let q = 'SELECT * FROM medicines WHERE tenant_id = ?'; const p = [tenantId];
     if (search) { q += ` AND (name LIKE ? OR generic_name LIKE ?)`; const s = `%${search}%`; p.push(s, s); }
     if (category) { q += ' AND category = ?'; p.push(category); }
     if (status) { q += ' AND status = ?'; p.push(status); }
@@ -704,8 +709,9 @@ router.get('/medicines', async (req, res) => {
 router.get('/medicines/expiring', async (req, res) => {
     const today = new Date().toISOString().split('T')[0];
     const ninetyDays = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    const tenantId = req.tenantId;
     try {
-        const rows = await db.prepare('SELECT * FROM medicines WHERE expiry_date BETWEEN ? AND ? ORDER BY expiry_date').all(today, ninetyDays);
+        const rows = await db.prepare('SELECT * FROM medicines WHERE expiry_date BETWEEN ? AND ? AND tenant_id = ? ORDER BY expiry_date').all(today, ninetyDays, tenantId);
         res.json(rows.map(fmtMed));
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -713,8 +719,9 @@ router.get('/medicines/expiring', async (req, res) => {
 });
 
 router.get('/medicines/low-stock', async (req, res) => {
+    const tenantId = req.tenantId;
     try {
-        const rows = await db.prepare('SELECT * FROM medicines WHERE quantity <= reorder_level AND quantity > 0').all();
+        const rows = await db.prepare('SELECT * FROM medicines WHERE quantity <= reorder_level AND quantity > 0 AND tenant_id = ?').all(tenantId);
         res.json(rows.map(fmtMed));
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -723,7 +730,7 @@ router.get('/medicines/low-stock', async (req, res) => {
 
 router.get('/medicines/:id', async (req, res) => {
     try {
-        const row = await db.prepare('SELECT * FROM medicines WHERE id = ?').get(req.params.id);
+        const row = await db.prepare('SELECT * FROM medicines WHERE id = ? AND tenant_id = ?').get(req.params.id, req.tenantId);
         if (!row) return res.status(404).json({ error: 'Medicine not found' });
         res.json(fmtMed(row));
     } catch (err) {
@@ -738,12 +745,13 @@ router.post('/medicines', async (req, res) => {
     const qty = parseInt(quantity) || 0;
     const rl = parseInt(reorderLevel) || 10;
     const status = qty === 0 ? 'out-of-stock' : qty <= rl ? 'low-stock' : 'in-stock';
+    const tenantId = req.tenantId;
     try {
-        await db.prepare(`INSERT INTO medicines (id, name, generic_name, category, manufacturer, batch_number, expiry_date, quantity, reorder_level, unit_price, selling_price, unit, status)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-            .run(id, name, genericName || null, category, manufacturer || null, batchNumber || null, expiryDate || null, qty, rl, unitPrice || 0, sellingPrice || 0, unit || 'tablet', status);
-        logAction(req.user.id, req.user.name, req.user.role, 'CREATE', 'Pharmacy', `Medicine added: ${name}`, req.ip);
-        const row = await db.prepare('SELECT * FROM medicines WHERE id = ?').get(id);
+        await db.prepare(`INSERT INTO medicines (id, name, generic_name, category, manufacturer, batch_number, expiry_date, quantity, reorder_level, unit_price, selling_price, unit, status, tenant_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+            .run(id, name, genericName || null, category, manufacturer || null, batchNumber || null, expiryDate || null, qty, rl, unitPrice || 0, sellingPrice || 0, unit || 'tablet', status, tenantId);
+        logAction(req.user.id, req.user.name, req.user.role, 'CREATE', 'Pharmacy', `Medicine added: ${name}`, req.ip, tenantId);
+        const row = await db.prepare('SELECT * FROM medicines WHERE id = ? AND tenant_id = ?').get(id, tenantId);
         res.status(201).json(fmtMed(row));
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -751,17 +759,18 @@ router.post('/medicines', async (req, res) => {
 });
 
 router.put('/medicines/:id', async (req, res) => {
+    const tenantId = req.tenantId;
     try {
-        const row = await db.prepare('SELECT * FROM medicines WHERE id = ?').get(req.params.id);
+        const row = await db.prepare('SELECT * FROM medicines WHERE id = ? AND tenant_id = ?').get(req.params.id, tenantId);
         if (!row) return res.status(404).json({ error: 'Not found' });
         const { name, genericName, category, manufacturer, batchNumber, expiryDate, quantity, reorderLevel, unitPrice, sellingPrice, unit } = req.body;
         const qty = quantity !== undefined ? parseInt(quantity) : row.quantity;
         const rl = reorderLevel !== undefined ? parseInt(reorderLevel) : row.reorder_level;
         const status = qty === 0 ? 'out-of-stock' : qty <= rl ? 'low-stock' : 'in-stock';
-        await db.prepare(`UPDATE medicines SET name=?, generic_name=?, category=?, manufacturer=?, batch_number=?, expiry_date=?, quantity=?, reorder_level=?, unit_price=?, selling_price=?, unit=?, status=? WHERE id=?`)
-            .run(name || row.name, genericName ?? row.generic_name, category || row.category, manufacturer ?? row.manufacturer, batchNumber ?? row.batch_number, expiryDate ?? row.expiry_date, qty, rl, unitPrice ?? row.unit_price, sellingPrice ?? row.selling_price, unit || row.unit, status, req.params.id);
-        logAction(req.user.id, req.user.name, req.user.role, 'UPDATE', 'Pharmacy', `Medicine updated: ${name || row.name}`, req.ip);
-        const updatedRow = await db.prepare('SELECT * FROM medicines WHERE id = ?').get(req.params.id);
+        await db.prepare(`UPDATE medicines SET name=?, generic_name=?, category=?, manufacturer=?, batch_number=?, expiry_date=?, quantity=?, reorder_level=?, unit_price=?, selling_price=?, unit=?, status=? WHERE id=? AND tenant_id=?`)
+            .run(name || row.name, genericName ?? row.generic_name, category || row.category, manufacturer ?? row.manufacturer, batchNumber ?? row.batch_number, expiryDate ?? row.expiry_date, qty, rl, unitPrice ?? row.unit_price, sellingPrice ?? row.selling_price, unit || row.unit, status, req.params.id, tenantId);
+        logAction(req.user.id, req.user.name, req.user.role, 'UPDATE', 'Pharmacy', `Medicine updated: ${name || row.name}`, req.ip, tenantId);
+        const updatedRow = await db.prepare('SELECT * FROM medicines WHERE id = ? AND tenant_id = ?').get(req.params.id, tenantId);
         res.json(fmtMed(updatedRow));
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -769,11 +778,12 @@ router.put('/medicines/:id', async (req, res) => {
 });
 
 router.delete('/medicines/:id', async (req, res) => {
+    const tenantId = req.tenantId;
     try {
-        const row = await db.prepare('SELECT * FROM medicines WHERE id = ?').get(req.params.id);
+        const row = await db.prepare('SELECT * FROM medicines WHERE id = ? AND tenant_id = ?').get(req.params.id, tenantId);
         if (!row) return res.status(404).json({ error: 'Not found' });
-        await db.prepare('DELETE FROM medicines WHERE id = ?').run(req.params.id);
-        logAction(req.user.id, req.user.name, req.user.role, 'DELETE', 'Pharmacy', `Medicine deleted: ${row.name}`, req.ip);
+        await db.prepare('DELETE FROM medicines WHERE id = ? AND tenant_id = ?').run(req.params.id, tenantId);
+        logAction(req.user.id, req.user.name, req.user.role, 'DELETE', 'Pharmacy', `Medicine deleted: ${row.name}`, req.ip, tenantId);
         res.json({ message: 'Deleted' });
     } catch (err) {
         res.status(500).json({ error: err.message });

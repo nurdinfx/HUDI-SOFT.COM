@@ -19,8 +19,9 @@ const fmt = (i) => ({
 router.get('/patient/:id/history', async (req, res) => {
     try {
         const patientId = req.params.id;
-        const invoices = await db.prepare('SELECT * FROM invoices WHERE patient_id = ? ORDER BY date DESC').all(patientId);
-        const claims = await db.prepare('SELECT * FROM insurance_claims WHERE patient_id = ? ORDER BY submitted_at DESC').all(patientId);
+        const tenantId = req.tenantId;
+        const invoices = await db.prepare('SELECT * FROM invoices WHERE patient_id = ? AND tenant_id = ? ORDER BY date DESC').all(patientId, tenantId);
+        const claims = await db.prepare('SELECT * FROM insurance_claims WHERE patient_id = ? AND tenant_id = ? ORDER BY submitted_at DESC').all(patientId, tenantId);
 
         const summary = {
             totalBilled: invoices.reduce((s, i) => s + (i.total || 0), 0),
@@ -47,7 +48,8 @@ router.get('/patient/:id/history', async (req, res) => {
 
 router.get('/', async (req, res) => {
     const { search, status, patientId } = req.query;
-    let q = 'SELECT * FROM invoices WHERE 1=1'; const p = [];
+    const tenantId = req.tenantId;
+    let q = 'SELECT * FROM invoices WHERE tenant_id = ?'; const p = [tenantId];
     if (search) { q += ` AND (patient_name LIKE ? OR invoice_id LIKE ?)`; const s = `%${search}%`; p.push(s, s); }
     if (status) { q += ' AND status = ?'; p.push(status); }
     if (patientId) { q += ' AND patient_id = ?'; p.push(patientId); }
@@ -62,7 +64,7 @@ router.get('/', async (req, res) => {
 
 router.get('/:id', async (req, res) => {
     try {
-        const row = await db.prepare('SELECT * FROM invoices WHERE id = ?').get(req.params.id);
+        const row = await db.prepare('SELECT * FROM invoices WHERE id = ? AND tenant_id = ?').get(req.params.id, req.tenantId);
         if (!row) return res.status(404).json({ error: 'Invoice not found' });
         res.json(fmt(row));
     } catch (err) {
@@ -72,13 +74,14 @@ router.get('/:id', async (req, res) => {
 
 router.post('/', async (req, res) => {
     const { patientId, items, discount, notes, dueDate, paymentMethod } = req.body;
+    const tenantId = req.tenantId;
     if (!patientId || !items || !Array.isArray(items)) return res.status(400).json({ error: 'patientId and items[] required' });
 
     try {
-        const patient = await db.prepare('SELECT * FROM patients WHERE id = ?').get(patientId);
+        const patient = await db.prepare('SELECT * FROM patients WHERE id = ? AND tenant_id = ?').get(patientId, tenantId);
         if (!patient) return res.status(404).json({ error: 'Patient not found' });
 
-        const maxIdData = await db.prepare("SELECT invoice_id FROM invoices WHERE invoice_id LIKE 'INV-%' AND invoice_id NOT LIKE 'INV-POS-%' AND invoice_id NOT LIKE 'INV-OPD-%' ORDER BY LENGTH(invoice_id) DESC, invoice_id DESC LIMIT 1").get();
+        const maxIdData = await db.prepare("SELECT invoice_id FROM invoices WHERE invoice_id LIKE 'INV-%' AND invoice_id NOT LIKE 'INV-POS-%' AND invoice_id NOT LIKE 'INV-OPD-%' AND tenant_id = ? ORDER BY LENGTH(invoice_id) DESC, invoice_id DESC LIMIT 1").get(tenantId);
         let nextNumber = 1;
         if (maxIdData && maxIdData.invoice_id) {
             const parts = maxIdData.invoice_id.split('-');
@@ -89,9 +92,8 @@ router.post('/', async (req, res) => {
         const randomSuffix = Math.random().toString(36).substring(2, 6).toUpperCase();
         const invId = `INV-${String(nextNumber).padStart(4, '0')}-${randomSuffix}`;
 
-
         const subtotal = items.reduce((s, item) => s + (item.total || item.quantity * item.unitPrice || 0), 0);
-        const settings = await db.prepare('SELECT tax_rate FROM hospital_settings WHERE id = 1').get();
+        const settings = await db.prepare('SELECT tax_rate FROM hospital_settings WHERE tenant_id = ?').get(tenantId);
         const taxRate = settings ? settings.tax_rate : 10;
         const disc = parseFloat(discount) || 0;
         const tax = subtotal * (taxRate / 100);
@@ -100,12 +102,12 @@ router.post('/', async (req, res) => {
         const due = dueDate || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
         const id = uuidv4();
 
-        await db.prepare(`INSERT INTO invoices (id, invoice_id, patient_id, patient_name, date, due_date, items, subtotal, tax, discount, total, paid_amount, status, payment_method, notes)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-            .run(id, invId, patientId, `${patient.first_name} ${patient.last_name}`, today, due, JSON.stringify(items), subtotal, tax, disc, total, 0, 'unpaid', paymentMethod || null, notes || null);
+        await db.prepare(`INSERT INTO invoices (id, invoice_id, patient_id, patient_name, date, due_date, items, subtotal, tax, discount, total, paid_amount, status, payment_method, notes, tenant_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+            .run(id, invId, patientId, `${patient.first_name} ${patient.last_name}`, today, due, JSON.stringify(items), subtotal, tax, disc, total, 0, 'unpaid', paymentMethod || null, notes || null, tenantId);
 
         logAction(req.user.id, req.user.name, req.user.role, 'CREATE', 'Billing', `Invoice created: ${invId}`, req.ip);
-        const row = await db.prepare('SELECT * FROM invoices WHERE id = ?').get(id);
+        const row = await db.prepare('SELECT * FROM invoices WHERE id = ? AND tenant_id = ?').get(id, tenantId);
         res.status(201).json(fmt(row));
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -113,8 +115,9 @@ router.post('/', async (req, res) => {
 });
 
 router.put('/:id', async (req, res) => {
+    const tenantId = req.tenantId;
     try {
-        const row = await db.prepare('SELECT * FROM invoices WHERE id = ?').get(req.params.id);
+        const row = await db.prepare('SELECT * FROM invoices WHERE id = ? AND tenant_id = ?').get(req.params.id, tenantId);
         if (!row) return res.status(404).json({ error: 'Invoice not found' });
 
         const { status, paidAmount, paymentMethod, notes, discount } = req.body;
@@ -136,8 +139,8 @@ router.put('/:id', async (req, res) => {
 
         await db.exec('BEGIN');
 
-        await db.prepare('UPDATE invoices SET status=?, paid_amount=?, payment_method=?, notes=?, discount=?, total=? WHERE id=?')
-            .run(newStatus, paid, paymentMethod ?? row.payment_method, notes ?? row.notes, disc, total, req.params.id);
+        await db.prepare('UPDATE invoices SET status=?, paid_amount=?, payment_method=?, notes=?, discount=?, total=? WHERE id=? AND tenant_id=?')
+            .run(newStatus, paid, paymentMethod ?? row.payment_method, notes ?? row.notes, disc, total, req.params.id, tenantId);
 
         if (paymentIncrement > 1e-6) {
             await recordGranularPayment({
@@ -146,14 +149,15 @@ router.put('/:id', async (req, res) => {
                 patientName: row.patient_name,
                 paymentAmount: paymentIncrement,
                 paymentMethod: paymentMethod || 'cash',
-                userId: req.user.id
+                userId: req.user.id,
+                tenantId: tenantId
             });
         }
 
         await db.exec('COMMIT');
 
         logAction(req.user.id, req.user.name, req.user.role, 'UPDATE', 'Billing', `Invoice ${row.invoice_id} updated. Payment: $${paymentIncrement}`, req.ip);
-        const updatedRow = await db.prepare('SELECT * FROM invoices WHERE id = ?').get(req.params.id);
+        const updatedRow = await db.prepare('SELECT * FROM invoices WHERE id = ? AND tenant_id = ?').get(req.params.id, tenantId);
         res.json(fmt(updatedRow));
     } catch (err) {
         await db.exec('ROLLBACK');
@@ -162,10 +166,11 @@ router.put('/:id', async (req, res) => {
 });
 
 router.delete('/:id', async (req, res) => {
+    const tenantId = req.tenantId;
     try {
-        const row = await db.prepare('SELECT * FROM invoices WHERE id = ?').get(req.params.id);
+        const row = await db.prepare('SELECT * FROM invoices WHERE id = ? AND tenant_id = ?').get(req.params.id, tenantId);
         if (!row) return res.status(404).json({ error: 'Not found' });
-        await db.prepare('DELETE FROM invoices WHERE id = ?').run(req.params.id);
+        await db.prepare('DELETE FROM invoices WHERE id = ? AND tenant_id = ?').run(req.params.id, tenantId);
         logAction(req.user.id, req.user.name, req.user.role, 'DELETE', 'Billing', `Invoice ${row.invoice_id} deleted`, req.ip);
         res.json({ message: 'Deleted' });
     } catch (err) {

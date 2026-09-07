@@ -28,15 +28,13 @@ function ActivationContent() {
   }, [keyParam])
 
   useEffect(() => {
-    const url = keyParam ? `/api/license/status?key=${encodeURIComponent(keyParam)}` : "/api/license/status"
-    fetch(url)
-      .then((res) => {
-        if (!res.ok) throw new Error(`HTTP error ${res.status}`)
-        return res.json()
-      })
+    const statusUrl = keyParam ? `/api/license/status?key=${encodeURIComponent(keyParam)}` : "/api/license/status"
+    fetch(statusUrl)
+      .then((res) => res.json())
       .then((data) => {
         setLicenseInfo(data)
-        if (data?.hospitalName) {
+        // Only prefill hospital name if this specific key already has a name, or if user hasn't typed anything
+        if (data.hospitalName && keyParam && data.status === "active") {
           setHospitalName(data.hospitalName)
         }
       })
@@ -55,14 +53,17 @@ function ActivationContent() {
 
     setLoading(true)
     try {
+      const cleanKey = licenseKey.trim().toUpperCase()
+      const chosenAdminEmail = customerEmail.trim() || undefined
       const res = await fetch("/api/license/activate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          licenseKey: licenseKey.trim(),
+          licenseKey: cleanKey,
           hospitalName: hospitalName.trim() || "My Hospital",
           customerName: customerName.trim(),
           customerEmail: customerEmail.trim(),
+          adminEmail: chosenAdminEmail,
         }),
       })
 
@@ -72,8 +73,16 @@ function ActivationContent() {
         throw new Error(data.error || "Activation failed")
       }
 
+      // Persist activated tenant context to browser
+      if (typeof window !== "undefined") {
+        localStorage.setItem("hms_license_key", cleanKey)
+        if (data.tenantId) localStorage.setItem("hms_tenant_id", data.tenantId)
+        if (data.hospitalName) localStorage.setItem("hms_hospital_name", data.hospitalName)
+        if (data.adminEmail) localStorage.setItem("hms_admin_email", data.adminEmail)
+      }
+
       toast.success(data.message || "License activated successfully!")
-      router.push("/login")
+      router.push(`/login?key=${encodeURIComponent(cleanKey)}`)
     } catch (err: any) {
       toast.error(err.message || "Failed to activate license")
     } finally {
@@ -95,8 +104,16 @@ function ActivationContent() {
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || "Failed to start demo")
 
+      if (typeof window !== "undefined") {
+        if (data.licenseKey) localStorage.setItem("hms_license_key", data.licenseKey)
+        if (data.tenantId) localStorage.setItem("hms_tenant_id", data.tenantId)
+        if (data.hospitalName) localStorage.setItem("hms_hospital_name", data.hospitalName)
+        if (data.adminEmail) localStorage.setItem("hms_admin_email", data.adminEmail)
+      }
+
       toast.success(data.message || "Demo mode activated")
-      router.push("/login")
+      const redirectUrl = data.licenseKey ? `/login?key=${encodeURIComponent(data.licenseKey)}` : "/login"
+      router.push(redirectUrl)
     } catch (err: any) {
       toast.error(err.message || "Could not start demo mode")
     } finally {

@@ -19,16 +19,21 @@ const fmt = (v) => ({
     createdAt: v.created_at
 });
 
-// GET vitals for a patient
+// GET vitals for a patient — scoped to tenant
 router.get('/patient/:patientId', async (req, res) => {
+    const tenantId = req.tenantId;
     try {
+        // Verify patient belongs to this tenant
+        const patient = await db.prepare('SELECT id FROM patients WHERE id = ? AND tenant_id = ?').get(req.params.patientId, tenantId);
+        if (!patient) return res.status(404).json({ error: 'Patient not found' });
+
         const rows = await db.prepare(`
             SELECT v.*, u.name as created_by_name 
             FROM vitals v 
             LEFT JOIN users u ON v.created_by = u.id 
-            WHERE v.patient_id = ? 
+            WHERE v.patient_id = ? AND v.tenant_id = ?
             ORDER BY v.created_at DESC
-        `).all(req.params.patientId);
+        `).all(req.params.patientId, tenantId);
         res.json(rows.map(fmt));
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -38,6 +43,7 @@ router.get('/patient/:patientId', async (req, res) => {
 // POST create vitals
 router.post('/', async (req, res) => {
     const { patientId, bp, temperature, pulse, spo2, bloodSugar } = req.body;
+    const tenantId = req.tenantId;
     
     // Only nurse, doctor and admin can create/edit vitals
     if (req.user.role !== 'nurse' && req.user.role !== 'admin' && req.user.role !== 'doctor') {
@@ -49,10 +55,14 @@ router.post('/', async (req, res) => {
     }
 
     try {
+        // Verify patient belongs to this tenant
+        const patient = await db.prepare('SELECT id FROM patients WHERE id = ? AND tenant_id = ?').get(patientId, tenantId);
+        if (!patient) return res.status(404).json({ error: 'Patient not found' });
+
         const id = uuidv4();
         await db.prepare(`
-            INSERT INTO vitals (id, patient_id, bp, temperature, pulse, spo2, blood_sugar, created_by, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO vitals (id, patient_id, bp, temperature, pulse, spo2, blood_sugar, created_by, created_at, tenant_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(
             id, 
             patientId, 
@@ -62,7 +72,8 @@ router.post('/', async (req, res) => {
             spo2 || null, 
             bloodSugar || null, 
             req.user.id, 
-            new Date().toISOString()
+            new Date().toISOString(),
+            tenantId
         );
 
         logAction(req.user.id, req.user.name, req.user.role, 'CREATE', 'Vitals', `Vitals recorded for patient ${patientId}`, req.ip);

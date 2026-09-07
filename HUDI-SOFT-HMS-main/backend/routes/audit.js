@@ -6,8 +6,10 @@ const router = express.Router();
 router.use(authenticate);
 
 router.get('/', async (req, res) => {
+    const tenantId = req.tenantId;
     const { module, userId, startDate, endDate, limit } = req.query;
-    let q = 'SELECT * FROM audit_logs WHERE 1=1'; const p = [];
+    let q = 'SELECT * FROM audit_logs WHERE tenant_id = ?';
+    const p = [tenantId];
     if (module) { q += ' AND module = ?'; p.push(module); }
     if (userId) { q += ' AND user_id = ?'; p.push(userId); }
     if (startDate) { q += ' AND timestamp >= ?'; p.push(startDate); }

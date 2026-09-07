@@ -12,39 +12,40 @@ router.use(authorize(['receptionist', 'admin', 'doctor']));
 router.get('/pending/:patientId', async (req, res) => {
     try {
         const patientId = req.params.patientId;
+        const tenantId = req.tenantId;
 
         // 1. Get unpaid invoices
         const unpaidInvoices = await db.prepare(`
             SELECT * FROM invoices 
-            WHERE patient_id = ? AND status IN ('unpaid', 'partial')
+            WHERE patient_id = ? AND tenant_id = ? AND status IN ('unpaid', 'partial')
             ORDER BY date DESC
-        `).all(patientId);
+        `).all(patientId, tenantId);
 
         // 2. Get pending prescriptions (that don't have an invoice yet)
         const pendingRxs = await db.prepare(`
             SELECT * FROM prescriptions 
-            WHERE patient_id = ? AND status = 'pending'
+            WHERE patient_id = ? AND tenant_id = ? AND status = 'pending'
             ORDER BY date DESC
-        `).all(patientId);
+        `).all(patientId, tenantId);
 
         // 3. Get ordered lab tests (that might not be in an invoice yet, though usually are)
         const pendingLabs = await db.prepare(`
             SELECT * FROM lab_tests 
-            WHERE patient_id = ? AND status = 'ordered' AND (is_billed = 0 OR is_billed IS NULL)
+            WHERE patient_id = ? AND tenant_id = ? AND status = 'ordered' AND (is_billed = 0 OR is_billed IS NULL)
             ORDER BY ordered_at DESC
-        `).all(patientId);
+        `).all(patientId, tenantId);
 
         // 4. Get pending OPD visits (Consultation Fees)
         const pendingVisits = await db.prepare(`
             SELECT v.*, d.consultation_fee 
             FROM opd_visits v
             LEFT JOIN doctors d ON v.doctor_id = d.id
-            WHERE v.patient_id = ? AND (v.is_billed = 0 OR v.is_billed IS NULL)
+            WHERE v.patient_id = ? AND v.tenant_id = ? AND (v.is_billed = 0 OR v.is_billed IS NULL)
             ORDER BY v.created_at DESC
-        `).all(patientId);
+        `).all(patientId, tenantId);
 
-        // Fetch current medicine prices for prescriptions
-        const allMeds = await db.prepare('SELECT id, name, selling_price FROM medicines').all();
+        // Fetch current medicine prices for prescriptions — scoped to tenant
+        const allMeds = await db.prepare('SELECT id, name, selling_price FROM medicines WHERE tenant_id = ?').all(tenantId);
         const medPriceMap = {};
         if (allMeds && Array.isArray(allMeds)) {
             allMeds.forEach(m => {
@@ -144,26 +145,27 @@ router.get('/pending/:patientId', async (req, res) => {
 router.get('/history/:patientId', async (req, res) => {
     try {
         const patientId = req.params.patientId;
+        const tenantId = req.tenantId;
         const invoices = await db.prepare(`
             SELECT * FROM invoices 
-            WHERE patient_id = ? 
+            WHERE patient_id = ? AND tenant_id = ?
             ORDER BY date DESC 
             LIMIT 10
-        `).all(patientId);
+        `).all(patientId, tenantId);
 
         const prescriptions = await db.prepare(`
             SELECT * FROM prescriptions 
-            WHERE patient_id = ? 
+            WHERE patient_id = ? AND tenant_id = ?
             ORDER BY date DESC 
             LIMIT 5
-        `).all(patientId);
+        `).all(patientId, tenantId);
 
         const labTests = await db.prepare(`
             SELECT * FROM lab_tests 
-            WHERE patient_id = ? 
+            WHERE patient_id = ? AND tenant_id = ?
             ORDER BY ordered_at DESC 
             LIMIT 5
-        `).all(patientId);
+        `).all(patientId, tenantId);
 
         res.json({
             invoices: invoices.map(inv => ({ ...inv, items: JSON.parse(inv.items || '[]') })),
@@ -215,8 +217,10 @@ router.post('/checkout', async (req, res) => {
         let actualPatientId = patientId || null;
         let actualPatientName = patientName || 'Walk-In Patient';
 
+        const tenantId = req.tenantId;
+
         if (actualPatientId) {
-            const p = await db.prepare('SELECT first_name, last_name FROM patients WHERE id = ?').get(actualPatientId);
+            const p = await db.prepare('SELECT first_name, last_name FROM patients WHERE id = ? AND tenant_id = ?').get(actualPatientId, tenantId);
             if (p) actualPatientName = `${p.first_name} ${p.last_name}`;
         }
 
@@ -310,24 +314,24 @@ router.post('/checkout', async (req, res) => {
         if (paidAmount >= total) invoiceStatus = 'paid';
         else if (paidAmount > 0) invoiceStatus = 'partial';
 
-        await db.prepare(`INSERT INTO invoices (id, invoice_id, patient_id, patient_name, date, due_date, items, subtotal, tax, discount, total, paid_amount, status, payment_method, notes)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+        await db.prepare(`INSERT INTO invoices (id, invoice_id, patient_id, patient_name, date, due_date, items, subtotal, tax, discount, total, paid_amount, status, payment_method, notes, tenant_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
             .run(
                 invoiceDbId, invoiceUID, actualPatientId, actualPatientName,
                 today, today, JSON.stringify(invoiceItems), subtotal, tax, disc,
                 total, paidAmount, invoiceStatus, paymentMethod || 'cash',
-                notes || 'POS Transaction'
+                notes || 'POS Transaction', tenantId
             );
 
         // 5. Handle Insurance Claim
         if (insuranceInfo && actualPatientId) {
             const claimId = `CLM-${uuidv4().slice(0, 8).toUpperCase()}`;
-            await db.prepare(`INSERT INTO insurance_claims (id, claim_id, patient_id, patient_name, insurance_company, policy_number, invoice_id, claim_amount, status)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+            await db.prepare(`INSERT INTO insurance_claims (id, claim_id, patient_id, patient_name, insurance_company, policy_number, invoice_id, claim_amount, status, tenant_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
                 .run(
                     uuidv4(), claimId, actualPatientId, actualPatientName,
                     insuranceInfo.company, insuranceInfo.policyNumber, invoiceDbId,
-                    insuranceInfo.claimAmount, 'submitted'
+                    insuranceInfo.claimAmount, 'submitted', tenantId
                 );
         }
 
@@ -339,7 +343,8 @@ router.post('/checkout', async (req, res) => {
                 patientName: actualPatientName,
                 paymentAmount: paidAmount,
                 paymentMethod: paymentMethod || 'cash',
-                userId: req.user.id
+                userId: req.user.id,
+                tenantId
             });
         }
 
@@ -350,7 +355,7 @@ router.post('/checkout', async (req, res) => {
                 throw new Error('Credit Customer ID is required for credit transactions');
             }
 
-            const customer = await db.prepare('SELECT * FROM credit_customers WHERE id = ?').get(creditCustomerId);
+            const customer = await db.prepare('SELECT * FROM credit_customers WHERE id = ? AND (tenant_id = ? OR tenant_id IS NULL)').get(creditCustomerId, tenantId);
             if (!customer) throw new Error('Credit Customer not found');
 
             // ── Credit Limit Check ──────────────────────────────────
@@ -409,7 +414,7 @@ router.post('/checkout', async (req, res) => {
                 throw new Error('Employee ID is required for employee credit transactions');
             }
 
-            const employee = await db.prepare('SELECT * FROM employees WHERE id = ?').get(creditCustomerId);
+            const employee = await db.prepare('SELECT * FROM employees WHERE id = ? AND (tenant_id = ? OR tenant_id IS NULL)').get(creditCustomerId, tenantId);
             if (!employee) throw new Error('Employee not found');
 
             const remainingBalance = total - paidAmount;

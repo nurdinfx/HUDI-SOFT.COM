@@ -35,7 +35,7 @@ async function initTables() {
 }
 initTables();
 
-// ── Categories ───────────────────────────────────────────────────────────
+// ── Categories (shared / global — not tenant scoped) ─────────────────────────
 router.get('/categories', async (req, res) => {
     try {
         const rows = await db.prepare('SELECT * FROM lab_categories ORDER BY name').all();
@@ -74,16 +74,18 @@ const fmt = (t) => ({
     ward: t.ward_name || t.ward, bedNumber: t.bed_number
 });
 
+// ── Stats — tenant scoped ─────────────────────────────────────────────────────
 router.get('/stats', async (req, res) => {
     const today = new Date().toISOString().split('T')[0];
+    const tenantId = req.tenantId;
     try {
         const stats = {
-            totalToday: (await db.prepare("SELECT COUNT(*) as c FROM lab_tests WHERE ordered_at::text LIKE ?").get(today + '%')).c,
-            pending: (await db.prepare("SELECT COUNT(*) as c FROM lab_tests WHERE status = 'ordered'").get()).c,
-            inProgress: (await db.prepare("SELECT COUNT(*) as c FROM lab_tests WHERE status IN ('sample-collected', 'in-progress')").get()).c,
-            completed: (await db.prepare("SELECT COUNT(*) as c FROM lab_tests WHERE status = 'completed' AND ordered_at::text LIKE ?").get(today + '%')).c,
-            critical: (await db.prepare("SELECT COUNT(*) as c FROM lab_tests WHERE critical_flag = 1").get()).c,
-            revenueToday: (await db.prepare("SELECT SUM(cost) as s FROM lab_tests WHERE ordered_at::text LIKE ?").get(today + '%')).s || 0
+            totalToday: (await db.prepare("SELECT COUNT(*) as c FROM lab_tests WHERE ordered_at::text LIKE ? AND tenant_id = ?").get(today + '%', tenantId)).c,
+            pending: (await db.prepare("SELECT COUNT(*) as c FROM lab_tests WHERE status = 'ordered' AND tenant_id = ?").get(tenantId)).c,
+            inProgress: (await db.prepare("SELECT COUNT(*) as c FROM lab_tests WHERE status IN ('sample-collected', 'in-progress') AND tenant_id = ?").get(tenantId)).c,
+            completed: (await db.prepare("SELECT COUNT(*) as c FROM lab_tests WHERE status = 'completed' AND ordered_at::text LIKE ? AND tenant_id = ?").get(today + '%', tenantId)).c,
+            critical: (await db.prepare("SELECT COUNT(*) as c FROM lab_tests WHERE critical_flag = 1 AND tenant_id = ?").get(tenantId)).c,
+            revenueToday: (await db.prepare("SELECT SUM(cost) as s FROM lab_tests WHERE ordered_at::text LIKE ? AND tenant_id = ?").get(today + '%', tenantId)).s || 0
         };
         res.json(stats);
     } catch (err) {
@@ -91,9 +93,11 @@ router.get('/stats', async (req, res) => {
     }
 });
 
+// ── Catalog — scoped per tenant ───────────────────────────────────────────────
 router.get('/catalog', async (req, res) => {
+    const tenantId = req.tenantId;
     try {
-        const rows = await db.prepare('SELECT * FROM lab_catalog ORDER BY category, name').all();
+        const rows = await db.prepare('SELECT * FROM lab_catalog WHERE tenant_id = ? ORDER BY category, name').all(tenantId);
         res.json(rows.map(r => ({
             id: r.id, name: r.name, category: r.category,
             sampleType: r.sample_type, normalRange: r.normal_range, cost: r.cost
@@ -107,10 +111,11 @@ router.post('/catalog', async (req, res) => {
     const { name, category, sampleType, normalRange, cost } = req.body;
     if (!name || !category) return res.status(400).json({ error: 'name and category required' });
 
+    const tenantId = req.tenantId;
     const id = uuidv4();
     try {
-        await db.prepare('INSERT INTO lab_catalog (id, name, category, sample_type, normal_range, cost) VALUES (?, ?, ?, ?, ?, ?)')
-            .run(id, name, category, sampleType || 'Blood', normalRange || null, cost || 0);
+        await db.prepare('INSERT INTO lab_catalog (id, name, category, sample_type, normal_range, cost, tenant_id) VALUES (?, ?, ?, ?, ?, ?, ?)')
+            .run(id, name, category, sampleType || 'Blood', normalRange || null, cost || 0, tenantId);
 
         logAction(req.user.id, req.user.name, req.user.role, 'CREATE', 'Laboratory', `Catalog item added: ${name}`, req.ip);
         res.status(201).json({ id, name, category, sampleType, normalRange, cost });
@@ -121,7 +126,11 @@ router.post('/catalog', async (req, res) => {
 
 router.put('/catalog/:id', async (req, res) => {
     const { name, category, sampleType, normalRange, cost } = req.body;
+    const tenantId = req.tenantId;
     try {
+        const existing = await db.prepare('SELECT * FROM lab_catalog WHERE id = ? AND tenant_id = ?').get(req.params.id, tenantId);
+        if (!existing) return res.status(404).json({ error: 'Catalog item not found' });
+
         await db.prepare('UPDATE lab_catalog SET name=?, category=?, sample_type=?, normal_range=?, cost=? WHERE id=?')
             .run(name, category, sampleType, normalRange, cost, req.params.id);
 
@@ -133,8 +142,9 @@ router.put('/catalog/:id', async (req, res) => {
 });
 
 router.delete('/catalog/:id', async (req, res) => {
+    const tenantId = req.tenantId;
     try {
-        const row = await db.prepare('SELECT name FROM lab_catalog WHERE id = ?').get(req.params.id);
+        const row = await db.prepare('SELECT name FROM lab_catalog WHERE id = ? AND tenant_id = ?').get(req.params.id, tenantId);
         if (!row) return res.status(404).json({ error: 'Item not found' });
 
         await db.prepare('DELETE FROM lab_catalog WHERE id = ?').run(req.params.id);
@@ -145,16 +155,18 @@ router.delete('/catalog/:id', async (req, res) => {
     }
 });
 
+// ── Lab Tests List — tenant scoped ───────────────────────────────────────────
 router.get('/', async (req, res) => {
     const { search, status, priority, patientId, admissionId, critical } = req.query;
+    const tenantId = req.tenantId;
     let q = `
         SELECT lt.*, a.ward, a.bed_number, w.name as ward_name
         FROM lab_tests lt
         LEFT JOIN ipd_admissions a ON lt.admission_id = a.id
         LEFT JOIN wards w ON a.ward = w.id
-        WHERE 1=1
+        WHERE lt.tenant_id = ?
     `;
-    const p = [];
+    const p = [tenantId];
     if (search) {
         q += ` AND (lt.patient_name LIKE ? OR lt.test_name LIKE ? OR lt.test_id LIKE ?)`;
         const s = `%${search}%`;
@@ -175,8 +187,9 @@ router.get('/', async (req, res) => {
 });
 
 router.get('/:id', async (req, res) => {
+    const tenantId = req.tenantId;
     try {
-        const row = await db.prepare('SELECT * FROM lab_tests WHERE id = ?').get(req.params.id);
+        const row = await db.prepare('SELECT * FROM lab_tests WHERE id = ? AND tenant_id = ?').get(req.params.id, tenantId);
         if (!row) return res.status(404).json({ error: 'Lab test not found' });
         res.json(fmt(row));
     } catch (err) {
@@ -188,15 +201,16 @@ router.post('/', async (req, res) => {
     const { patientId, admissionId, doctorId, testName, testCategory, sampleType, priority, cost, clinicalNotes } = req.body;
     if (!patientId || !testName || !testCategory) return res.status(400).json({ error: 'patientId, testName, testCategory required' });
 
+    const tenantId = req.tenantId;
     try {
-        const patient = await db.prepare('SELECT * FROM patients WHERE id = ?').get(patientId);
+        const patient = await db.prepare('SELECT * FROM patients WHERE id = ? AND tenant_id = ?').get(patientId, tenantId);
         if (!patient) return res.status(404).json({ error: 'Patient not found' });
         
         // Safely handle doctorId - empty string is not a valid UUID
         const safeDoctorId = (doctorId && doctorId.trim() !== '') ? doctorId : null;
-        const doctor = safeDoctorId ? await db.prepare('SELECT * FROM doctors WHERE id = ?').get(safeDoctorId) : null;
+        const doctor = safeDoctorId ? await db.prepare('SELECT * FROM doctors WHERE id = ? AND tenant_id = ?').get(safeDoctorId, tenantId) : null;
 
-        const maxIdData = await db.prepare('SELECT test_id FROM lab_tests ORDER BY test_id DESC LIMIT 1').get();
+        const maxIdData = await db.prepare('SELECT test_id FROM lab_tests WHERE tenant_id = ? ORDER BY test_id DESC LIMIT 1').get(tenantId);
         let nextNumber = 1;
         if (maxIdData && maxIdData.test_id) {
             const lastNumber = parseInt(maxIdData.test_id.split('-')[1]);
@@ -207,7 +221,7 @@ router.post('/', async (req, res) => {
 
         let invoiceId = null;
         if (cost > 0) {
-            const maxInvData = await db.prepare("SELECT invoice_id FROM invoices WHERE invoice_id LIKE 'INV-%' AND invoice_id NOT LIKE 'INV-POS-%' AND invoice_id NOT LIKE 'INV-OPD-%' ORDER BY LENGTH(invoice_id) DESC, invoice_id DESC LIMIT 1").get();
+            const maxInvData = await db.prepare("SELECT invoice_id FROM invoices WHERE invoice_id LIKE 'INV-%' AND invoice_id NOT LIKE 'INV-POS-%' AND invoice_id NOT LIKE 'INV-OPD-%' AND tenant_id = ? ORDER BY LENGTH(invoice_id) DESC, invoice_id DESC LIMIT 1").get(tenantId);
             let nextInvNumber = 1;
             if (maxInvData && maxInvData.invoice_id) {
                 const parts = maxInvData.invoice_id.split('-');
@@ -218,24 +232,24 @@ router.post('/', async (req, res) => {
             const randomSuffix = Math.random().toString(36).substring(2, 6).toUpperCase();
             const invIdStr = `INV-${String(nextInvNumber).padStart(4, '0')}-${randomSuffix}`;
             const invUuid = uuidv4();
-            const settings = await db.prepare('SELECT tax_rate FROM hospital_settings WHERE id = 1').get();
+            const settings = await db.prepare('SELECT tax_rate FROM hospital_settings WHERE tenant_id = ?').get(tenantId);
             const taxRate = settings ? settings.tax_rate : 10;
             const tax = cost * (taxRate / 100);
             const total = cost + tax;
             const items = [{ description: `Lab Test: ${testName}`, category: 'Laboratory', quantity: 1, unitPrice: cost, total: cost }];
 
-            await db.prepare(`INSERT INTO invoices (id, invoice_id, patient_id, patient_name, date, due_date, items, subtotal, tax, discount, total, paid_amount, status)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-                .run(invUuid, invIdStr, patientId, `${patient.first_name} ${patient.last_name}`, new Date().toISOString().split('T')[0], new Date().toISOString().split('T')[0], JSON.stringify(items), cost, tax, 0, total, 0, 'unpaid');
+            await db.prepare(`INSERT INTO invoices (id, invoice_id, patient_id, patient_name, date, due_date, items, subtotal, tax, discount, total, paid_amount, status, tenant_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+                .run(invUuid, invIdStr, patientId, `${patient.first_name} ${patient.last_name}`, new Date().toISOString().split('T')[0], new Date().toISOString().split('T')[0], JSON.stringify(items), cost, tax, 0, total, 0, 'unpaid', tenantId);
             invoiceId = invUuid;
         }
 
         // Safely handle admissionId - empty string is not valid UUID
         const safeAdmissionId = (admissionId && admissionId.trim() !== '') ? admissionId : null;
 
-        await db.prepare(`INSERT INTO lab_tests (id, test_id, patient_id, patient_name, doctor_id, doctor_name, test_name, test_category, sample_type, priority, status, ordered_at, cost, clinical_notes, is_billed, invoice_id, admission_id, ordered_by)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-            .run(id, testId, patientId, `${patient.first_name} ${patient.last_name}`, safeDoctorId, doctor ? doctor.name : '', testName, testCategory, sampleType || 'Blood', priority || 'normal', 'ordered', new Date().toISOString(), cost || 0, clinicalNotes || null, invoiceId ? 1 : 0, invoiceId, safeAdmissionId, req.user.name);
+        await db.prepare(`INSERT INTO lab_tests (id, test_id, patient_id, patient_name, doctor_id, doctor_name, test_name, test_category, sample_type, priority, status, ordered_at, cost, clinical_notes, is_billed, invoice_id, admission_id, ordered_by, tenant_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+            .run(id, testId, patientId, `${patient.first_name} ${patient.last_name}`, safeDoctorId, doctor ? doctor.name : '', testName, testCategory, sampleType || 'Blood', priority || 'normal', 'ordered', new Date().toISOString(), cost || 0, clinicalNotes || null, invoiceId ? 1 : 0, invoiceId, safeAdmissionId, req.user.name, tenantId);
 
         logAction(req.user.id, req.user.name, req.user.role, 'CREATE', 'Laboratory', `Lab test ordered: ${testName} (ID: ${testId})`, req.ip);
         const row = await db.prepare(`
@@ -254,8 +268,9 @@ router.post('/', async (req, res) => {
 
 router.put('/:id/collect', async (req, res) => {
     const { collectedBy, barcode } = req.body;
+    const tenantId = req.tenantId;
     try {
-        const row = await db.prepare('SELECT * FROM lab_tests WHERE id = ?').get(req.params.id);
+        const row = await db.prepare('SELECT * FROM lab_tests WHERE id = ? AND tenant_id = ?').get(req.params.id, tenantId);
         if (!row) return res.status(404).json({ error: 'Not found' });
 
         await db.prepare('UPDATE lab_tests SET status=?, sample_collected_at=?, sample_collected_by=?, sample_barcode=? WHERE id=?')
@@ -272,8 +287,9 @@ router.put('/:id/collect', async (req, res) => {
 });
 
 router.put('/:id', async (req, res) => {
+    const tenantId = req.tenantId;
     try {
-        const row = await db.prepare('SELECT lt.* FROM lab_tests lt WHERE lt.id = ?').get(req.params.id);
+        const row = await db.prepare('SELECT lt.* FROM lab_tests lt WHERE lt.id = ? AND lt.tenant_id = ?').get(req.params.id, tenantId);
         if (!row) return res.status(404).json({ error: 'Not found' });
         const { status, results, normalRange, completedAt, reportUrl, priority, criticalFlag, clinicalNotes, technicianId } = req.body;
 
@@ -318,19 +334,20 @@ router.put('/:id', async (req, res) => {
 });
 
 router.delete('/:id', async (req, res) => {
+    const tenantId = req.tenantId;
     try {
-        const row = await db.prepare('SELECT * FROM lab_tests WHERE id = ?').get(req.params.id);
+        const row = await db.prepare('SELECT * FROM lab_tests WHERE id = ? AND tenant_id = ?').get(req.params.id, tenantId);
         if (!row) return res.status(404).json({ error: 'Not found' });
 
         // Delete associated invoice if it exists and is unpaid
         if (row.invoice_id) {
-            const invoice = await db.prepare('SELECT status FROM invoices WHERE id = ?').get(row.invoice_id);
+            const invoice = await db.prepare('SELECT status FROM invoices WHERE id = ? AND tenant_id = ?').get(row.invoice_id, tenantId);
             if (invoice && invoice.status === 'unpaid') {
-                await db.prepare('DELETE FROM invoices WHERE id = ?').run(row.invoice_id);
+                await db.prepare('DELETE FROM invoices WHERE id = ? AND tenant_id = ?').run(row.invoice_id, tenantId);
             }
         }
 
-        await db.prepare('DELETE FROM lab_tests WHERE id = ?').run(req.params.id);
+        await db.prepare('DELETE FROM lab_tests WHERE id = ? AND tenant_id = ?').run(req.params.id, tenantId);
         logAction(req.user.id, req.user.name, req.user.role, 'DELETE', 'Laboratory', `Lab test deleted: ${row.test_id}`, req.ip);
         res.json({ message: 'Deleted' });
     } catch (err) {

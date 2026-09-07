@@ -7,14 +7,15 @@ router.use(authenticate);
 
 // GET all payments (income from account_entries linked to invoices)
 router.get('/', async (req, res) => {
+    const tenantId = req.tenantId;
     const { method, startDate, endDate, patientId } = req.query;
     let q = `
         SELECT ae.*, i.patient_name, i.total as invoice_total
         FROM account_entries ae
         LEFT JOIN invoices i ON ae.reference_id = i.invoice_id
-        WHERE ae.type = 'income'
+        WHERE ae.type = 'income' AND ae.tenant_id = ?
     `;
-    const p = [];
+    const p = [tenantId];
 
     if (method) { q += ' AND ae.payment_method = ?'; p.push(method); }
     if (startDate) { q += ' AND ae.date >= ?'; p.push(startDate); }

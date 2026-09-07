@@ -11,8 +11,9 @@ router.use(authenticate);
 
 // GET /api/hr/employees - List all employees
 router.get('/employees', async (req, res) => {
+    const tenantId = req.tenantId;
     try {
-        const employees = await db.prepare('SELECT * FROM employees ORDER BY full_name ASC').all();
+        const employees = await db.prepare('SELECT * FROM employees WHERE tenant_id = ? ORDER BY full_name ASC').all(tenantId);
         res.json(employees);
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -22,6 +23,7 @@ router.get('/employees', async (req, res) => {
 // POST /api/hr/employees - Register new employee
 router.post('/employees', async (req, res) => {
     const { fullName, phone, email, address, position, department, base_salary, payment_method } = req.body;
+    const tenantId = req.tenantId;
     
     if (!fullName) return res.status(400).json({ error: 'Full Name is required' });
 
@@ -30,13 +32,13 @@ router.post('/employees', async (req, res) => {
         const employeeUID = `EMP-${Math.floor(1000 + Math.random() * 9000)}`;
         
         await db.prepare(`
-            INSERT INTO employees (id, employee_id, full_name, phone, email, address, position, department, base_salary, payment_method)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `).run(id, employeeUID, fullName, phone, email, address, position, department, base_salary || 0, payment_method || 'cash');
+            INSERT INTO employees (id, employee_id, full_name, phone, email, address, position, department, base_salary, payment_method, tenant_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(id, employeeUID, fullName, phone, email, address, position, department, base_salary || 0, payment_method || 'cash', tenantId);
 
         logAction(req.user.id, req.user.name, req.user.role, 'CREATE', 'HR', `Registered employee: ${fullName}`, req.ip);
         
-        const newEmployee = await db.prepare('SELECT * FROM employees WHERE id = ?').get(id);
+        const newEmployee = await db.prepare('SELECT * FROM employees WHERE id = ? AND tenant_id = ?').get(id, tenantId);
         res.status(201).json(newEmployee);
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -45,8 +47,9 @@ router.post('/employees', async (req, res) => {
 
 // GET /api/hr/employees/:id - Get profile, ledger, and history
 router.get('/employees/:id', async (req, res) => {
+    const tenantId = req.tenantId;
     try {
-        const employee = await db.prepare('SELECT * FROM employees WHERE id = ?').get(req.params.id);
+        const employee = await db.prepare('SELECT * FROM employees WHERE id = ? AND tenant_id = ?').get(req.params.id, tenantId);
         if (!employee) return res.status(404).json({ error: 'Employee not found' });
 
         const ledger = await db.prepare('SELECT * FROM employee_ledger WHERE employee_id = ? ORDER BY date DESC, created_at DESC').all(req.params.id);
@@ -64,6 +67,7 @@ router.get('/employees/:id', async (req, res) => {
 // POST /api/hr/expenses - Record an advance or expense
 router.post('/expenses', async (req, res) => {
     const { employeeId, type, amount, date, notes } = req.body;
+    const tenantId = req.tenantId;
     
     if (!employeeId || !amount || !type) {
         return res.status(400).json({ error: 'Missing required fields' });
@@ -72,7 +76,7 @@ router.post('/expenses', async (req, res) => {
     try {
         await db.exec('BEGIN');
 
-        const employee = await db.prepare('SELECT * FROM employees WHERE id = ?').get(employeeId);
+        const employee = await db.prepare('SELECT * FROM employees WHERE id = ? AND tenant_id = ?').get(employeeId, tenantId);
         if (!employee) throw new Error('Employee not found');
 
         const expenseId = uuidv4();
@@ -81,16 +85,16 @@ router.post('/expenses', async (req, res) => {
 
         // 1. Record expense
         await db.prepare(`
-            INSERT INTO employee_expenses (id, employee_id, type, amount, date, notes, status, recorded_by)
-            VALUES (?, ?, ?, ?, ?, ?, 'pending', ?)
-        `).run(expenseId, employeeId, type, amt, expDate, notes, req.user.id);
+            INSERT INTO employee_expenses (id, employee_id, type, amount, date, notes, status, recorded_by, tenant_id)
+            VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?)
+        `).run(expenseId, employeeId, type, amt, expDate, notes, req.user.id, tenantId);
 
         // 2. Add to ledger (as a debit - deduction)
         // Note: Running balance calculation is simplified here, in a real system we'd calculate properly
         await db.prepare(`
-            INSERT INTO employee_ledger (id, employee_id, date, description, type, amount, reference_id)
-            VALUES (?, ?, ?, ?, 'debit', ?, ?)
-        `).run(uuidv4(), employeeId, expDate, `${type.charAt(0).toUpperCase() + type.slice(1)}: ${notes || ''}`, amt, expenseId);
+            INSERT INTO employee_ledger (id, employee_id, date, description, type, amount, reference_id, tenant_id)
+            VALUES (?, ?, ?, ?, 'debit', ?, ?, ?)
+        `).run(uuidv4(), employeeId, expDate, `${type.charAt(0).toUpperCase() + type.slice(1)}: ${notes || ''}`, amt, expenseId, tenantId);
 
         // Update employee's outstanding balance
         await db.prepare(`
@@ -120,8 +124,8 @@ router.put('/employees/:id', async (req, res) => {
             UPDATE employees 
             SET full_name = ?, phone = ?, email = ?, position = ?, department = ?, 
                 base_salary = ?, payment_method = ?, address = ?, status = ?
-            WHERE id = ?
-        `).run(fullName, phone, email, position, department, base_salary, payment_method, address, status || 'active', id);
+            WHERE id = ? AND tenant_id = ?
+        `).run(fullName, phone, email, position, department, base_salary, payment_method, address, status || 'active', id, tenantId);
         
         res.json({ message: "Employee updated successfully" });
     } catch (err) {
@@ -134,10 +138,11 @@ router.put('/employees/:id', async (req, res) => {
 router.delete('/employees/:id', async (req, res) => {
     try {
         const { id } = req.params;
+        const tenantId = req.tenantId;
         // Also delete related records
         await db.prepare("DELETE FROM employee_ledger WHERE employee_id = ?").run(id);
         await db.prepare("DELETE FROM employee_expenses WHERE employee_id = ?").run(id);
-        await db.prepare("DELETE FROM employees WHERE id = ?").run(id);
+        await db.prepare("DELETE FROM employees WHERE id = ? AND tenant_id = ?").run(id, tenantId);
         res.json({ message: "Employee deleted successfully" });
     } catch (err) {
         console.error('❌ Delete Employee Error:', err.message);
@@ -159,7 +164,7 @@ router.post('/employees/:id/repay', async (req, res) => {
     try {
         await db.exec('BEGIN');
 
-        const employee = await db.prepare('SELECT * FROM employees WHERE id = ?').get(id);
+        const employee = await db.prepare('SELECT * FROM employees WHERE id = ? AND tenant_id = ?').get(id, tenantId);
         if (!employee) throw new Error('Employee not found');
 
         const repayAmt = parseFloat(amount);
@@ -177,18 +182,18 @@ router.post('/employees/:id/repay', async (req, res) => {
 
         const repaymentId = uuidv4();
         await db.prepare(`
-            INSERT INTO employee_ledger (id, employee_id, date, description, type, amount, reference_id)
-            VALUES (?, ?, ?, ?, 'credit', ?, ?)
-        `).run(repaymentId, id, repayDate, `Advance Repayment: ${notes || 'Manual partial payment'}`, repayAmt, repaymentId);
+            INSERT INTO employee_ledger (id, employee_id, date, description, type, amount, reference_id, tenant_id)
+            VALUES (?, ?, ?, ?, 'credit', ?, ?, ?)
+        `).run(repaymentId, id, repayDate, `Advance Repayment: ${notes || 'Manual partial payment'}`, repayAmt, repaymentId, tenantId);
 
         // Mark incoming cash as income
         await db.prepare(`
-            INSERT INTO account_entries (id, date, type, category, description, amount, payment_method, department, status, user_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'completed', ?)
+            INSERT INTO account_entries (id, date, type, category, description, amount, payment_method, department, status, user_id, tenant_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'completed', ?, ?)
         `).run(
             uuidv4(), repayDate, 'income', 'Staff Repayment',
             `Advance Repayment - ${employee.full_name}`,
-            repayAmt, method || 'cash', employee.department || 'HR', req.user.id
+            repayAmt, method || 'cash', employee.department || 'HR', req.user.id, tenantId
         );
 
         // Since they repaid directly, we can optionally credit an equal amount against their pending expenses
@@ -210,10 +215,11 @@ router.post('/employees/:id/repay', async (req, res) => {
 
 // GET /api/hr/payroll/summary/:monthYear - Get payroll summary for a month
 router.get('/payroll/summary/:monthYear', async (req, res) => {
+    const tenantId = req.tenantId;
     try {
         const monthYear = req.params.monthYear; // YYYY-MM
         
-        const employees = await db.prepare("SELECT * FROM employees WHERE status = 'active'").all();
+        const employees = await db.prepare("SELECT * FROM employees WHERE status = 'active' AND tenant_id = ?").all(tenantId);
         const summary = await Promise.all(employees.map(async (emp) => {
             // Deductions are now solely based on their explicit outstanding_balance
             const totalDeductions = parseFloat(emp.outstanding_balance || 0);
@@ -239,13 +245,14 @@ router.get('/payroll/summary/:monthYear', async (req, res) => {
 // POST /api/hr/payroll/process - Mark payroll as paid
 router.post('/payroll/process', async (req, res) => {
     const { employeeId, monthYear, paymentDate } = req.body;
+    const tenantId = req.tenantId;
 
     if (!employeeId || !monthYear) return res.status(400).json({ error: 'Missing required fields' });
 
     try {
         await db.exec('BEGIN');
 
-        const employee = await db.prepare('SELECT * FROM employees WHERE id = ?').get(employeeId);
+        const employee = await db.prepare('SELECT * FROM employees WHERE id = ? AND tenant_id = ?').get(employeeId, tenantId);
         if (!employee) throw new Error('Employee not found');
 
         // Check if already paid
@@ -260,9 +267,9 @@ router.post('/payroll/process', async (req, res) => {
 
         // 1. Create payroll record
         await db.prepare(`
-            INSERT INTO employee_payroll (id, employee_id, month_year, base_salary, total_deductions, final_salary, payment_status, payment_date)
-            VALUES (?, ?, ?, ?, ?, ?, 'paid', ?)
-        `).run(payrollId, employeeId, monthYear, employee.base_salary, totalDeductions, finalSalary, payDate);
+            INSERT INTO employee_payroll (id, employee_id, month_year, base_salary, total_deductions, final_salary, payment_status, payment_date, tenant_id)
+            VALUES (?, ?, ?, ?, ?, ?, 'paid', ?, ?)
+        `).run(payrollId, employeeId, monthYear, employee.base_salary, totalDeductions, finalSalary, payDate, tenantId);
 
         // 2. Mark pending expenses as deducted and reset outstanding_balance
         await db.prepare(`
@@ -279,18 +286,18 @@ router.post('/payroll/process', async (req, res) => {
 
         // 3. Add to ledger (as a credit - salary payout)
         await db.prepare(`
-            INSERT INTO employee_ledger (id, employee_id, date, description, type, amount, reference_id)
-            VALUES (?, ?, ?, ?, 'credit', ?, ?)
-        `).run(uuidv4(), employeeId, payDate, `Salary Payment: ${monthYear}`, 'credit', finalSalary, payrollId);
+            INSERT INTO employee_ledger (id, employee_id, date, description, type, amount, reference_id, tenant_id)
+            VALUES (?, ?, ?, ?, 'credit', ?, ?, ?)
+        `).run(uuidv4(), employeeId, payDate, `Salary Payment: ${monthYear}`, 'credit', finalSalary, payrollId, tenantId);
 
         // 4. Record as expense in main accounts
         await db.prepare(`
-            INSERT INTO account_entries (id, date, type, category, description, amount, payment_method, department, status, user_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'completed', ?)
+            INSERT INTO account_entries (id, date, type, category, description, amount, payment_method, department, status, user_id, tenant_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'completed', ?, ?)
         `).run(
             uuidv4(), payDate, 'expense', 'Salary',
             `Salary Payment - ${employee.full_name} (${monthYear})`,
-            finalSalary, employee.payment_method, employee.department, req.user.id
+            finalSalary, employee.payment_method, employee.department, req.user.id, tenantId
         );
 
         await db.exec('COMMIT');
@@ -306,17 +313,19 @@ router.post('/payroll/process', async (req, res) => {
 
 // GET /api/hr/stats - HR Dashboard stats
 router.get('/stats', async (req, res) => {
+    const tenantId = req.tenantId;
     try {
-        const totalEmployees = await db.prepare("SELECT COUNT(*) as count FROM employees WHERE status = 'active'").get();
-        const totalPayroll = await db.prepare("SELECT SUM(base_salary) as total FROM employees WHERE status = 'active'").get();
-        const totalAdvances = await db.prepare("SELECT SUM(amount) as total FROM employee_expenses WHERE status = 'pending'").get();
+        const totalEmployees = await db.prepare("SELECT COUNT(*) as count FROM employees WHERE status = 'active' AND tenant_id = ?").get(tenantId);
+        const totalPayroll = await db.prepare("SELECT SUM(base_salary) as total FROM employees WHERE status = 'active' AND tenant_id = ?").get(tenantId);
+        const totalAdvances = await db.prepare("SELECT SUM(amount) as total FROM employee_expenses WHERE status = 'pending' AND employee_id IN (SELECT id FROM employees WHERE tenant_id = ?)").get(tenantId);
         
         const recentExpenses = await db.prepare(`
             SELECT e.*, emp.full_name 
             FROM employee_expenses e
             JOIN employees emp ON e.employee_id = emp.id
+            WHERE emp.tenant_id = ?
             ORDER BY e.created_at DESC LIMIT 5
-        `).all();
+        `).all(tenantId);
 
         res.json({
             stats: {
@@ -335,14 +344,15 @@ router.get('/stats', async (req, res) => {
 
 // GET /api/hr/reports/payroll/:monthYear - Detailed payroll report
 router.get('/reports/payroll/:monthYear', async (req, res) => {
+    const tenantId = req.tenantId;
     try {
         const data = await db.prepare(`
             SELECT p.*, e.full_name, e.employee_id, e.position, e.department
             FROM employee_payroll p
             JOIN employees e ON p.employee_id = e.id
-            WHERE p.month_year = ?
+            WHERE p.month_year = ? AND e.tenant_id = ?
             ORDER BY e.full_name ASC
-        `).all(req.params.monthYear);
+        `).all(req.params.monthYear, tenantId);
         res.json(data);
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -352,13 +362,14 @@ router.get('/reports/payroll/:monthYear', async (req, res) => {
 // GET /api/hr/reports/expenses - Detailed expense report
 router.get('/reports/expenses', async (req, res) => {
     const { start, end, type } = req.query;
+    const tenantId = req.tenantId;
     let query = `
         SELECT ex.*, e.full_name, e.employee_id, e.position
         FROM employee_expenses ex
         JOIN employees e ON ex.employee_id = e.id
-        WHERE 1=1
+        WHERE e.tenant_id = ?
     `;
-    const params = [];
+    const params = [tenantId];
 
     if (start) { query += ` AND ex.date >= ?`; params.push(start); }
     if (end) { query += ` AND ex.date <= ?`; params.push(end); }

@@ -4,26 +4,22 @@ const BACKEND = (process.env.NEXT_PUBLIC_API_URL || "https://hudi-soft-com-hms-r
 
 export async function GET(req: NextRequest) {
   try {
-    const searchParams = req.nextUrl.searchParams.toString();
-    const targetUrl = searchParams ? `${BACKEND}/api/license/status?${searchParams}` : `${BACKEND}/api/license/status`;
-    const headers: Record<string, string> = { "Content-Type": "application/json" };
-    const licenseHeader = req.headers.get("x-license-key");
-    if (licenseHeader) headers["x-license-key"] = licenseHeader;
+    const searchParams = req.nextUrl.searchParams;
+    const key = searchParams.get("key") || "";
+    const backendUrl = key ? `${BACKEND}/api/license/status?key=${encodeURIComponent(key)}` : `${BACKEND}/api/license/status`;
 
-    const res = await fetch(targetUrl, {
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+    const licenseKeyHeader = req.headers.get("x-license-key");
+    if (licenseKeyHeader) headers["X-License-Key"] = licenseKeyHeader;
+    const authHeader = req.headers.get("authorization");
+    if (authHeader) headers["Authorization"] = authHeader;
+
+    const res = await fetch(backendUrl, {
       headers,
       cache: "no-store",
     });
-
-    const contentType = res.headers.get("content-type") || "";
-    if (!contentType.includes("application/json")) {
-      const text = await res.text();
-      return NextResponse.json(
-        { error: "Backend database or server error", details: text || `HTTP ${res.status}` },
-        { status: res.status }
-      );
-    }
-
     const data = await res.json();
     return NextResponse.json(data, { status: res.status });
   } catch (err: any) {

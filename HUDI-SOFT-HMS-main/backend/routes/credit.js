@@ -8,8 +8,9 @@ router.use(authenticate);
 
 // GET /api/credit/customers - List all credit customers
 router.get('/customers', async (req, res) => {
+    const tenantId = req.tenantId;
     try {
-        const customers = await db.prepare('SELECT * FROM credit_customers ORDER BY full_name ASC').all();
+        const customers = await db.prepare('SELECT * FROM credit_customers WHERE tenant_id = ? ORDER BY full_name ASC').all(tenantId);
         res.json(customers);
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -18,6 +19,7 @@ router.get('/customers', async (req, res) => {
 
 // POST /api/credit/customers - Register new credit customer
 router.post('/customers', async (req, res) => {
+    const tenantId = req.tenantId;
     const { fullName, phone, address, patientId, creditLimit } = req.body;
     
     if (!fullName) return res.status(400).json({ error: 'Full Name is required' });
@@ -27,13 +29,13 @@ router.post('/customers', async (req, res) => {
         const customerUID = `CR-${Math.floor(1000 + Math.random() * 9000)}`;
         
         await db.prepare(`
-            INSERT INTO credit_customers (id, customer_id, full_name, phone, address, patient_id, credit_limit)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        `).run(id, customerUID, fullName, phone, address, patientId, creditLimit || 1000);
+            INSERT INTO credit_customers (id, customer_id, full_name, phone, address, patient_id, credit_limit, tenant_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(id, customerUID, fullName, phone, address, patientId, creditLimit || 1000, tenantId);
 
         logAction(req.user.id, req.user.name, req.user.role, 'CREATE', 'Credit', `Registered credit customer: ${fullName}`, req.ip);
         
-        const newCustomer = await db.prepare('SELECT * FROM credit_customers WHERE id = ?').get(id);
+        const newCustomer = await db.prepare('SELECT * FROM credit_customers WHERE id = ? AND tenant_id = ?').get(id, tenantId);
         res.status(201).json(newCustomer);
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -42,13 +44,14 @@ router.post('/customers', async (req, res) => {
 
 // GET /api/credit/customers/:id - Get profile and ledger
 router.get('/customers/:id', async (req, res) => {
+    const tenantId = req.tenantId;
     try {
-        const customer = await db.prepare('SELECT * FROM credit_customers WHERE id = ?').get(req.params.id);
+        const customer = await db.prepare('SELECT * FROM credit_customers WHERE id = ? AND tenant_id = ?').get(req.params.id, tenantId);
         if (!customer) return res.status(404).json({ error: 'Customer not found' });
 
-        const ledger = await db.prepare('SELECT * FROM credit_ledger WHERE customer_id = ? ORDER BY created_at DESC').all(req.params.id);
-        const transactions = await db.prepare('SELECT * FROM credit_transactions WHERE customer_id = ? ORDER BY date DESC').all(req.params.id);
-        const payments = await db.prepare('SELECT * FROM credit_payments WHERE customer_id = ? ORDER BY date DESC').all(req.params.id);
+        const ledger = await db.prepare('SELECT * FROM credit_ledger WHERE customer_id = ? AND tenant_id = ? ORDER BY created_at DESC').all(req.params.id, tenantId);
+        const transactions = await db.prepare('SELECT * FROM credit_transactions WHERE customer_id = ? AND tenant_id = ? ORDER BY date DESC').all(req.params.id, tenantId);
+        const payments = await db.prepare('SELECT * FROM credit_payments WHERE customer_id = ? AND tenant_id = ? ORDER BY date DESC').all(req.params.id, tenantId);
 
         res.json({ customer, ledger, transactions, payments });
     } catch (err) {
@@ -58,14 +61,15 @@ router.get('/customers/:id', async (req, res) => {
 
 // Update customer
 router.put('/customers/:id', async (req, res) => {
+    const tenantId = req.tenantId;
     try {
         const { fullName, phone, address, creditLimit, status } = req.body;
         const { id } = req.params;
         await db.prepare(`
             UPDATE credit_customers 
             SET full_name = ?, phone = ?, address = ?, credit_limit = ?, status = ?
-            WHERE id = ?
-        `).run(fullName, phone, address, creditLimit, status || 'active', id);
+            WHERE id = ? AND tenant_id = ?
+        `).run(fullName, phone, address, creditLimit, status || 'active', id, tenantId);
         res.json({ message: "Customer updated successfully" });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -74,16 +78,17 @@ router.put('/customers/:id', async (req, res) => {
 
 // Delete customer
 router.delete('/customers/:id', async (req, res) => {
+    const tenantId = req.tenantId;
     const { id } = req.params;
     try {
         await db.exec('BEGIN');
         
         console.log(`🗑️ Deleting customer ${id} and all related records...`);
         
-        await db.prepare("DELETE FROM credit_payments WHERE customer_id = ?").run(id);
-        await db.prepare("DELETE FROM credit_ledger WHERE customer_id = ?").run(id);
-        await db.prepare("DELETE FROM credit_transactions WHERE customer_id = ?").run(id);
-        await db.prepare("DELETE FROM credit_customers WHERE id = ?").run(id);
+        await db.prepare("DELETE FROM credit_payments WHERE customer_id = ? AND tenant_id = ?").run(id, tenantId);
+        await db.prepare("DELETE FROM credit_ledger WHERE customer_id = ? AND tenant_id = ?").run(id, tenantId);
+        await db.prepare("DELETE FROM credit_transactions WHERE customer_id = ? AND tenant_id = ?").run(id, tenantId);
+        await db.prepare("DELETE FROM credit_customers WHERE id = ? AND tenant_id = ?").run(id, tenantId);
         
         await db.exec('COMMIT');
         
@@ -99,6 +104,7 @@ router.delete('/customers/:id', async (req, res) => {
 // ─── TRANSACTIONS ────────────────────────────────────────────────
 // POST /api/credit/payments - Record a repayment
 router.post('/payments', async (req, res) => {
+    const tenantId = req.tenantId;
     const { customerId, amount, paymentMethod, referenceNotes, date, discountAmount } = req.body;
     
     if (!customerId || (!amount && !discountAmount) || !paymentMethod) {
@@ -108,7 +114,7 @@ router.post('/payments', async (req, res) => {
     try {
         await db.exec('BEGIN');
 
-        const customer = await db.prepare('SELECT * FROM credit_customers WHERE id = ?').get(customerId);
+        const customer = await db.prepare('SELECT * FROM credit_customers WHERE id = ? AND tenant_id = ?').get(customerId, tenantId);
         if (!customer) throw new Error('Customer not found');
 
         const paymentId = uuidv4();
@@ -123,9 +129,9 @@ router.post('/payments', async (req, res) => {
         // 1. Record cash payment
         if (amt > 0) {
             await db.prepare(`
-                INSERT INTO credit_payments (id, payment_id, customer_id, amount, payment_method, reference_notes, date, staff_id)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            `).run(paymentId, paymentUID, customerId, amt, paymentMethod, referenceNotes, payDate, req.user.id);
+                INSERT INTO credit_payments (id, payment_id, customer_id, amount, payment_method, reference_notes, date, staff_id, tenant_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `).run(paymentId, paymentUID, customerId, amt, paymentMethod, referenceNotes, payDate, req.user.id, tenantId);
         }
 
         // 2. Update customer balance
@@ -135,46 +141,46 @@ router.post('/payments', async (req, res) => {
         await db.prepare(`
             UPDATE credit_customers 
             SET outstanding_balance = ?, total_payments_made = ?, updated_at = CURRENT_TIMESTAMP
-            WHERE id = ?
-        `).run(newBalance, totalPayments, customerId);
+            WHERE id = ? AND tenant_id = ?
+        `).run(newBalance, totalPayments, customerId, tenantId);
 
         // 3. Add to ledger (cash payment)
         if (amt > 0) {
             await db.prepare(`
-                INSERT INTO credit_ledger (id, customer_id, date, description, type, amount, running_balance, reference_id)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            `).run(uuidv4(), customerId, payDate, `Repayment via ${paymentMethod.toUpperCase()}: ${paymentUID}`, 'credit', amt, newBalance, paymentUID);
+                INSERT INTO credit_ledger (id, customer_id, date, description, type, amount, running_balance, reference_id, tenant_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `).run(uuidv4(), customerId, payDate, `Repayment via ${paymentMethod.toUpperCase()}: ${paymentUID}`, 'credit', amt, newBalance, paymentUID, tenantId);
         }
 
         // 4. Add to ledger (discount)
         if (discount > 0) {
             await db.prepare(`
-                INSERT INTO credit_ledger (id, customer_id, date, description, type, amount, running_balance, reference_id)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            `).run(uuidv4(), customerId, payDate, `Discount applied (${paymentUID})`, 'credit', discount, newBalance, paymentUID);
+                INSERT INTO credit_ledger (id, customer_id, date, description, type, amount, running_balance, reference_id, tenant_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `).run(uuidv4(), customerId, payDate, `Discount applied (${paymentUID})`, 'credit', discount, newBalance, paymentUID, tenantId);
         }
 
         // 5. Record cash portion as income in main accounts (correct payment method → ZAAD/Sahal receipts)
         if (amt > 0) {
             await db.prepare(`
-                INSERT INTO account_entries (id, date, type, category, description, amount, payment_method, reference_id, department, status, user_id)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO account_entries (id, date, type, category, description, amount, payment_method, reference_id, department, status, user_id, tenant_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             `).run(
                 uuidv4(), payDate, 'income', 'Credit Repayment',
                 `Credit Repayment from ${customer.full_name} via ${paymentMethod.toUpperCase()} (${paymentUID})`,
-                amt, paymentMethod, paymentUID, 'Finance', 'completed', req.user.id
+                amt, paymentMethod, paymentUID, 'Finance', 'completed', req.user.id, tenantId
             );
         }
 
         // 6. Record discount as expense in main accounts
         if (discount > 0) {
             await db.prepare(`
-                INSERT INTO account_entries (id, date, type, category, description, amount, payment_method, reference_id, department, status, user_id)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO account_entries (id, date, type, category, description, amount, payment_method, reference_id, department, status, user_id, tenant_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             `).run(
                 uuidv4(), payDate, 'expense', 'Credit Discount',
                 `Discount granted to ${customer.full_name} on account balance (${paymentUID})`,
-                discount, paymentMethod, paymentUID, 'Finance', 'completed', req.user.id
+                discount, paymentMethod, paymentUID, 'Finance', 'completed', req.user.id, tenantId
             );
         }
 
@@ -192,6 +198,7 @@ router.post('/payments', async (req, res) => {
 
 // POST /api/credit/transactions - Record manual credit / loan
 router.post('/transactions', async (req, res) => {
+    const tenantId = req.tenantId;
     const { customerId, amount, notes, date } = req.body;
     
     if (!customerId || !amount || parseFloat(amount) <= 0) {
@@ -201,7 +208,7 @@ router.post('/transactions', async (req, res) => {
     try {
         await db.exec('BEGIN');
 
-        const customer = await db.prepare('SELECT * FROM credit_customers WHERE id = ?').get(customerId);
+        const customer = await db.prepare('SELECT * FROM credit_customers WHERE id = ? AND tenant_id = ?').get(customerId, tenantId);
         if (!customer) throw new Error('Customer not found');
 
         if (customer.status !== 'active') {
@@ -226,12 +233,12 @@ router.post('/transactions', async (req, res) => {
 
         // 1. Insert into credit_transactions
         await db.prepare(`
-            INSERT INTO credit_transactions (id, transaction_id, customer_id, items_summary, total_amount, amount_paid, remaining_balance, status, staff_id, staff_name, date)
-            VALUES (?, ?, ?, ?, ?, 0.00, ?, 'unpaid', ?, ?, ?)
+            INSERT INTO credit_transactions (id, transaction_id, customer_id, items_summary, total_amount, amount_paid, remaining_balance, status, staff_id, staff_name, date, tenant_id)
+            VALUES (?, ?, ?, ?, ?, 0.00, ?, 'unpaid', ?, ?, ?, ?)
         `).run(
             transactionId, transactionUID, customerId, 
             notes || 'Manual Credit Adjustment',
-            amt, amt, req.user.id, req.user.name, txDate
+            amt, amt, req.user.id, req.user.name, txDate, tenantId
         );
 
         // 2. Update Customer Balance
@@ -241,17 +248,17 @@ router.post('/transactions', async (req, res) => {
         await db.prepare(`
             UPDATE credit_customers 
             SET outstanding_balance = ?, total_credit_taken = ?, updated_at = CURRENT_TIMESTAMP
-            WHERE id = ?
-        `).run(newBalance, newTotalCredit, customerId);
+            WHERE id = ? AND tenant_id = ?
+        `).run(newBalance, newTotalCredit, customerId, tenantId);
 
         // 3. Add to Ledger
         await db.prepare(`
-            INSERT INTO credit_ledger (id, customer_id, date, description, type, amount, running_balance, reference_id)
-            VALUES (?, ?, ?, ?, 'debit', ?, ?, ?)
+            INSERT INTO credit_ledger (id, customer_id, date, description, type, amount, running_balance, reference_id, tenant_id)
+            VALUES (?, ?, ?, ?, 'debit', ?, ?, ?, ?)
         `).run(
             uuidv4(), customerId, txDate, 
             notes || `Manual Credit Adjustment`,
-            amt, newBalance, transactionUID
+            amt, newBalance, transactionUID, tenantId
         );
 
         await db.exec('COMMIT');
@@ -267,13 +274,15 @@ router.post('/transactions', async (req, res) => {
 
 // GET /api/credit/transactions - Global history
 router.get('/transactions', async (req, res) => {
+    const tenantId = req.tenantId;
     try {
         const transactions = await db.prepare(`
             SELECT t.*, c.full_name as customer_name 
             FROM credit_transactions t
             JOIN credit_customers c ON t.customer_id = c.id
+            WHERE t.tenant_id = ?
             ORDER BY t.created_at DESC
-        `).all();
+        `).all(tenantId);
         res.json(transactions);
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -282,6 +291,7 @@ router.get('/transactions', async (req, res) => {
 
 // PUT /api/credit/transactions/:id/pay - Pay off a specific transaction partially or fully
 router.put('/transactions/:id/pay', async (req, res) => {
+    const tenantId = req.tenantId;
     const { id } = req.params;
     const { paymentMethod, referenceNotes, amount, discountAmount } = req.body;
     
@@ -289,7 +299,7 @@ router.put('/transactions/:id/pay', async (req, res) => {
         console.log(`💳 Processing payment for transaction ${id}, amount: ${amount}, method: ${paymentMethod}, discount: ${discountAmount}`);
         await db.exec('BEGIN');
         
-        const txn = await db.prepare('SELECT * FROM credit_transactions WHERE id = ?').get(id);
+        const txn = await db.prepare('SELECT * FROM credit_transactions WHERE id = ? AND tenant_id = ?').get(id, tenantId);
         if (!txn) {
             console.warn(`⚠️ Transaction ${id} not found`);
             throw new Error('Transaction not found');
@@ -313,7 +323,7 @@ router.put('/transactions/:id/pay', async (req, res) => {
         const totalSettled = amt + discount; // total reduction to the balance
         const customerId = txn.customer_id;
         
-        const customer = await db.prepare('SELECT * FROM credit_customers WHERE id = ?').get(customerId);
+        const customer = await db.prepare('SELECT * FROM credit_customers WHERE id = ? AND tenant_id = ?').get(customerId, tenantId);
         if (!customer) throw new Error('Customer not found');
 
         // Update transaction
@@ -326,13 +336,13 @@ router.put('/transactions/:id/pay', async (req, res) => {
         await db.prepare(`
             UPDATE credit_transactions 
             SET amount_paid = ?, remaining_balance = ?, status = ?
-            WHERE id = ?
-        `).run(newAmountPaid, newRemaining, newStatus, id);
+            WHERE id = ? AND tenant_id = ?
+        `).run(newAmountPaid, newRemaining, newStatus, id, tenantId);
 
         // Also update the linked pharmacy_transactions row so the Pharmacy Financial Hub
         // shows the correct payment method (the one selected by the pharmacist) and paid amount.
         if (txn.invoice_id) {
-            const pharmTx = await db.prepare(`SELECT id, paid_amount, total_amount, credit_amount FROM pharmacy_transactions WHERE id = ?`).get(txn.invoice_id);
+            const pharmTx = await db.prepare(`SELECT id, paid_amount, total_amount, credit_amount FROM pharmacy_transactions WHERE id = ? AND tenant_id = ?`).get(txn.invoice_id, tenantId);
             if (pharmTx) {
                 const newPharmPaid = Math.min(
                     parseFloat(pharmTx.total_amount) || 0,
@@ -343,8 +353,8 @@ router.put('/transactions/:id/pay', async (req, res) => {
                 await db.prepare(`
                     UPDATE pharmacy_transactions
                     SET paid_amount = ?, credit_amount = ?, payment_method = ?, status = ?
-                    WHERE id = ?
-                `).run(newPharmPaid, newPharmCredit, paymentMethod || 'cash', newPharmStatus, pharmTx.id);
+                    WHERE id = ? AND tenant_id = ?
+                `).run(newPharmPaid, newPharmCredit, paymentMethod || 'cash', newPharmStatus, pharmTx.id, tenantId);
             }
         }
 
@@ -356,9 +366,9 @@ router.put('/transactions/:id/pay', async (req, res) => {
         // 1. Record payment (cash portion only)
         if (amt > 0) {
             await db.prepare(`
-                INSERT INTO credit_payments (id, payment_id, customer_id, amount, payment_method, reference_notes, date, staff_id)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            `).run(paymentId, paymentUID, customerId, amt, method, referenceNotes || `Paid Txn: ${txn.transaction_id}`, payDate, req.user.id);
+                INSERT INTO credit_payments (id, payment_id, customer_id, amount, payment_method, reference_notes, date, staff_id, tenant_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `).run(paymentId, paymentUID, customerId, amt, method, referenceNotes || `Paid Txn: ${txn.transaction_id}`, payDate, req.user.id, tenantId);
         }
 
         // 2. Update customer balance
@@ -368,47 +378,47 @@ router.put('/transactions/:id/pay', async (req, res) => {
         await db.prepare(`
             UPDATE credit_customers 
             SET outstanding_balance = ?, total_payments_made = ?, updated_at = CURRENT_TIMESTAMP
-            WHERE id = ?
-        `).run(newBalance, totalPayments, customerId);
+            WHERE id = ? AND tenant_id = ?
+        `).run(newBalance, totalPayments, customerId, tenantId);
 
         // 3. Add to ledger (cash payment)
         if (amt > 0) {
             await db.prepare(`
-                INSERT INTO credit_ledger (id, customer_id, date, description, type, amount, running_balance, reference_id)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            `).run(uuidv4(), customerId, payDate, `Repayment via ${method.toUpperCase()} (Txn ${txn.transaction_id})`, 'credit', amt, newBalance, paymentUID);
+                INSERT INTO credit_ledger (id, customer_id, date, description, type, amount, running_balance, reference_id, tenant_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `).run(uuidv4(), customerId, payDate, `Repayment via ${method.toUpperCase()} (Txn ${txn.transaction_id})`, 'credit', amt, newBalance, paymentUID, tenantId);
         }
 
         // 4. Add to ledger (discount portion)
         if (discount > 0) {
             await db.prepare(`
-                INSERT INTO credit_ledger (id, customer_id, date, description, type, amount, running_balance, reference_id)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            `).run(uuidv4(), customerId, payDate, `Discount applied (Txn ${txn.transaction_id})`, 'credit', discount, newBalance, paymentUID);
+                INSERT INTO credit_ledger (id, customer_id, date, description, type, amount, running_balance, reference_id, tenant_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `).run(uuidv4(), customerId, payDate, `Discount applied (Txn ${txn.transaction_id})`, 'credit', discount, newBalance, paymentUID, tenantId);
         }
 
         // 5. Record cash payment as income in main accounts (hospital revenue)
         //    — goes under the correct payment method so ZAAD/Sahal etc. receipts update correctly
         if (amt > 0) {
             await db.prepare(`
-                INSERT INTO account_entries (id, date, type, category, description, amount, payment_method, reference_id, department, status, user_id)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO account_entries (id, date, type, category, description, amount, payment_method, reference_id, department, status, user_id, tenant_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             `).run(
                 uuidv4(), payDate, 'income', 'Credit Repayment',
                 `Credit Repayment from ${customer.full_name} via ${method.toUpperCase()} (${paymentUID})`,
-                amt, method, paymentUID, 'Finance', 'completed', req.user.id
+                amt, method, paymentUID, 'Finance', 'completed', req.user.id, tenantId
             );
         }
 
         // 6. Record discount as a separate discount entry in account_entries
         if (discount > 0) {
             await db.prepare(`
-                INSERT INTO account_entries (id, date, type, category, description, amount, payment_method, reference_id, department, status, user_id)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO account_entries (id, date, type, category, description, amount, payment_method, reference_id, department, status, user_id, tenant_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             `).run(
                 uuidv4(), payDate, 'expense', 'Credit Discount',
                 `Discount granted to ${customer.full_name} on credit balance (${paymentUID})`,
-                discount, method, paymentUID, 'Finance', 'completed', req.user.id
+                discount, method, paymentUID, 'Finance', 'completed', req.user.id, tenantId
             );
         }
 
@@ -431,21 +441,24 @@ router.put('/transactions/:id/pay', async (req, res) => {
 
 // GET /api/credit/stats - Summary for dashboard
 router.get('/stats', async (req, res) => {
+    const tenantId = req.tenantId;
     try {
         const stats = await db.prepare(`
             SELECT 
                 SUM(outstanding_balance) as total_outstanding,
                 COUNT(*) as total_customers,
-                (SELECT COUNT(*) FROM credit_customers WHERE outstanding_balance > credit_limit) as limit_exceeded_count
+                (SELECT COUNT(*) FROM credit_customers WHERE outstanding_balance > credit_limit AND tenant_id = ?) as limit_exceeded_count
             FROM credit_customers
-        `).get();
+            WHERE tenant_id = ?
+        `).get(tenantId, tenantId);
         
         const recentTransactions = await db.prepare(`
             SELECT t.*, c.full_name as customer_name 
             FROM credit_transactions t
             JOIN credit_customers c ON t.customer_id = c.id
+            WHERE t.tenant_id = ?
             ORDER BY t.created_at DESC LIMIT 5
-        `).all();
+        `).all(tenantId);
 
         res.json({ stats, recentTransactions });
     } catch (err) {

@@ -15,6 +15,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../database');
 const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
 const { v4: uuidv4 } = require('uuid');
 
 const DEMO_DAYS = 7;
@@ -35,22 +36,35 @@ async function getLicenseByKey(licenseKey) {
 }
 
 // ─── GET /api/license/status ─────────────────────────────────────
-// Requires X-License-Key header to identify which hospital's status to return
+// Requires X-License-Key header or query param ?key= (or Bearer token)
 router.get('/status', async (req, res) => {
   try {
     const licenseKey = req.headers['x-license-key'] || req.query.key;
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
 
-    let info;
-    if (licenseKey) {
-      const result = await db.query('SELECT * FROM license_info WHERE license_key = $1', [licenseKey.trim().toUpperCase()]);
-      info = result.rows[0];
-    }
-    // Fallback for single-tenant installs
-    if (!info) {
-      const result = await db.query('SELECT * FROM license_info ORDER BY id DESC LIMIT 1');
-      info = result.rows[0];
+    let info = null;
+
+    // 1. If license key provided, lookup by key
+    if (licenseKey && licenseKey.trim() !== '') {
+      const result = await db.query('SELECT * FROM license_info WHERE license_key = $1 LIMIT 1', [licenseKey.trim().toUpperCase()]);
+      info = result.rows[0] || null;
     }
 
+    // 2. If no key, but JWT provided, lookup by decoded tenant_id
+    if (!info && token) {
+      try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        if (decoded && decoded.tenantId) {
+          const result = await db.query('SELECT * FROM license_info WHERE tenant_id = $1 LIMIT 1', [decoded.tenantId]);
+          info = result.rows[0] || null;
+        }
+      } catch (tokenErr) {
+        // Token invalid or expired - ignore and continue
+      }
+    }
+
+    // 3. If no matching license found, return clean default demo status WITHOUT leaking other hospitals' data
     if (!info) {
       return res.json({
         status: 'demo',
@@ -59,7 +73,7 @@ router.get('/status', async (req, res) => {
         daysLeft: DEMO_DAYS,
         hospitalName: 'My Hospital',
         tenantId: null,
-        message: 'No license record found. Demo mode active.',
+        message: 'Enter your license key to activate or start demo.',
       });
     }
 
@@ -203,7 +217,7 @@ router.post('/activate', async (req, res) => {
     }
 
     // ── Create/update admin user for this hospital tenant ──
-    const finalAdminEmail = adminEmail || 'admin@hospital.com';
+    const finalAdminEmail = adminEmail || customerEmail || 'admin@hospital.com';
     const finalAdminPassword = adminPassword || 'admin123';
     const passwordHash = bcrypt.hashSync(finalAdminPassword, 10);
 
@@ -215,6 +229,23 @@ router.post('/activate', async (req, res) => {
         [uuidv4(), finalAdminEmail, passwordHash, now, tenantId]
       );
       console.log(`✅ [License] Admin user created: ${finalAdminEmail} for tenant: ${tenantId}`);
+    } else if (adminPassword) {
+      await db.query(`UPDATE users SET password_hash = $1 WHERE email = $2 AND tenant_id = $3`, [passwordHash, finalAdminEmail, tenantId]);
+    }
+
+    // Ensure hospital_settings row exists for this tenant
+    try {
+      const existingSettings = await db.query('SELECT id FROM hospital_settings WHERE tenant_id = $1', [tenantId]);
+      if (existingSettings.rows.length === 0) {
+        await db.query(`
+          INSERT INTO hospital_settings (name, tagline, address, phone, email, website, currency, tax_rate, tenant_id)
+          VALUES ($1, 'Excellence in Healthcare', '', '', $2, '', 'USD', 10, $3)
+        `, [hospitalName || 'My Hospital', finalAdminEmail, tenantId]);
+      } else if (hospitalName) {
+        await db.query('UPDATE hospital_settings SET name = $1 WHERE tenant_id = $2', [hospitalName, tenantId]);
+      }
+    } catch (settErr) {
+      console.warn('[License] Could not init hospital_settings:', settErr.message);
     }
 
     const updatedInfo = await db.query('SELECT * FROM license_info WHERE license_key = $1', [cleanKey]);
@@ -223,6 +254,7 @@ router.post('/activate', async (req, res) => {
     res.json({
       success: true,
       status: 'active',
+      licenseKey: cleanKey,
       tenantId: info.tenant_id,
       hospitalName: info.hospital_name,
       plan: info.plan,
@@ -238,58 +270,56 @@ router.post('/activate', async (req, res) => {
 });
 
 // ─── POST /api/license/demo ───────────────────────────────────────
+// Multi-tenant demo: Each demo client receives their OWN isolated tenant_id & demo license key!
 router.post('/demo', async (req, res) => {
-  const { hospitalName } = req.body;
+  const { hospitalName, adminEmail, adminPassword } = req.body;
   try {
-    // Demo: find or create a demo row (not scoped by key)
-    const existing = await db.query("SELECT id, status, tenant_id FROM license_info WHERE status = 'demo' AND license_key IS NULL LIMIT 1");
-
     const now = new Date().toISOString();
-    let tenantId;
+    const demoKey = `DEMO-${uuidv4().substring(0, 8).toUpperCase()}-${Math.floor(1000 + Math.random() * 9000)}`;
+    const finalHospitalName = hospitalName?.trim() || 'Demo Hospital';
 
-    if (existing.rows.length > 0 && existing.rows[0].status === 'active') {
-      return res.json({ success: true, status: 'active', message: 'Already activated.' });
-    }
+    // Insert brand-new isolated tenant row for this demo
+    const insertResult = await db.query(`
+      INSERT INTO license_info (license_key, hospital_name, status, plan, demo_started_at)
+      VALUES ($1, $2, 'demo', 'demo', $3) RETURNING tenant_id
+    `, [demoKey, finalHospitalName, now]);
 
-    if (existing.rows.length > 0) {
-      tenantId = existing.rows[0].tenant_id;
+    const tenantId = insertResult.rows[0].tenant_id;
+    console.log(`✅ [License] New demo tenant created: ${tenantId} (Key: ${demoKey}) for: ${finalHospitalName}`);
+
+    // Create demo admin user scoped to this specific tenant
+    const finalAdminEmail = adminEmail || 'admin@hospital.com';
+    const finalAdminPassword = adminPassword || 'admin123';
+    const passwordHash = bcrypt.hashSync(finalAdminPassword, 10);
+
+    await db.query(
+      `INSERT INTO users (id, name, email, password_hash, role, is_active, created_at, tenant_id)
+       VALUES ($1, 'Admin', $2, $3, 'admin', 1, $4, $5)`,
+      [uuidv4(), finalAdminEmail, passwordHash, now, tenantId]
+    );
+
+    // Initialize default hospital_settings for this demo tenant
+    try {
       await db.query(`
-        UPDATE license_info SET
-          hospital_name = COALESCE($1, hospital_name),
-          status = 'demo', plan = 'demo',
-          demo_started_at = CASE WHEN demo_started_at IS NULL THEN $2 ELSE demo_started_at END
-        WHERE id = $3
-      `, [hospitalName, now, existing.rows[0].id]);
-    } else {
-      const insertResult = await db.query(`
-        INSERT INTO license_info (hospital_name, status, plan, demo_started_at)
-        VALUES ($1, 'demo', 'demo', $2) RETURNING tenant_id
-      `, [hospitalName || 'My Hospital', now]);
-      tenantId = insertResult.rows[0].tenant_id;
+        INSERT INTO hospital_settings (name, tagline, address, phone, email, website, currency, tax_rate, tenant_id)
+        VALUES ($1, 'Excellence in Healthcare (Demo)', '', '', $2, '', 'USD', 10, $3)
+      `, [finalHospitalName, finalAdminEmail, tenantId]);
+    } catch (settErr) {
+      console.warn('[License] Could not init demo settings:', settErr.message);
     }
 
-    // Create demo admin user
-    const existingAdmin = await db.query('SELECT id FROM users WHERE email = $1 AND tenant_id = $2', ['admin@hospital.com', tenantId]);
-    if (existingAdmin.rows.length === 0) {
-      const passwordHash = bcrypt.hashSync('admin123', 10);
-      await db.query(
-        `INSERT INTO users (id, name, email, password_hash, role, is_active, created_at, tenant_id)
-         VALUES ($1, 'Admin', 'admin@hospital.com', $2, 'admin', 1, $3, $4)`,
-        [uuidv4(), passwordHash, now, tenantId]
-      );
-    }
-
-    const updated = await db.query('SELECT * FROM license_info WHERE tenant_id = $1', [tenantId]);
-    const info = updated.rows[0];
-    const demoLeft = getDemoTimeLeft(info.demo_started_at);
+    const demoLeft = DEMO_DAYS;
 
     res.json({
       success: true,
       status: 'demo',
-      tenantId: info.tenant_id,
-      hospitalName: info.hospital_name,
+      licenseKey: demoKey,
+      tenantId: tenantId,
+      hospitalName: finalHospitalName,
+      adminEmail: finalAdminEmail,
+      adminPassword: 'admin123',
       daysLeft: demoLeft,
-      message: `Demo started. You have ${demoLeft} days to try HUDI-SOFT HMS.`,
+      message: `Demo started. You have ${demoLeft} days to evaluate HUDI-SOFT HMS.`,
     });
   } catch (err) {
     console.error('[License] demo error:', err);

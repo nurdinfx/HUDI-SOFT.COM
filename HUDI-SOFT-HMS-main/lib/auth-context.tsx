@@ -10,7 +10,7 @@ interface AuthState {
 }
 
 interface AuthContextType extends AuthState {
-  login: (email: string, password: string) => Promise<void>
+  login: (email: string, password: string, licenseKey?: string) => Promise<void>
   logout: () => void
   hasRole: (roles: UserRole[]) => boolean
 }
@@ -39,9 +39,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  const login = useCallback(async (email: string, password: string) => {
-    const { token, user } = await authApi.login(email, password)
+  const login = useCallback(async (email: string, password: string, licenseKey?: string) => {
+    const { token, user, license } = await authApi.login(email, password, licenseKey)
     setToken(token)
+    if (typeof window !== "undefined") {
+      if (user?.tenantId) localStorage.setItem("hms_tenant_id", user.tenantId)
+      if (license?.hospitalName) localStorage.setItem("hms_hospital_name", license.hospitalName)
+      if (licenseKey) localStorage.setItem("hms_license_key", licenseKey.trim().toUpperCase())
+    }
     setAuth({ user: user as unknown as User, isAuthenticated: true, isLoading: false })
   }, [])
 

@@ -25,6 +25,7 @@ const fmtOps = (row) => ({
 
 // GET summary metrics
 router.get('/summary', async (req, res) => {
+    const tenantId = req.tenantId;
     try {
         const today = new Date().toISOString().split('T')[0];
         
@@ -37,8 +38,8 @@ router.get('/summary', async (req, res) => {
                          WHEN transaction_type = 'Operational Expense' THEN -amount 
                          ELSE 0 END) as net_balance
             FROM daily_operations
-            WHERE date = ?
-        `).get(today);
+            WHERE date = ? AND tenant_id = ?
+        `).get(today, tenantId);
 
         res.json({
             expenses: parseFloat(metrics.expenses || 0),
@@ -53,10 +54,11 @@ router.get('/summary', async (req, res) => {
 
 // GET all records
 router.get('/', async (req, res) => {
+    const tenantId = req.tenantId;
     try {
         const { date, transactionType, employeeId } = req.query;
-        let q = 'SELECT * FROM daily_operations WHERE 1=1';
-        const params = [];
+        let q = 'SELECT * FROM daily_operations WHERE tenant_id = ?';
+        const params = [tenantId];
 
         if (date) { q += ' AND date = ?'; params.push(date); }
         if (transactionType && transactionType !== 'all') { q += ' AND transaction_type = ?'; params.push(transactionType); }
@@ -73,8 +75,9 @@ router.get('/', async (req, res) => {
 
 // GET single record
 router.get('/:id', async (req, res) => {
+    const tenantId = req.tenantId;
     try {
-        const row = await db.prepare('SELECT * FROM daily_operations WHERE id = ?').get(req.params.id);
+        const row = await db.prepare('SELECT * FROM daily_operations WHERE id = ? AND tenant_id = ?').get(req.params.id, tenantId);
         if (!row) return res.status(404).json({ error: 'Record not found' });
         res.json(fmtOps(row));
     } catch (err) {
@@ -84,6 +87,7 @@ router.get('/:id', async (req, res) => {
 
 // POST new record
 router.post('/', async (req, res) => {
+    const tenantId = req.tenantId;
     const { employeeId, department, transactionType, labTestId, amount, description, date, selectedTests } = req.body;
     
     if (!employeeId || !transactionType) {
@@ -91,12 +95,12 @@ router.post('/', async (req, res) => {
     }
 
     try {
-        const emp = await db.prepare('SELECT full_name FROM employees WHERE id = ?').get(employeeId);
+        const emp = await db.prepare('SELECT full_name FROM employees WHERE id = ? AND tenant_id = ?').get(employeeId, tenantId);
         if (!emp) return res.status(404).json({ error: 'Employee not found' });
 
         let labTestName = null;
         if (labTestId) {
-            const lab = await db.prepare('SELECT name FROM lab_catalog WHERE id = ?').get(labTestId);
+            const lab = await db.prepare('SELECT name FROM lab_catalog WHERE id = ? AND tenant_id = ?').get(labTestId, tenantId);
             if (lab) labTestName = lab.name;
         }
 
@@ -106,12 +110,12 @@ router.post('/', async (req, res) => {
         await db.prepare(`
             INSERT INTO daily_operations (
                 id, employee_id, employee_name, department, transaction_type, 
-                lab_test_id, lab_test_name, selected_tests, amount, description, date, recorded_by
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                lab_test_id, lab_test_name, selected_tests, amount, description, date, recorded_by, tenant_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(
             id, employeeId, emp.full_name, department || null, transactionType,
             labTestId || null, labTestName, JSON.stringify(selectedTests || []), amount || 0, description || null,
-            opDate, req.user.name
+            opDate, req.user.name, tenantId
         );
 
         // Create account entry
@@ -124,10 +128,11 @@ router.post('/', async (req, res) => {
             department: department || 'General',
             userId: req.user.id,
             userName: req.user.name,
-            referenceId: id
+            referenceId: id,
+            tenantId
         });
 
-        const newRow = await db.prepare('SELECT * FROM daily_operations WHERE id = ?').get(id);
+        const newRow = await db.prepare('SELECT * FROM daily_operations WHERE id = ? AND tenant_id = ?').get(id, tenantId);
         logAction(req.user.id, req.user.name, req.user.role, 'CREATE', 'Daily Operations', `Created ${transactionType} record for ${emp.full_name}`, req.ip);
         
         res.status(201).json(fmtOps(newRow));
@@ -138,20 +143,21 @@ router.post('/', async (req, res) => {
 
 // PUT update record
 router.put('/:id', async (req, res) => {
+    const tenantId = req.tenantId;
     const { employeeId, department, transactionType, labTestId, amount, description, date, selectedTests } = req.body;
     try {
-        const row = await db.prepare('SELECT * FROM daily_operations WHERE id = ?').get(req.params.id);
+        const row = await db.prepare('SELECT * FROM daily_operations WHERE id = ? AND tenant_id = ?').get(req.params.id, tenantId);
         if (!row) return res.status(404).json({ error: 'Record not found' });
 
         let empName = row.employee_name;
         if (employeeId && employeeId !== row.employee_id) {
-            const emp = await db.prepare('SELECT full_name FROM employees WHERE id = ?').get(employeeId);
+            const emp = await db.prepare('SELECT full_name FROM employees WHERE id = ? AND tenant_id = ?').get(employeeId, tenantId);
             if (emp) empName = emp.full_name;
         }
 
         let labTestName = row.lab_test_name;
         if (labTestId && labTestId !== row.lab_test_id) {
-            const lab = await db.prepare('SELECT name FROM lab_catalog WHERE id = ?').get(labTestId);
+            const lab = await db.prepare('SELECT name FROM lab_catalog WHERE id = ? AND tenant_id = ?').get(labTestId, tenantId);
             if (lab) labTestName = lab.name;
         }
 
@@ -160,7 +166,7 @@ router.put('/:id', async (req, res) => {
                 employee_id = ?, employee_name = ?, department = ?, transaction_type = ?,
                 lab_test_id = ?, lab_test_name = ?, selected_tests = ?, amount = ?, description = ?, date = ?,
                 updated_at = CURRENT_TIMESTAMP
-            WHERE id = ?
+            WHERE id = ? AND tenant_id = ?
         `).run(
             employeeId || row.employee_id,
             empName,
@@ -172,17 +178,18 @@ router.put('/:id', async (req, res) => {
             amount !== undefined ? amount : row.amount,
             description !== undefined ? description : row.description,
             date || row.date,
-            req.params.id
+            req.params.id,
+            tenantId
         );
 
         // Update or Create account entry
-        const existingEntry = await db.prepare('SELECT id FROM account_entries WHERE reference_id = ?').get(req.params.id);
+        const existingEntry = await db.prepare('SELECT id FROM account_entries WHERE reference_id = ? AND tenant_id = ?').get(req.params.id, tenantId);
         if (existingEntry) {
             await db.prepare(`
                 UPDATE account_entries SET 
                     date = ?, type = ?, category = ?, description = ?, amount = ?, 
                     department = ?, user_id = ?
-                WHERE id = ?
+                WHERE id = ? AND tenant_id = ?
             `).run(
                 date || row.date,
                 transactionType === 'Operational Expense' ? 'expense' : 'income',
@@ -191,7 +198,8 @@ router.put('/:id', async (req, res) => {
                 parseFloat(amount !== undefined ? amount : row.amount),
                 department !== undefined ? department : row.department,
                 req.user.id,
-                existingEntry.id
+                existingEntry.id,
+                tenantId
             );
         } else {
             await recordSimpleEntry({
@@ -203,13 +211,14 @@ router.put('/:id', async (req, res) => {
                 department: department !== undefined ? department : row.department,
                 userId: req.user.id,
                 userName: req.user.name,
-                referenceId: req.params.id
+                referenceId: req.params.id,
+                tenantId
             });
         }
 
         logAction(req.user.id, req.user.name, req.user.role, 'UPDATE', 'Daily Operations', `Updated record ${req.params.id}`, req.ip);
         
-        const updatedRow = await db.prepare('SELECT * FROM daily_operations WHERE id = ?').get(req.params.id);
+        const updatedRow = await db.prepare('SELECT * FROM daily_operations WHERE id = ? AND tenant_id = ?').get(req.params.id, tenantId);
         res.json(fmtOps(updatedRow));
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -218,11 +227,13 @@ router.put('/:id', async (req, res) => {
 
 // DELETE record
 router.delete('/:id', async (req, res) => {
+    const tenantId = req.tenantId;
     try {
-        const row = await db.prepare('SELECT * FROM daily_operations WHERE id = ?').get(req.params.id);
+        const row = await db.prepare('SELECT * FROM daily_operations WHERE id = ? AND tenant_id = ?').get(req.params.id, tenantId);
         if (!row) return res.status(404).json({ error: 'Record not found' });
 
-        await db.prepare('DELETE FROM daily_operations WHERE id = ?').run(req.params.id);
+        await db.prepare('DELETE FROM daily_operations WHERE id = ? AND tenant_id = ?').run(req.params.id, tenantId);
+        await db.prepare('DELETE FROM account_entries WHERE reference_id = ? AND tenant_id = ?').run(req.params.id, tenantId);
         logAction(req.user.id, req.user.name, req.user.role, 'DELETE', 'Daily Operations', `Deleted record ${req.params.id}`, req.ip);
         
         res.json({ message: 'Record deleted successfully' });

@@ -921,8 +921,11 @@ export function LaboratoryContent({ initialLabTests }: Props) {
 
       {/* MODAL: RESULT ENTRY */}
       <Dialog open={isResultModalOpen} onOpenChange={setIsResultModalOpen}>
-        <DialogContent className="max-w-5xl rounded-[30px] p-0 overflow-hidden border-none shadow-2xl animate-in fade-in zoom-in-95 slide-in-from-bottom-4 duration-300">
-          <DialogHeader className="relative overflow-hidden border-b border-cyan-400/20 bg-[radial-gradient(circle_at_top_left,_rgba(34,211,238,0.35),_transparent_35%),linear-gradient(135deg,#020617_0%,#0f172a_45%,#0f766e_100%)] p-8 text-white">
+        <DialogContent
+          className="w-[95vw] sm:max-w-6xl max-w-6xl max-h-[92vh] flex flex-col rounded-[30px] p-0 overflow-hidden border-none shadow-2xl animate-in fade-in zoom-in-95 slide-in-from-bottom-4 duration-300"
+          style={{ maxWidth: '1280px', width: '95vw', maxHeight: '92vh' }}
+        >
+          <DialogHeader className="flex-shrink-0 relative overflow-hidden border-b border-cyan-400/20 bg-[radial-gradient(circle_at_top_left,_rgba(34,211,238,0.35),_transparent_35%),linear-gradient(135deg,#020617_0%,#0f172a_45%,#0f766e_100%)] p-6 md:p-8 text-white">
             <div className="absolute -right-8 -top-10 size-40 rounded-full bg-white/10 blur-2xl" />
             <div className="absolute bottom-0 left-0 h-1 w-full bg-gradient-to-r from-cyan-400 via-emerald-400 to-transparent" />
             <div className="relative flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
@@ -957,9 +960,9 @@ export function LaboratoryContent({ initialLabTests }: Props) {
             </div>
           </DialogHeader>
 
-          <ScrollArea className="max-h-[68vh] bg-slate-50/60">
-            <div className="space-y-8 p-8">
-              <div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
+          <ScrollArea className="flex-1 overflow-y-auto bg-slate-50/60 max-h-[calc(92vh-220px)]">
+            <div className="space-y-6 p-6 md:p-8">
+              <div className="grid gap-5 lg:grid-cols-[1.2fr_0.8fr]">
                 <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm animate-in fade-in slide-in-from-left-3 duration-300">
                   <div className="flex items-center justify-between">
                     <div>
@@ -971,7 +974,7 @@ export function LaboratoryContent({ initialLabTests }: Props) {
                       <p className="mt-1 font-mono text-sm font-bold text-slate-900">{selectedPatient?.patientId || selectedTest?.patientId || "Not available"}</p>
                     </div>
                   </div>
-                  <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                  <div className="mt-5 grid gap-3 grid-cols-2 sm:grid-cols-4">
                     <div className="rounded-2xl bg-slate-50 px-4 py-3">
                       <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Age</p>
                       <p className="mt-1 text-sm font-semibold text-slate-900">{calculateAge(selectedPatient?.dateOfBirth)}</p>
@@ -1118,7 +1121,7 @@ export function LaboratoryContent({ initialLabTests }: Props) {
                 </div>
               </div>
 
-              <div className="grid gap-6 xl:grid-cols-[1.3fr_0.7fr]">
+              <div className="grid gap-6 lg:grid-cols-[1.3fr_0.7fr]">
                 <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
                   <Label className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">Clinical Interpretation</Label>
                   <Textarea
@@ -1153,7 +1156,7 @@ export function LaboratoryContent({ initialLabTests }: Props) {
             </div>
           </ScrollArea>
 
-          <DialogFooter className="sticky bottom-0 border-t bg-white/95 p-6 backdrop-blur flex gap-3 sm:justify-end">
+          <DialogFooter className="flex-shrink-0 border-t bg-white/95 p-6 backdrop-blur flex gap-3 sm:justify-end">
             <Button variant="ghost" className="rounded-xl h-11 px-6 font-black text-slate-400 hover:text-slate-900" onClick={() => setIsResultModalOpen(false)}>DISCARD</Button>
             <Button className="rounded-xl h-11 px-10 font-black shadow-xl shadow-primary/20 transition-all hover:scale-[1.02] active:scale-[0.98] bg-slate-900 text-white" onClick={handleResultSubmit} disabled={loading}>
               {loading ? <Clock className="size-4 animate-spin mr-2" /> : <Save className="size-4 mr-2" />}

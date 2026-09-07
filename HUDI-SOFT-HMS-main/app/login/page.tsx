@@ -19,20 +19,44 @@ function LoginContent() {
   const [submitting, setSubmitting] = useState(false)
   const [rememberMe, setRememberMe] = useState(false)
   const [checkingLicense, setCheckingLicense] = useState(true)
+  const [activeKey, setActiveKey] = useState("")
+  const [hospitalName, setHospitalName] = useState("")
 
   const redirectTo = searchParams.get("redirect") || "/dashboard"
 
   useEffect(() => {
-    fetch("/api/license/status")
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.status === "expired") {
-          router.replace("/activate")
-        }
-      })
-      .catch((err) => console.error("License check error:", err))
-      .finally(() => setCheckingLicense(false))
-  }, [router])
+    const keyFromUrl = searchParams.get("key")
+    const keyFromStorage = typeof window !== "undefined" ? localStorage.getItem("hms_license_key") : null
+    const key = (keyFromUrl || keyFromStorage || "").trim().toUpperCase()
+    if (key) {
+      setActiveKey(key)
+      if (typeof window !== "undefined") localStorage.setItem("hms_license_key", key)
+    }
+
+    const storedHospitalName = typeof window !== "undefined" ? localStorage.getItem("hms_hospital_name") : ""
+    if (storedHospitalName) setHospitalName(storedHospitalName)
+
+    const storedEmail = typeof window !== "undefined" ? localStorage.getItem("hms_admin_email") : ""
+    if (storedEmail) setEmail((prev) => prev || storedEmail)
+
+    if (key) {
+      fetch(`/api/license/status?key=${encodeURIComponent(key)}`)
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.status === "expired") {
+            router.replace(`/activate?key=${encodeURIComponent(key)}`)
+          }
+          if (data.hospitalName) {
+            setHospitalName(data.hospitalName)
+            if (typeof window !== "undefined") localStorage.setItem("hms_hospital_name", data.hospitalName)
+          }
+        })
+        .catch((err) => console.error("License check error:", err))
+        .finally(() => setCheckingLicense(false))
+    } else {
+      setCheckingLicense(false)
+    }
+  }, [router, searchParams])
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -52,7 +76,7 @@ function LoginContent() {
     }
     setSubmitting(true)
     try {
-      await login(email.trim(), password)
+      await login(email.trim(), password, activeKey || undefined)
       toast.success("Welcome back")
       router.replace(redirectTo)
     } catch (err: unknown) {
@@ -112,7 +136,14 @@ function LoginContent() {
             </div>
           </div>
 
-          <h1 className="text-white text-3xl font-light tracking-tight mt-8 mb-8">User Login</h1>
+          <h1 className="text-white text-3xl font-light tracking-tight mt-8 mb-3">User Login</h1>
+          {hospitalName && (
+            <div className="mb-6 px-3.5 py-1 bg-teal-500/10 border border-teal-500/30 rounded-full text-xs text-teal-300 font-medium flex items-center gap-2 shadow-sm">
+              <span className="size-2 rounded-full bg-teal-400 animate-pulse" />
+              <span>Facility: <strong className="text-white font-semibold">{hospitalName}</strong></span>
+            </div>
+          )}
+          {!hospitalName && <div className="mb-5" />}
 
           <form onSubmit={handleSubmit} className="w-full space-y-6">
             {/* Email Field */}

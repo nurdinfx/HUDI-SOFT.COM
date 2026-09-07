@@ -66,30 +66,29 @@ const authenticate = async (req, res, next) => {
 
 const isValidUUID = (str) => typeof str === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
 
-const logAction = async (userId, userName, userRole, action, module, details, ip = '127.0.0.1') => {
+const logAction = async (userId, userName, userRole, action, module, details, ip = '127.0.0.1', tenantId = null) => {
   try {
     const validUserId = isValidUUID(userId) ? userId : null;
+    let resolvedTenantId = tenantId;
+    if (!resolvedTenantId && validUserId) {
+      try {
+        const u = await db.query('SELECT tenant_id FROM users WHERE id = $1', [validUserId]);
+        resolvedTenantId = u.rows[0]?.tenant_id || null;
+      } catch (e) {}
+    }
     await db.query(
-      `INSERT INTO audit_logs (id, user_id, user_name, user_role, action, module, details, timestamp, ip_address)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-      [uuidv4(), validUserId, userName, userRole, action, module, details, new Date().toISOString(), ip]
+      `INSERT INTO audit_logs (id, user_id, user_name, user_role, action, module, details, timestamp, ip_address, tenant_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+      [uuidv4(), validUserId, userName, userRole, action, module, details, new Date().toISOString(), ip, resolvedTenantId]
     );
   } catch (e) {
     console.error('Audit Log Silent Fail:', e.message);
   }
 };
 
-// Helper for backward compat — reads tenant from DB license table for non-JWT contexts (e.g. license routes)
+// Helper for backward compat — returns null in multi-tenant mode to prevent cross-tenant data leakage
 async function getTenantId() {
-  try {
-    const result = await db.query('SELECT tenant_id FROM license_info WHERE status IN ($1, $2) LIMIT 1', ['active', 'demo']);
-    if (result.rows[0]?.tenant_id) return result.rows[0].tenant_id;
-    const fallback = await db.query('SELECT tenant_id FROM license_info LIMIT 1');
-    return fallback.rows[0]?.tenant_id || null;
-  } catch (e) {
-    console.warn('⚠️  Could not fetch tenant_id:', e.message);
-    return null;
-  }
+  return null;
 }
 
 // No-op for backward compat

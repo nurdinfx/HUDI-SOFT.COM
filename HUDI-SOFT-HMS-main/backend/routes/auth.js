@@ -45,11 +45,15 @@ router.post('/login', async (req, res) => {
             if (licResult.rows[0]) {
                 licenseInfo = licResult.rows[0];
                 tenantId = licResult.rows[0].tenant_id;
+            } else {
+                return res.status(401).json({
+                    error: 'License key not recognized. Please check your key or activate at /activate.',
+                    code: 'INVALID_LICENSE_KEY'
+                });
             }
         }
 
-        // ── Strategy 2: Find the user, use their tenant_id ──
-        // This works when each hospital user has a unique email (most common case)
+        // ── Strategy 2: Find the user within the tenant ──
         let userResult;
         if (tenantId) {
             userResult = await db.query(
@@ -57,12 +61,20 @@ router.post('/login', async (req, res) => {
                 [email.toLowerCase().trim(), tenantId]
             );
         } else {
-            // No license key — find user by email, any tenant
-            // The tenant_id comes from the USER's own record
-            userResult = await db.query(
-                `SELECT * FROM users WHERE email = $1 AND is_active = 1 LIMIT 1`,
+            // No license key provided: check if this email is unique across the whole system
+            const allMatchingUsers = await db.query(
+                `SELECT * FROM users WHERE email = $1 AND is_active = 1`,
                 [email.toLowerCase().trim()]
             );
+
+            if (allMatchingUsers.rows.length > 1) {
+                return res.status(400).json({
+                    error: 'Multiple hospitals exist with this email. Please provide your License Key to log in to the correct facility.',
+                    code: 'LICENSE_KEY_REQUIRED'
+                });
+            }
+
+            userResult = allMatchingUsers;
         }
 
         const user = userResult.rows[0];
@@ -102,7 +114,7 @@ router.post('/login', async (req, res) => {
             { expiresIn: '12h' }
         );
 
-        logAction(user.id, user.name, user.role, 'LOGIN', 'Auth', `User logged in: ${user.email}`, req.ip);
+        logAction(user.id, user.name, user.role, 'LOGIN', 'Auth', `User logged in: ${user.email}`, req.ip, userTenantId);
 
         res.json({
             token,
@@ -146,7 +158,18 @@ router.get('/me', async (req, res) => {
         const user = userResult.rows[0];
         if (!user) return res.status(404).json({ error: 'User not found' });
 
-        res.json({ ...user, isActive: user.is_active === 1 || user.is_active === true, tenantId });
+        const licResult = await db.query(
+            `SELECT status, hospital_name FROM license_info WHERE tenant_id = $1 LIMIT 1`,
+            [tenantId]
+        );
+        const licenseInfo = licResult.rows[0] || null;
+
+        res.json({
+            ...user,
+            isActive: user.is_active === 1 || user.is_active === true,
+            tenantId,
+            hospitalName: licenseInfo?.hospital_name || 'My Hospital'
+        });
     } catch (e) {
         res.status(401).json({ error: 'Invalid token' });
     }

@@ -21,13 +21,14 @@ const fmt = (v) => ({
 
 router.get('/stats', async (req, res) => {
     const today = new Date().toISOString().split('T')[0];
+    const tenantId = req.tenantId;
     try {
-        const todayVisits = (await db.prepare('SELECT COUNT(*) as c FROM opd_visits WHERE date = ?').get(today)).c;
-        const waitingCount = (await db.prepare('SELECT COUNT(*) as c FROM opd_visits WHERE date = ? AND status = \'waiting\'').get(today)).c;
-        const consultingCount = (await db.prepare('SELECT COUNT(*) as c FROM opd_visits WHERE date = ? AND status = \'in-consultation\'').get(today)).c;
-        const completedCount = (await db.prepare('SELECT COUNT(*) as c FROM opd_visits WHERE date = ? AND status = \'completed\'').get(today)).c;
-        const departmentStats = await db.prepare('SELECT department, COUNT(*) as count FROM opd_visits WHERE date = ? GROUP BY department').all(today);
-        const queueStatus = await db.prepare('SELECT visit_id as "visitId", patient_name as "patientName", token_number as token, status FROM opd_visits WHERE date = ? ORDER BY token_number ASC').all(today);
+        const todayVisits = (await db.prepare('SELECT COUNT(*) as c FROM opd_visits WHERE date = ? AND tenant_id = ?').get(today, tenantId)).c;
+        const waitingCount = (await db.prepare("SELECT COUNT(*) as c FROM opd_visits WHERE date = ? AND status = 'waiting' AND tenant_id = ?").get(today, tenantId)).c;
+        const consultingCount = (await db.prepare("SELECT COUNT(*) as c FROM opd_visits WHERE date = ? AND status = 'in-consultation' AND tenant_id = ?").get(today, tenantId)).c;
+        const completedCount = (await db.prepare("SELECT COUNT(*) as c FROM opd_visits WHERE date = ? AND status = 'completed' AND tenant_id = ?").get(today, tenantId)).c;
+        const departmentStats = await db.prepare('SELECT department, COUNT(*) as count FROM opd_visits WHERE date = ? AND tenant_id = ? GROUP BY department').all(today, tenantId);
+        const queueStatus = await db.prepare('SELECT visit_id as "visitId", patient_name as "patientName", token_number as token, status FROM opd_visits WHERE date = ? AND tenant_id = ? ORDER BY token_number ASC').all(today, tenantId);
 
         res.json({
             todayVisits: parseInt(todayVisits),
@@ -45,7 +46,8 @@ router.get('/stats', async (req, res) => {
 
 router.get('/', async (req, res) => {
     const { search, status, date } = req.query;
-    let q = 'SELECT * FROM opd_visits WHERE 1=1'; const p = [];
+    const tenantId = req.tenantId;
+    let q = 'SELECT * FROM opd_visits WHERE tenant_id = ?'; const p = [tenantId];
     if (search) { q += ` AND (patient_name LIKE ? OR visit_id LIKE ?)`; const s = `%${search}%`; p.push(s, s); }
     if (status) { q += ' AND status = ?'; p.push(status); }
     if (date) { q += ' AND date = ?'; p.push(date); }
@@ -60,7 +62,7 @@ router.get('/', async (req, res) => {
 
 router.get('/:id', async (req, res) => {
     try {
-        const row = await db.prepare('SELECT * FROM opd_visits WHERE id = ?').get(req.params.id);
+        const row = await db.prepare('SELECT * FROM opd_visits WHERE id = ? AND tenant_id = ?').get(req.params.id, req.tenantId);
         if (!row) return res.status(404).json({ error: 'Not found' });
         res.json(fmt(row));
     } catch (err) {
@@ -72,13 +74,14 @@ router.post('/', async (req, res) => {
     const { patientId, doctorId, chiefComplaint, vitals, time, visitType } = req.body;
     if (!patientId || !doctorId || !chiefComplaint) return res.status(400).json({ error: 'patientId, doctorId, chiefComplaint required' });
 
+    const tenantId = req.tenantId;
     try {
-        const patient = await db.prepare('SELECT * FROM patients WHERE id = ?').get(patientId);
-        const doctor = await db.prepare('SELECT * FROM doctors WHERE id = ?').get(doctorId);
+        const patient = await db.prepare('SELECT * FROM patients WHERE id = ? AND tenant_id = ?').get(patientId, tenantId);
+        const doctor = await db.prepare('SELECT * FROM doctors WHERE id = ? AND tenant_id = ?').get(doctorId, tenantId);
         const today = new Date().toISOString().split('T')[0];
-        const tokenCountData = await db.prepare("SELECT COUNT(*) as c FROM opd_visits WHERE date = ?").get(today);
+        const tokenCountData = await db.prepare("SELECT COUNT(*) as c FROM opd_visits WHERE date = ? AND tenant_id = ?").get(today, tenantId);
         const tokenCount = parseInt(tokenCountData.c);
-        const maxVisitData = await db.prepare('SELECT visit_id FROM opd_visits ORDER BY visit_id DESC LIMIT 1').get();
+        const maxVisitData = await db.prepare('SELECT visit_id FROM opd_visits WHERE tenant_id = ? ORDER BY visit_id DESC LIMIT 1').get(tenantId);
         let nextVisitNumber = 1;
         if (maxVisitData && maxVisitData.visit_id) {
             const lastVisitNumber = parseInt(maxVisitData.visit_id.split('-').pop());
@@ -87,9 +90,9 @@ router.post('/', async (req, res) => {
         const visitId = `OPD-${String(nextVisitNumber).padStart(4, '0')}`;
         const id = uuidv4();
 
-        await db.prepare(`INSERT INTO opd_visits (id, visit_id, patient_id, patient_name, doctor_id, doctor_name, department, date, time, chief_complaint, vitals, status, token_number, visit_type)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-            .run(id, visitId, patientId, patient ? `${patient.first_name} ${patient.last_name}` : 'Unknown', doctorId, doctor ? doctor.name : 'Unknown', doctor ? doctor.department : 'General', today, time || new Date().toTimeString().slice(0, 5), chiefComplaint, JSON.stringify(vitals || {}), 'waiting', tokenCount + 1, visitType || 'New');
+        await db.prepare(`INSERT INTO opd_visits (id, visit_id, patient_id, patient_name, doctor_id, doctor_name, department, date, time, chief_complaint, vitals, status, token_number, visit_type, tenant_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+            .run(id, visitId, patientId, patient ? `${patient.first_name} ${patient.last_name}` : 'Unknown', doctorId, doctor ? doctor.name : 'Unknown', doctor ? doctor.department : 'General', today, time || new Date().toTimeString().slice(0, 5), chiefComplaint, JSON.stringify(vitals || {}), 'waiting', tokenCount + 1, visitType || 'New', tenantId);
 
         logAction(req.user.id, req.user.name, req.user.role, 'CREATE', 'OPD', `OPD visit created: ${visitId}`, req.ip);
         const row = await db.prepare('SELECT * FROM opd_visits WHERE id = ?').get(id);
@@ -100,8 +103,9 @@ router.post('/', async (req, res) => {
 });
 
 router.put('/:id', async (req, res) => {
+    const tenantId = req.tenantId;
     try {
-        const row = await db.prepare('SELECT * FROM opd_visits WHERE id = ?').get(req.params.id);
+        const row = await db.prepare('SELECT * FROM opd_visits WHERE id = ? AND tenant_id = ?').get(req.params.id, tenantId);
         if (!row) return res.status(404).json({ error: 'Not found' });
         const { status, diagnosis, vitals, historyIllness, pastHistory, familyHistory, physicalExamination, clinicalNotes } = req.body;
 
@@ -109,7 +113,7 @@ router.put('/:id', async (req, res) => {
             status=?, diagnosis=?, vitals=?, 
             history_illness=?, past_history=?, family_history=?, 
             physical_examination=?, clinical_notes=? 
-            WHERE id=?`)
+            WHERE id=? AND tenant_id=?`)
             .run(
                 status || row.status,
                 diagnosis ?? row.diagnosis,
@@ -119,7 +123,7 @@ router.put('/:id', async (req, res) => {
                 familyHistory ?? row.family_history,
                 physicalExamination ?? row.physical_examination,
                 clinicalNotes ?? row.clinical_notes,
-                req.params.id
+                req.params.id, tenantId
             );
         const updatedRow = await db.prepare('SELECT * FROM opd_visits WHERE id = ?').get(req.params.id);
         res.json(fmt(updatedRow));
@@ -129,12 +133,13 @@ router.put('/:id', async (req, res) => {
 });
 
 router.get('/:id/patient-summary', async (req, res) => {
+    const tenantId = req.tenantId;
     try {
-        const visit = await db.prepare('SELECT * FROM opd_visits WHERE id = ?').get(req.params.id);
+        const visit = await db.prepare('SELECT * FROM opd_visits WHERE id = ? AND tenant_id = ?').get(req.params.id, tenantId);
         if (!visit) return res.status(404).json({ error: 'Visit not found' });
 
-        const patient = await db.prepare('SELECT allergies, chronic_conditions FROM patients WHERE id = ?').get(visit.patient_id);
-        const visitCountData = await db.prepare('SELECT COUNT(*) as c FROM opd_visits WHERE patient_id = ? AND status = \'completed\'').get(visit.patient_id);
+        const patient = await db.prepare('SELECT allergies, chronic_conditions FROM patients WHERE id = ? AND tenant_id = ?').get(visit.patient_id, tenantId);
+        const visitCountData = await db.prepare("SELECT COUNT(*) as c FROM opd_visits WHERE patient_id = ? AND status = 'completed' AND tenant_id = ?").get(visit.patient_id, tenantId);
 
         res.json({
             allergies: JSON.parse(patient?.allergies || '[]'),
@@ -147,8 +152,9 @@ router.get('/:id/patient-summary', async (req, res) => {
 });
 
 router.put('/:id/consultation', async (req, res) => {
+    const tenantId = req.tenantId;
     try {
-        const row = await db.prepare('SELECT * FROM opd_visits WHERE id = ?').get(req.params.id);
+        const row = await db.prepare('SELECT * FROM opd_visits WHERE id = ? AND tenant_id = ?').get(req.params.id, tenantId);
         if (!row) return res.status(404).json({ error: 'Not found' });
         const {
             diagnosis, vitals, historyIllness, pastHistory, familyHistory,
@@ -161,7 +167,7 @@ router.put('/:id/consultation', async (req, res) => {
             status=?, diagnosis=?, vitals=?, 
             history_illness=?, past_history=?, family_history=?, 
             physical_examination=?, clinical_notes=? 
-            WHERE id=?`)
+            WHERE id=? AND tenant_id=?`)
             .run(
                 newStatus,
                 diagnosis ?? row.diagnosis,
@@ -171,26 +177,26 @@ router.put('/:id/consultation', async (req, res) => {
                 familyHistory ?? row.family_history,
                 physicalExamination ?? row.physical_examination,
                 clinicalNotes ?? row.clinical_notes,
-                req.params.id
+                req.params.id, tenantId
             );
 
         if (completeVisit) {
             if (medications && Array.isArray(medications) && medications.length > 0) {
-                const maxRxData = await db.prepare('SELECT prescription_id FROM prescriptions ORDER BY prescription_id DESC LIMIT 1').get();
+                const maxRxData = await db.prepare('SELECT prescription_id FROM prescriptions WHERE tenant_id = ? ORDER BY prescription_id DESC LIMIT 1').get(tenantId);
                 let nextRxNumber = 1;
                 if (maxRxData && maxRxData.prescription_id) {
                     const lastRxNumber = parseInt(maxRxData.prescription_id.split('-').pop());
                     if (!isNaN(lastRxNumber)) nextRxNumber = lastRxNumber + 1;
                 }
                 const rxId = `RX-OPD-${String(nextRxNumber).padStart(4, '0')}`;
-                await db.prepare(`INSERT INTO prescriptions (id, prescription_id, patient_id, patient_name, doctor_id, doctor_name, date, diagnosis, medicines, status)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-                    .run(uuidv4(), rxId, row.patient_id, row.patient_name, row.doctor_id, row.doctor_name, new Date().toISOString().split('T')[0], diagnosis || 'OPD Consultation', JSON.stringify(medications), 'pending');
+                await db.prepare(`INSERT INTO prescriptions (id, prescription_id, patient_id, patient_name, doctor_id, doctor_name, date, diagnosis, medicines, status, tenant_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+                    .run(uuidv4(), rxId, row.patient_id, row.patient_name, row.doctor_id, row.doctor_name, new Date().toISOString().split('T')[0], diagnosis || 'OPD Consultation', JSON.stringify(medications), 'pending', tenantId);
             }
 
-            const doc = await db.prepare('SELECT consultation_fee FROM doctors WHERE id = ?').get(row.doctor_id);
+            const doc = await db.prepare('SELECT consultation_fee FROM doctors WHERE id = ? AND tenant_id = ?').get(row.doctor_id, tenantId);
             const fee = doc ? doc.consultation_fee : 50;
-            const maxInvData = await db.prepare("SELECT invoice_id FROM invoices WHERE invoice_id LIKE 'INV-OPD-%' ORDER BY LENGTH(invoice_id) DESC, invoice_id DESC LIMIT 1").get();
+            const maxInvData = await db.prepare("SELECT invoice_id FROM invoices WHERE invoice_id LIKE 'INV-OPD-%' AND tenant_id = ? ORDER BY LENGTH(invoice_id) DESC, invoice_id DESC LIMIT 1").get(tenantId);
             let nextInvNumber = 1;
             if (maxInvData && maxInvData.invoice_id) {
                 const parts = maxInvData.invoice_id.split('-');
@@ -202,9 +208,9 @@ router.put('/:id/consultation', async (req, res) => {
             const invId = `INV-OPD-${String(nextInvNumber).padStart(4, '0')}-${randomSuffix}`;
             const items = [{ description: `Consultation Fee (${row.visit_id})`, category: 'Service', quantity: 1, unitPrice: fee, total: fee }];
 
-            await db.prepare(`INSERT INTO invoices (id, invoice_id, patient_id, patient_name, date, due_date, items, subtotal, tax, total, paid_amount, status)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-                .run(uuidv4(), invId, row.patient_id, row.patient_name, new Date().toISOString().split('T')[0], new Date().toISOString().split('T')[0], JSON.stringify(items), fee, 0, fee, 0, 'unpaid');
+            await db.prepare(`INSERT INTO invoices (id, invoice_id, patient_id, patient_name, date, due_date, items, subtotal, tax, total, paid_amount, status, tenant_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+                .run(uuidv4(), invId, row.patient_id, row.patient_name, new Date().toISOString().split('T')[0], new Date().toISOString().split('T')[0], JSON.stringify(items), fee, 0, fee, 0, 'unpaid', tenantId);
         }
 
         const updatedRow = await db.prepare('SELECT * FROM opd_visits WHERE id = ?').get(req.params.id);
@@ -215,10 +221,11 @@ router.put('/:id/consultation', async (req, res) => {
 });
 
 router.delete('/:id', async (req, res) => {
+    const tenantId = req.tenantId;
     try {
-        const row = await db.prepare('SELECT * FROM opd_visits WHERE id = ?').get(req.params.id);
+        const row = await db.prepare('SELECT * FROM opd_visits WHERE id = ? AND tenant_id = ?').get(req.params.id, tenantId);
         if (!row) return res.status(404).json({ error: 'Not found' });
-        await db.prepare('DELETE FROM opd_visits WHERE id = ?').run(req.params.id);
+        await db.prepare('DELETE FROM opd_visits WHERE id = ? AND tenant_id = ?').run(req.params.id, tenantId);
         res.json({ message: 'Deleted' });
     } catch (err) {
         res.status(500).json({ error: err.message });

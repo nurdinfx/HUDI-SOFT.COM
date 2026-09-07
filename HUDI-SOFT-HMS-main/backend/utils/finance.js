@@ -19,14 +19,22 @@ async function recordGranularPayment({
     paymentAmount,
     paymentMethod,
     userId,
-    defaultDept = 'Billing'
+    defaultDept = 'Billing',
+    tenantId = null
 }) {
     if (paymentAmount <= 0) return;
 
     const today = new Date().toISOString().split('T')[0];
 
     // Try to get detailed invoice items from the invoices table
-    const row = await db.prepare('SELECT items, subtotal, total FROM invoices WHERE id = ?').get(dbInvoiceId);
+    let rowQuery = 'SELECT items, subtotal, total, tenant_id FROM invoices WHERE id = ?';
+    const queryParams = [dbInvoiceId];
+    if (tenantId) {
+        rowQuery += ' AND tenant_id = ?';
+        queryParams.push(tenantId);
+    }
+    const row = await db.prepare(rowQuery).get(...queryParams);
+    const resolvedTenantId = tenantId || row?.tenant_id || null;
 
     if (row) {
         // Full granular split across invoice items
@@ -40,8 +48,8 @@ async function recordGranularPayment({
             const share = (itemTotal / subtotal) * paymentAmount;
 
             await db.prepare(`
-                INSERT INTO account_entries (id, date, type, category, description, amount, payment_method, reference_id, department, status, user_id)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO account_entries (id, date, type, category, description, amount, payment_method, reference_id, department, status, user_id, tenant_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             `).run(
                 uuidv4(),
                 today,
@@ -53,15 +61,16 @@ async function recordGranularPayment({
                 invoiceId,
                 item.department || defaultDept,
                 'completed',
-                userId
+                userId,
+                resolvedTenantId
             );
         }
     } else {
         // Fallback: invoice may belong to pharmacy_transactions or another table.
         // Record as a single income entry under the defaultDept.
         await db.prepare(`
-            INSERT INTO account_entries (id, date, type, category, description, amount, payment_method, reference_id, department, status, user_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO account_entries (id, date, type, category, description, amount, payment_method, reference_id, department, status, user_id, tenant_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(
             uuidv4(),
             today,
@@ -73,7 +82,8 @@ async function recordGranularPayment({
             invoiceId,
             defaultDept,
             'completed',
-            userId
+            userId,
+            resolvedTenantId
         );
     }
 }
@@ -91,13 +101,14 @@ async function recordSimpleEntry({
     referenceId,
     department,
     userId,
-    userName
+    userName,
+    tenantId = null
 }) {
     if (amount === 0) return;
 
     await db.prepare(`
-        INSERT INTO account_entries (id, date, type, category, description, amount, payment_method, reference_id, department, status, user_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO account_entries (id, date, type, category, description, amount, payment_method, reference_id, department, status, user_id, tenant_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
         uuidv4(),
         date || new Date().toISOString().split('T')[0],
@@ -109,7 +120,8 @@ async function recordSimpleEntry({
         referenceId,
         department,
         'completed',
-        userId
+        userId,
+        tenantId
     );
 }
 
