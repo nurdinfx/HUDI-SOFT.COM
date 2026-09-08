@@ -4,7 +4,7 @@ async function migrateReturnsV2() {
     console.log('🚀 Starting Returns V2 Migration (Adding medicine_id)...');
     try {
         await db.query(`
-            ALTER TABLE pharmacy_supplier_returns ADD COLUMN medicine_id UUID REFERENCES medicines(id);
+            ALTER TABLE pharmacy_supplier_returns ADD COLUMN IF NOT EXISTS medicine_id UUID REFERENCES medicines(id);
         `);
         console.log('✨ Returns V2 Migration completed successfully!');
     } catch (err) {

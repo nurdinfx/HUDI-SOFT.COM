@@ -21,9 +21,13 @@ async function migrate() {
                 category TEXT,
                 cost DECIMAL(10, 2) NOT NULL,
                 status TEXT DEFAULT 'active',
+                tenant_id TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         `);
+        try {
+            await db.query(`ALTER TABLE procedures ADD COLUMN IF NOT EXISTS tenant_id TEXT`);
+        } catch (e) {}
         console.log('✅ Procedures table created/verified');
 
         // Note: FOREIGN KEY constraints are often skipped in this codebase for flexibility, 
@@ -32,7 +36,7 @@ async function migrate() {
         console.log('✨ Procedure Hub migration completed successfully!');
     } catch (err) {
         console.error('❌ Migration failed:', err.message);
-        process.exit(1);
+        throw err;
     }
 }
 

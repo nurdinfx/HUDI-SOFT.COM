@@ -96,21 +96,26 @@ app.get('/api/health', (req, res) => {
 const dbModule = require('./database');
 dbModule.promise.then(async () => {
     console.log('📦 Running Database Migrations...');
-    try {
-        await require('./init_schema')();
-        await require('./migrate_tables')();
-        await require('./migrate_license')();
-        await require('./migrate_tenants')();
-        await require('./migrate_revenue_analytics')();
-        await require('./migrate_multi_test')();
-        await require('./migrate_purchase_hub')();
-        await require('./migrate_push_subscriptions')();
-        await require('./migrate_procedures')();
-        await require('./migrate_pharmacy_accounts')();
-        await require('./migrate_vitals')();
-        await require('./migrate_pharmacy_transfer')();
-    } catch (err) {
-        console.error('⚠️ Migration warning:', err.message);
+    const migrations = [
+        ['Core Schema', require('./init_schema')],
+        ['Core Tables', require('./migrate_tables')],
+        ['License', require('./migrate_license')],
+        ['Revenue Analytics', require('./migrate_revenue_analytics')],
+        ['Multi Test', require('./migrate_multi_test')],
+        ['Purchase Hub', require('./migrate_purchase_hub')],
+        ['Push Subscriptions', require('./migrate_push_subscriptions')],
+        ['Procedures', require('./migrate_procedures')],
+        ['Pharmacy Accounts', require('./migrate_pharmacy_accounts')],
+        ['Vitals', require('./migrate_vitals')],
+        ['Pharmacy Transfer', require('./migrate_pharmacy_transfer')],
+        ['Multi-Tenant Isolation', require('./migrate_tenants')]
+    ];
+    for (const [name, fn] of migrations) {
+        try {
+            await fn();
+        } catch (err) {
+            console.warn(`⚠️ [Migration] ${name} warning:`, err.message);
+        }
     }
 
 

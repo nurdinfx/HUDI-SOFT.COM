@@ -59,7 +59,7 @@ router.post('/', async (req, res) => {
             .run(id, itemId, name, category, description || null, qty, unit || 'pcs', rl, unitCost || 0, supplier || null, new Date().toISOString().split('T')[0], status, tenantId);
 
         logAction(req.user.id, req.user.name, req.user.role, 'CREATE', 'Inventory', `Item added: ${name}`, req.ip);
-        const row = await db.prepare('SELECT * FROM inventory_items WHERE id = ?').get(id);
+        const row = await db.prepare('SELECT * FROM inventory_items WHERE id = ? AND tenant_id = ?').get(id, tenantId);
         res.status(201).json(fmt(row));
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -81,7 +81,7 @@ router.put('/:id', async (req, res) => {
             .run(name || row.name, category || row.category, description ?? row.description, qty, unit || row.unit, rl, unitCost ?? row.unit_cost, supplier ?? row.supplier, restocked, status, req.params.id, tenantId);
 
         logAction(req.user.id, req.user.name, req.user.role, 'UPDATE', 'Inventory', `Item updated: ${name || row.name}`, req.ip);
-        const updatedRow = await db.prepare('SELECT * FROM inventory_items WHERE id = ?').get(req.params.id);
+        const updatedRow = await db.prepare('SELECT * FROM inventory_items WHERE id = ? AND tenant_id = ?').get(req.params.id, tenantId);
         res.json(fmt(updatedRow));
     } catch (err) {
         res.status(500).json({ error: err.message });

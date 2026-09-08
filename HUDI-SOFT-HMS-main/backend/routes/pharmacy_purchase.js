@@ -301,12 +301,12 @@ router.post('/returns', async (req, res) => {
 router.get('/stats', async (req, res) => {
     const tenantId = req.tenantId;
     try {
-        const totalPurchases = (await db.prepare("SELECT SUM(total_amount) as s FROM pharmacy_purchase_orders WHERE status = 'received' AND tenant_id = ?").get(tenantId)).s || 0;
-        const totalCash = (await db.prepare("SELECT SUM(total_amount) as s FROM pharmacy_purchase_orders WHERE status = 'received' AND payment_type = 'cash' AND tenant_id = ?").get(tenantId)).s || 0;
-        const totalLoan = (await db.prepare("SELECT SUM(total_amount) as s FROM pharmacy_purchase_orders WHERE status = 'received' AND payment_type = 'loan' AND tenant_id = ?").get(tenantId)).s || 0;
-        const expiringCount = (await db.prepare("SELECT COUNT(*) as c FROM pharmacy_batches WHERE status = 'near-expiry' AND quantity_remaining > 0 AND tenant_id = ?").get(tenantId)).c || 0;
-        const expiredCount = (await db.prepare("SELECT COUNT(*) as c FROM pharmacy_batches WHERE status = 'expired' AND quantity_remaining > 0 AND tenant_id = ?").get(tenantId)).c || 0;
-        const returnedAmount = (await db.prepare("SELECT SUM(amount) as s FROM pharmacy_supplier_returns WHERE tenant_id = ?").get(tenantId)).s || 0;
+        const totalPurchases = (await db.prepare("SELECT SUM(total_amount) as s FROM pharmacy_purchase_orders WHERE status = 'received' AND tenant_id = ?").get(tenantId))?.s || 0;
+        const totalCash = (await db.prepare("SELECT SUM(total_amount) as s FROM pharmacy_purchase_orders WHERE status = 'received' AND payment_type = 'cash' AND tenant_id = ?").get(tenantId))?.s || 0;
+        const totalLoan = (await db.prepare("SELECT SUM(total_amount) as s FROM pharmacy_purchase_orders WHERE status = 'received' AND payment_type = 'loan' AND tenant_id = ?").get(tenantId))?.s || 0;
+        const expiringCount = (await db.prepare("SELECT COUNT(*) as c FROM pharmacy_batches WHERE status = 'near-expiry' AND quantity_remaining > 0 AND tenant_id = ?").get(tenantId))?.c || 0;
+        const expiredCount = (await db.prepare("SELECT COUNT(*) as c FROM pharmacy_batches WHERE status = 'expired' AND quantity_remaining > 0 AND tenant_id = ?").get(tenantId))?.c || 0;
+        const returnedAmount = (await db.prepare("SELECT SUM(amount) as s FROM pharmacy_supplier_returns WHERE tenant_id = ?").get(tenantId))?.s || 0;
         
         // Stock Value Calculation based on batch unit prices
         const stockValueRes = await db.prepare(`
@@ -315,7 +315,7 @@ router.get('/stats', async (req, res) => {
             LEFT JOIN pharmacy_purchase_items pi ON b.po_id = pi.po_id AND b.medicine_id = pi.medicine_id
             WHERE b.quantity_remaining > 0 AND b.tenant_id = ?
         `).get(tenantId);
-        const stockValue = stockValueRes.v || 0;
+        const stockValue = stockValueRes?.v || 0;
 
         res.json({
             totalPurchases,

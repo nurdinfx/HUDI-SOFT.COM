@@ -14,6 +14,7 @@ const TABLES_WITH_TENANT = [
   'lab_tests',
   'lab_catalog',
   'lab_audit_logs',
+  'lab_categories',
   'invoices',
   'opd_visits',
   'ipd_admissions',
@@ -30,6 +31,8 @@ const TABLES_WITH_TENANT = [
   'insurance_claims',
   'daily_operations',
   'manual_daily_revenue',
+  'departments',
+  'service_categories',
   'users',
   'inventory_items',
   'pos_orders',
@@ -38,6 +41,12 @@ const TABLES_WITH_TENANT = [
   'pharmacy_transaction_items',
   'pharmacy_returns',
   'pharmacy_purchases',
+  'medicine_categories',
+  'pharmacy_suppliers',
+  'pharmacy_purchase_orders',
+  'pharmacy_purchase_items',
+  'pharmacy_batches',
+  'pharmacy_supplier_returns',
   'employees',
   'employee_expenses',
   'employee_ledger',
@@ -46,16 +55,15 @@ const TABLES_WITH_TENANT = [
   'credit_ledger',
   'credit_transactions',
   'credit_payments',
-  'pharmacy_purchase_items',
   'hr_employees',
   'hr_payroll',
   'hr_attendance',
   'patient_credits',
-  'credit_transactions',
   'procedures',
   'patient_procedures',
   'vitals',
   'revenue_analytics',
+  'push_subscriptions'
 ];
 
 module.exports = async function migrateTenants() {
@@ -70,17 +78,28 @@ module.exports = async function migrateTenants() {
       if (!tableCheck.rows[0]?.exists) continue;
 
       // Add tenant_id column if it doesn't exist
-      await db.query(`
-        ALTER TABLE ${table}
-        ADD COLUMN IF NOT EXISTS tenant_id UUID
-      `);
+      try {
+        await db.query(`
+          ALTER TABLE ${table}
+          ADD COLUMN IF NOT EXISTS tenant_id TEXT
+        `);
+      } catch (colErr) {
+        try {
+          await db.query(`
+            ALTER TABLE ${table}
+            ADD COLUMN IF NOT EXISTS tenant_id UUID
+          `);
+        } catch (colErr2) {}
+      }
 
       // Backfill: assign all existing rows to the first tenant
-      await db.query(`
-        UPDATE ${table}
-        SET tenant_id = (SELECT tenant_id FROM license_info LIMIT 1)
-        WHERE tenant_id IS NULL
-      `);
+      try {
+        await db.query(`
+          UPDATE ${table}
+          SET tenant_id = (SELECT tenant_id FROM license_info LIMIT 1)
+          WHERE tenant_id IS NULL
+        `);
+      } catch (backfillErr) {}
 
       console.log(`  ✅ ${table}: tenant_id added & backfilled`);
     } catch (err) {

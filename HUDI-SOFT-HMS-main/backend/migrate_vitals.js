@@ -19,9 +19,13 @@ async function migrate() {
                 spo2 INTEGER,
                 blood_sugar INTEGER,
                 created_by UUID REFERENCES users(id),
+                tenant_id TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         `);
+        try {
+            await db.query(`ALTER TABLE vitals ADD COLUMN IF NOT EXISTS tenant_id TEXT`);
+        } catch (e) {}
         console.log('✅ Vitals table created/verified');
 
         console.log('✨ Vitals migration completed successfully!');
