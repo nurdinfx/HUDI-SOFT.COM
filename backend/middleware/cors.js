@@ -12,6 +12,7 @@ const DEFAULT_ALLOWED_ORIGINS = [
     // Production custom domain
     'https://hudisoft.online',
     'https://www.hudisoft.online',
+    'https://main.hudisoft.online',
     // Production Vercel deployments
     'https://hudi-soft-com.vercel.app',
     'https://hudi-soft-com-sz9e.vercel.app',
@@ -60,7 +61,7 @@ const ALLOWED_SET = buildAllowedSet();
  */
 const VERCEL_PREVIEW_PATTERN = /^https:\/\/(hudi-soft|hudisoftdatel)[-a-z0-9]*\.vercel\.app$/;
 const VERCEL_TEAM_PATTERN = /^https:\/\/hudisoftdatel[-a-z0-9]*-cismaankayse377-5782s-projects\.vercel\.app$/;
-const HUDISOFT_DOMAIN_PATTERN = /^https?:\/\/(www\.)?hudisoft\.online$/;
+const HUDISOFT_DOMAIN_PATTERN = /^https?:\/\/([a-zA-Z0-9-]+\.)*hudisoft\.online$/;
 
 function isOriginAllowed(origin) {
     if (!origin) return true; // server-to-server / non-browser request
