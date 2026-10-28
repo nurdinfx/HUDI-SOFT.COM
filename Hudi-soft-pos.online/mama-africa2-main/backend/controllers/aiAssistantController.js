@@ -17,7 +17,6 @@
  */
 
 import mongoose from 'mongoose';
-import OpenAI from 'openai';
 import Order from '../models/Order.js';
 import Product from '../models/Product.js';
 import Customer from '../models/Customer.js';
@@ -26,17 +25,28 @@ import Expense from '../models/Expense.js';
 import Branch from '../models/Branch.js';
 
 // ─────────────────────────────────────────────────────────────
-// OpenAI Client — initialized once, used per request
+// OpenAI Client — dynamically loaded, resilient on any host
 // ─────────────────────────────────────────────────────────────
 let openaiClient = null;
+let OpenAILib = null;
 
-const getOpenAIClient = () => {
-  if (!openaiClient && process.env.OPENAI_API_KEY) {
-    openaiClient = new OpenAI({
+const getOpenAIClient = async () => {
+  if (openaiClient) return openaiClient;
+  if (!process.env.OPENAI_API_KEY) return null;
+
+  try {
+    if (!OpenAILib) {
+      const mod = await import('openai');
+      OpenAILib = mod.default || mod.OpenAI || mod;
+    }
+    openaiClient = new OpenAILib({
       apiKey: process.env.OPENAI_API_KEY
     });
+    return openaiClient;
+  } catch (err) {
+    console.warn('⚠️ OpenAI package not available or failed to load:', err.message);
+    return null;
   }
-  return openaiClient;
 };
 
 // Format currency helper
@@ -48,7 +58,7 @@ const fmt = (num) => `$${(Number(num) || 0).toLocaleString('en-US', { minimumFra
  * Falls back to the pre-computed deterministic answer if unavailable.
  */
 const enhanceWithGPT = async (userQuery, businessContext, deterministicAnswer) => {
-  const client = getOpenAIClient();
+  const client = await getOpenAIClient();
   if (!client) return deterministicAnswer;
 
   try {
@@ -74,7 +84,7 @@ Manager's Question: "${userQuery}"
 
 Please provide a helpful, professional response based on this verified data.`;
 
-    const completion = await openaiClient.chat.completions.create({
+    const completion = await client.chat.completions.create({
       model: process.env.OPENAI_MODEL || 'gpt-4o',
       messages: [
         { role: 'system', content: systemPrompt },
