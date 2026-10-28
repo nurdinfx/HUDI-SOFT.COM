@@ -15,6 +15,8 @@ import Orders from './pages/orders';
 import Inventory from './pages/inventory';
 import CustomerLedger from './pages/customer-ledger';
 import Finance from './pages/finance';
+import EquityFinance from './pages/equity-finance';
+import AIAssistant from './pages/ai-assistant';
 import Settings from './pages/settings';
 import Users from './pages/users';
 import Tables from './pages/tables';
@@ -140,8 +142,20 @@ function App() {
                       } />
 
                       <Route path="finance" element={
-                        <ProtectedRoute requiredRoles={['admin', 'manager']}>
-                          <Finance />
+                        <ProtectedRoute requiredPermission="equityFinance">
+                          <EquityFinance />
+                        </ProtectedRoute>
+                      } />
+
+                      <Route path="equity-finance" element={
+                        <ProtectedRoute requiredPermission="equityFinance">
+                          <EquityFinance />
+                        </ProtectedRoute>
+                      } />
+
+                      <Route path="ai-assistant" element={
+                        <ProtectedRoute requiredPermission="aiAssistant">
+                          <AIAssistant />
                         </ProtectedRoute>
                       } />
 

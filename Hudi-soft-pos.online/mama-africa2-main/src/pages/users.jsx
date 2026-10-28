@@ -166,6 +166,7 @@ const Users = () => {
     const colors = {
       admin: 'bg-red-100 text-red-800',
       manager: 'bg-blue-100 text-blue-800',
+      accountant: 'bg-teal-100 text-teal-800',
       chef: 'bg-green-100 text-green-800',
       cashier: 'bg-purple-100 text-purple-800',
       waiter: 'bg-yellow-100 text-yellow-800'
@@ -177,6 +178,7 @@ const Users = () => {
     const names = {
       admin: 'Administrator',
       manager: 'Manager',
+      accountant: 'Accountant',
       chef: 'Chef',
       cashier: 'Cashier',
       waiter: 'Waiter'
@@ -184,7 +186,23 @@ const Users = () => {
     return names[role] || role;
   };
 
-  const roles = ['admin', 'manager', 'chef', 'cashier', 'waiter'];
+  const getFeaturePermission = (u, featureKey) => {
+    const userPermissions = u.permissions || {};
+    if (userPermissions[featureKey] !== undefined && userPermissions[featureKey] !== null) {
+      return {
+        allowed: Boolean(userPermissions[featureKey]),
+        isOverride: true
+      };
+    }
+    const role = (u.role || 'cashier').toLowerCase();
+    const defaultAllowed = ['admin', 'manager', 'accountant', 'owner'].includes(role);
+    return {
+      allowed: defaultAllowed,
+      isOverride: false
+    };
+  };
+
+  const roles = ['admin', 'manager', 'accountant', 'chef', 'cashier', 'waiter'];
 
   // Toggle sort field and direction
   const toggleSort = (field) => {
@@ -284,6 +302,7 @@ const Users = () => {
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Email</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Phone</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Role</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Permissions</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                   <button onClick={() => toggleSort('lastLogin')} className="flex items-center gap-2">
@@ -311,6 +330,32 @@ const Users = () => {
                   <td className="px-6 py-4 text-sm text-gray-600">{u.phone}</td>
                   <td className="px-6 py-4 text-sm">
                     <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getRoleColor(u.role)}`}>{getRoleName(u.role)}</span>
+                  </td>
+                  <td className="px-6 py-4 text-sm">
+                    <div className="flex flex-col gap-1">
+                      {(() => {
+                        const eq = getFeaturePermission(u, 'equityFinance');
+                        const ai = getFeaturePermission(u, 'aiAssistant');
+                        return (
+                          <>
+                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-medium rounded ${
+                              eq.allowed 
+                                ? (eq.isOverride ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' : 'bg-green-50 text-green-700') 
+                                : (eq.isOverride ? 'bg-red-100 text-red-700 border border-red-300' : 'bg-gray-100 text-gray-500')
+                            }`}>
+                              {eq.allowed ? '✓' : '✗'} Equity & Finance {eq.isOverride && <span className="text-[9px] font-bold opacity-75">(Override)</span>}
+                            </span>
+                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-medium rounded ${
+                              ai.allowed 
+                                ? (ai.isOverride ? 'bg-purple-100 text-purple-800 border border-purple-300' : 'bg-indigo-50 text-indigo-700') 
+                                : (ai.isOverride ? 'bg-red-100 text-red-700 border border-red-300' : 'bg-gray-100 text-gray-500')
+                            }`}>
+                              {ai.allowed ? '✓' : '✗'} AI Assistant {ai.isOverride && <span className="text-[9px] font-bold opacity-75">(Override)</span>}
+                            </span>
+                          </>
+                        );
+                      })()}
+                    </div>
                   </td>
                   <td className="px-6 py-4 text-sm">
                     <span className={`font-medium ${u.isActive ? 'text-green-600' : 'text-red-600'}`}>{u.isActive ? 'Active' : 'Inactive'}</span>
@@ -377,6 +422,10 @@ const UserModal = ({ user, onClose, onSave, currentUser }) => {
     password: '',
     confirmPassword: ''
   });
+  const [permissions, setPermissions] = useState({
+    equityFinance: null, // null = Follow role default, true = explicit allow, false = explicit deny
+    aiAssistant: null
+  });
   const [errors, setErrors] = useState({});
 
   useEffect(() => {
@@ -390,6 +439,10 @@ const UserModal = ({ user, onClose, onSave, currentUser }) => {
         address: user.address || '',
         password: '',
         confirmPassword: ''
+      });
+      setPermissions({
+        equityFinance: user.permissions?.equityFinance !== undefined ? user.permissions.equityFinance : null,
+        aiAssistant: user.permissions?.aiAssistant !== undefined ? user.permissions.aiAssistant : null
       });
     }
   }, [user]);
@@ -437,6 +490,7 @@ const UserModal = ({ user, onClose, onSave, currentUser }) => {
     e.preventDefault();
     if (validateForm()) {
       const { confirmPassword, ...userData } = formData;
+      userData.permissions = permissions;
       onSave(userData);
     }
   };
@@ -459,10 +513,15 @@ const UserModal = ({ user, onClose, onSave, currentUser }) => {
   const roles = [
     { value: 'admin', label: 'Administrator' },
     { value: 'manager', label: 'Manager' },
+    { value: 'accountant', label: 'Accountant' },
     { value: 'chef', label: 'Chef' },
     { value: 'cashier', label: 'Cashier' },
     { value: 'waiter', label: 'Waiter' }
   ];
+
+  // Helper to determine role default
+  const isRoleAllowedDefault = (role) => ['admin', 'manager', 'accountant', 'owner'].includes(role);
+  const currentRoleDefault = isRoleAllowedDefault(formData.role);
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
@@ -557,6 +616,65 @@ const UserModal = ({ user, onClose, onSave, currentUser }) => {
                   </option>
                 ))}
               </select>
+            </div>
+
+            {/* ─── Page Access / Feature Permissions ───────────────────────────────── */}
+            <div className="p-4 bg-blue-50/70 border border-blue-200 rounded-xl space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-black uppercase tracking-wider text-blue-900">
+                  Feature & Page Permissions
+                </span>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-blue-200 text-blue-800">
+                  Role Default: {currentRoleDefault ? 'Allowed' : 'Denied'}
+                </span>
+              </div>
+              <p className="text-xs text-blue-700">
+                Configure module access for this user. You can follow the role default or grant/deny specific access overrides.
+              </p>
+
+              {/* Equity & Finance Permission */}
+              <div className="bg-white p-3 rounded-lg border border-blue-100 shadow-sm">
+                <label className="block text-xs font-bold text-gray-800 mb-1">
+                  1. Equity & Financial Management
+                </label>
+                <select
+                  value={permissions.equityFinance === null ? 'default' : (permissions.equityFinance ? 'allow' : 'deny')}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setPermissions(p => ({
+                      ...p,
+                      equityFinance: val === 'default' ? null : val === 'allow'
+                    }));
+                  }}
+                  className="w-full text-xs border border-gray-300 rounded px-2.5 py-1.5 focus:ring-1 focus:ring-blue-500 font-medium"
+                >
+                  <option value="default">Follow Role Default ({currentRoleDefault ? 'Allowed' : 'Denied'})</option>
+                  <option value="allow">Explicitly Allowed (Grant Access)</option>
+                  <option value="deny">Explicitly Denied (Block Access)</option>
+                </select>
+              </div>
+
+              {/* AI Business Assistant Permission */}
+              <div className="bg-white p-3 rounded-lg border border-blue-100 shadow-sm">
+                <label className="block text-xs font-bold text-gray-800 mb-1">
+                  2. AI Business Assistant
+                </label>
+                <select
+                  value={permissions.aiAssistant === null ? 'default' : (permissions.aiAssistant ? 'allow' : 'deny')}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setPermissions(p => ({
+                      ...p,
+                      aiAssistant: val === 'default' ? null : val === 'allow'
+                    }));
+                  }}
+                  className="w-full text-xs border border-gray-300 rounded px-2.5 py-1.5 focus:ring-1 focus:ring-blue-500 font-medium"
+                >
+                  <option value="default">Follow Role Default ({currentRoleDefault ? 'Allowed' : 'Denied'})</option>
+                  <option value="allow">Explicitly Allowed (Grant Access)</option>
+                  <option value="deny">Explicitly Denied (Block Access)</option>
+                </select>
+              </div>
             </div>
 
             <div>

@@ -6,8 +6,12 @@ const userSchema = new mongoose.Schema({
   email: { type: String, unique: true, sparse: true },
   username: { type: String, required: true, unique: true },
   password: { type: String, required: true },
-  role: { type: String, enum: ['admin', 'manager', 'cashier', 'waiter', 'chef', 'kitchen', 'owner'], default: 'cashier' },
+  role: { type: String, enum: ['admin', 'manager', 'cashier', 'waiter', 'chef', 'kitchen', 'owner', 'accountant'], default: 'cashier' },
   branch: { type: mongoose.Schema.Types.ObjectId, ref: 'Branch' },
+  permissions: {
+    equityFinance: { type: Boolean, default: null },
+    aiAssistant: { type: Boolean, default: null }
+  },
   isActive: { type: Boolean, default: true }
 }, { timestamps: true });
 

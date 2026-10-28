@@ -1,10 +1,12 @@
 import User from '../models/User.js';
 import Branch from '../models/Branch.js';
 import bcrypt from 'bcryptjs';
+import { ensureDefaultAccounts } from '../controllers/equityFinanceController.js';
 
 const DEMO_ACCOUNTS = [
   { email: 'admin@demo.com', password: 'admin123', name: 'Demo Admin', role: 'admin' },
   { email: 'manager@demo.com', password: 'manager123', name: 'Demo Manager', role: 'manager' },
+  { email: 'accountant@demo.com', password: 'accountant123', name: 'Demo Accountant', role: 'accountant' },
   { email: 'cashier@demo.com', password: 'cashier123', name: 'Demo Cashier', role: 'cashier' },
   { email: 'chef@demo.com', password: 'chef123', name: 'Demo Chef', role: 'chef' },
   { email: 'waiter@demo.com', password: 'waiter123', name: 'Demo Waiter', role: 'waiter' }
@@ -33,6 +35,9 @@ export const seedDatabase = async () => {
       });
       console.log('✅ Created Demo Branch');
     }
+
+    // Ensure default chart of accounts for demo branch
+    await ensureDefaultAccounts(demoBranch._id);
 
     // 2. Ensure each demo account exists
     for (const demoAccount of DEMO_ACCOUNTS) {

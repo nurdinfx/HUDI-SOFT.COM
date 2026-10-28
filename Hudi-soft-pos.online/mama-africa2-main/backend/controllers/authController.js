@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import User from '../models/User.js';
 import Branch from '../models/Branch.js';
+import { getEffectivePermissions } from '../utils/permissions.js';
 
 // Demo accounts data
 const DEMO_ACCOUNTS = [
@@ -17,6 +18,12 @@ const DEMO_ACCOUNTS = [
     password: 'manager123',
     name: 'Demo Manager',
     role: 'manager'
+  },
+  {
+    email: 'accountant@demo.com',
+    password: 'accountant123',
+    name: 'Demo Accountant',
+    role: 'accountant'
   },
   {
     email: 'cashier@demo.com',
@@ -50,6 +57,7 @@ const getPermissionsByRole = (role) => {
   const permissions = {
     admin: ['read', 'write', 'delete', 'manage_users', 'view_reports', 'manage_settings'],
     manager: ['read', 'write', 'view_reports', 'manage_orders'],
+    accountant: ['read', 'write', 'view_reports', 'manage_finance'],
     cashier: ['read', 'write', 'process_payments', 'manage_orders'],
     chef: ['read', 'update_orders', 'view_kitchen'],
     waiter: ['read', 'create_orders', 'update_orders']
@@ -154,7 +162,8 @@ export const login = async (req, res) => {
         email: user.email,
         role: user.role,
         isDemo: true,
-        permissions: getPermissionsByRole(user.role),
+        permissions: user.permissions || {},
+        effectivePermissions: getEffectivePermissions(user),
         branch: {
           _id: branch._id.toString(),
           name: branch.name,
@@ -232,7 +241,8 @@ export const login = async (req, res) => {
       email: user.email,
       role: user.role,
       isDemo: false,
-      permissions: getPermissionsByRole(user.role),
+      permissions: user.permissions || {},
+      effectivePermissions: getEffectivePermissions(user),
       branch: {
         _id: branch._id.toString(),
         name: branch.name,
@@ -406,7 +416,8 @@ export const getMe = async (req, res) => {
       email: user.email,
       role: user.role,
       isDemo: false,
-      permissions: getPermissionsByRole(user.role),
+      permissions: user.permissions || {},
+      effectivePermissions: getEffectivePermissions(user),
       branch: {
         _id: branch._id.toString(),
         name: branch.name,

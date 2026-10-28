@@ -29,7 +29,9 @@ import {
   CalendarDays,
   ConciergeBell,
   Brush,
-  Database
+  Database,
+  Landmark,
+  Sparkles
 } from 'lucide-react';
 
 const Sidebar = ({ isOpen, setIsOpen }) => {
@@ -51,23 +53,39 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
   }, []);
 
   const navigation = [
-    { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, roles: ['admin', 'manager'] },
-    { name: 'POS', href: '/pos', icon: CreditCard, roles: ['admin', 'manager', 'cashier', 'waiter'] },
+    { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, roles: ['admin', 'manager', 'accountant'] },
+    { name: 'POS', href: '/pos', icon: CreditCard, roles: ['admin', 'manager', 'cashier', 'waiter', 'accountant'] },
+
+    // NEW FEATURES: Equity & Finance + AI Business Assistant (Permission-governed)
+    { 
+      name: 'Equity & Finance', 
+      href: '/equity-finance', 
+      icon: Landmark, 
+      permission: 'equityFinance',
+      badge: 'QuickBooks'
+    },
+    { 
+      name: 'AI Business Assistant', 
+      href: '/ai-assistant', 
+      icon: Sparkles, 
+      permission: 'aiAssistant',
+      badge: 'AI'
+    },
 
     { name: 'Kitchen', href: '/kitchen', icon: ChefHat, roles: ['admin', 'chef'] },
-    { name: 'Orders', href: '/orders', icon: Package, roles: ['admin', 'manager', 'cashier', 'waiter'] },
-    { name: 'Sales History', href: '/sales', icon: ClipboardList, roles: ['admin', 'manager'] },
+    { name: 'Orders', href: '/orders', icon: Package, roles: ['admin', 'manager', 'cashier', 'waiter', 'accountant'] },
+    { name: 'Sales History', href: '/sales', icon: ClipboardList, roles: ['admin', 'manager', 'accountant'] },
     { name: 'Tables', href: '/tables', icon: Table, roles: ['admin', 'manager', 'waiter'] }, 
     { name: 'QR Management', href: '/qr-management', icon: QrCode, roles: ['admin', 'manager'] },
     { name: 'Waiter Board', href: '/waiter', icon: Bell, roles: ['admin', 'manager', 'waiter'] },
-    { name: 'Inventory', href: '/inventory', icon: Archive, roles: ['admin', 'manager'] },
-    { name: 'Customer Ledger', href: '/customers/ledger', icon: BookOpen, roles: ['admin', 'manager', 'cashier'] },
-    { name: 'Finance', href: '/finance', icon: Banknote, roles: ['admin', 'manager'] },
-    { name: 'Purchase', href: '/purchase', icon: ShoppingCart, roles: ['admin', 'manager'] },
+    { name: 'Inventory', href: '/inventory', icon: Archive, roles: ['admin', 'manager', 'accountant'] },
+    { name: 'Customer Ledger', href: '/customers/ledger', icon: BookOpen, roles: ['admin', 'manager', 'cashier', 'accountant'] },
+    { name: 'Finance', href: '/finance', icon: Banknote, roles: ['admin', 'manager', 'accountant'] },
+    { name: 'Purchase', href: '/purchase', icon: ShoppingCart, roles: ['admin', 'manager', 'accountant'] },
     { name: 'Users', href: '/users', icon: Users, roles: ['admin', 'manager'] },
     { name: 'Employees', href: '/employees', icon: Briefcase, roles: ['admin', 'manager'] },
     { name: 'Attendance', href: '/attendance', icon: CalendarCheck, roles: ['admin', 'manager'] },
-    { name: 'Reports', href: '/reports', icon: TrendingUp, roles: ['admin', 'manager'] },
+    { name: 'Reports', href: '/reports', icon: TrendingUp, roles: ['admin', 'manager', 'accountant'] },
     { name: 'Data Migration', href: '/migration', icon: Database, roles: ['admin', 'manager'] },
     { name: 'Settings', href: '/settings', icon: Settings, roles: ['admin', 'manager'] },
     { name: 'License Mgmt', href: '/admin/licensing', icon: Shield, roles: ['admin'] },
@@ -75,7 +93,7 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
 
   // Hotel management navigation items
   const hotelNavigation = [
-    { name: 'Hotel Dashboard', href: '/hotel/dashboard', icon: Building2, roles: ['admin', 'manager'] },
+    { name: 'Hotel Dashboard', href: '/hotel/dashboard', icon: Building2, roles: ['admin', 'manager', 'accountant'] },
     { name: 'Rooms & Types', href: '/hotel/rooms', icon: Bed, roles: ['admin', 'manager'] },
     { name: 'Reservations', href: '/hotel/reservations', icon: CalendarDays, roles: ['admin', 'manager', 'cashier'] },
     { name: 'Front Desk', href: '/hotel/frontdesk', icon: ConciergeBell, roles: ['admin', 'manager', 'cashier'] },
@@ -85,8 +103,23 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
   const showHotel = settings?.businessType === 'both' || settings?.businessType === 'hotel';
 
   const filteredNavigation = navigation.filter((item) => {
-    // Check role permissions first
-    if (!item.roles.includes(user?.role)) return false;
+    // 1. Check feature-level permission if specified
+    if (item.permission) {
+      const userRole = (user?.role || 'cashier').toLowerCase();
+      const defaultAllowed = ['admin', 'manager', 'accountant', 'owner'].includes(userRole);
+      const customOverride = user?.permissions?.[item.permission];
+      const effective = customOverride !== undefined && customOverride !== null
+        ? Boolean(customOverride)
+        : (user?.effectivePermissions?.[item.permission] !== undefined
+          ? Boolean(user.effectivePermissions[item.permission])
+          : defaultAllowed);
+
+      if (!effective) return false;
+      return true; // Access granted via explicit or role-default permission
+    }
+
+    // 2. Check role permissions for standard POS items
+    if (item.roles && !item.roles.includes(user?.role)) return false;
 
     // In supermarket-only mode, hide restaurant modules
     if (settings?.businessType === 'supermarket') {
@@ -179,7 +212,16 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
                   >
                     <Icon size={18} />
                   </span>
-                  <span className="truncate">{item.name}</span>
+                  <span className="truncate flex-1">{item.name}</span>
+                  {item.badge && (
+                    <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-md uppercase tracking-wider ${
+                      active 
+                        ? 'bg-blue-600 text-white' 
+                        : 'bg-emerald-500/20 text-emerald-300 border border-emerald-400/30'
+                    }`}>
+                      {item.badge}
+                    </span>
+                  )}
                 </Link>
               </li>
             );

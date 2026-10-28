@@ -2,6 +2,7 @@
 import User from '../models/User.js';
 import Branch from '../models/Branch.js';
 import bcrypt from 'bcryptjs';
+import { getEffectivePermissions } from '../utils/permissions.js';
 
 // Get all users
 export const getUsers = async (req, res) => {
@@ -17,6 +18,8 @@ export const getUsers = async (req, res) => {
         ...u.toJSON(),
         id: u._id.toString(),
         _id: u._id.toString(),
+        permissions: u.permissions || {},
+        effectivePermissions: getEffectivePermissions(u),
         branch: u.branch ? {
           _id: u.branch._id.toString(),
           id: u.branch._id.toString(),
@@ -56,6 +59,8 @@ export const getUser = async (req, res) => {
         ...user.toJSON(),
         id: user._id.toString(),
         _id: user._id.toString(),
+        permissions: user.permissions || {},
+        effectivePermissions: getEffectivePermissions(user),
         branch: user.branch ? {
           _id: user.branch._id.toString(),
           id: user.branch._id.toString(),
@@ -76,20 +81,28 @@ export const getUser = async (req, res) => {
 // Create user
 export const createUser = async (req, res) => {
   try {
-    const { name, email, username, password, role } = req.body;
+    const { name, email, username, password, role, permissions } = req.body;
     const branchId = req.user.branch._id || req.user.branch.id;
 
     if (!name || !email || !username || !password) {
       return res.status(400).json({ success: false, message: 'All fields are required' });
     }
 
+    // Only admin or manager can set permissions
+    const canManagePermissions = ['admin', 'manager'].includes(req.user?.role);
+    const userPermissions = canManagePermissions && permissions ? {
+      equityFinance: permissions.equityFinance !== undefined ? permissions.equityFinance : null,
+      aiAssistant: permissions.aiAssistant !== undefined ? permissions.aiAssistant : null
+    } : {};
+
     const user = await User.create({
       name,
       email,
       username,
       password,
-      role: role || 'staff',
+      role: role || 'cashier',
       branch: branchId,
+      permissions: userPermissions,
       isActive: true
     });
 
@@ -101,6 +114,8 @@ export const createUser = async (req, res) => {
         ...populatedUser.toJSON(),
         id: populatedUser._id.toString(),
         _id: populatedUser._id.toString(),
+        permissions: populatedUser.permissions || {},
+        effectivePermissions: getEffectivePermissions(populatedUser),
         branch: populatedUser.branch ? {
           _id: populatedUser.branch._id.toString(),
           name: populatedUser.branch.name,
@@ -125,11 +140,18 @@ export const createUser = async (req, res) => {
 export const updateUser = async (req, res) => {
   try {
     const { id } = req.params;
-    const updateData = req.body;
+    const updateData = { ...req.body };
     const branchId = req.user.branch._id || req.user.branch.id;
 
     // Remove password from update data if it exists (use separate endpoint for pwd change)
     delete updateData.password;
+
+    // Security check: Only admin or manager can edit permissions or change roles
+    const isPrivileged = ['admin', 'manager'].includes(req.user?.role);
+    if (!isPrivileged) {
+      delete updateData.permissions;
+      delete updateData.role;
+    }
 
     const user = await User.findOneAndUpdate(
       { _id: id, branch: branchId },
@@ -147,6 +169,8 @@ export const updateUser = async (req, res) => {
         ...user.toJSON(),
         id: user._id.toString(),
         _id: user._id.toString(),
+        permissions: user.permissions || {},
+        effectivePermissions: getEffectivePermissions(user),
         branch: user.branch ? {
           _id: user.branch._id.toString(),
           name: user.branch.name,

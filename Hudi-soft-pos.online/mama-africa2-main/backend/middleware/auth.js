@@ -4,11 +4,13 @@ import User from '../models/User.js';
 import Branch from '../models/Branch.js';
 import bcrypt from 'bcryptjs';
 import mongoose from 'mongoose';
+import { getEffectivePermissions } from '../utils/permissions.js';
 
 // Demo accounts configuration
 const DEMO_ACCOUNTS = [
   { email: 'admin@demo.com', password: 'admin123', name: 'Demo Admin', role: 'admin' },
   { email: 'manager@demo.com', password: 'manager123', name: 'Demo Manager', role: 'manager' },
+  { email: 'accountant@demo.com', password: 'accountant123', name: 'Demo Accountant', role: 'accountant' },
   { email: 'cashier@demo.com', password: 'cashier123', name: 'Demo Cashier', role: 'cashier' },
   { email: 'chef@demo.com', password: 'chef123', name: 'Demo Chef', role: 'chef' },
   { email: 'waiter@demo.com', password: 'waiter123', name: 'Demo Waiter', role: 'waiter' }
@@ -93,6 +95,8 @@ export const auth = async (req, res, next) => {
         email: demoUser.email,
         role: demoUser.role,
         isDemo: true,
+        permissions: demoUser.permissions || {},
+        effectivePermissions: getEffectivePermissions(demoUser),
         branch: {
           _id: demoBranch._id.toString(),
           id: demoBranch._id.toString(),
@@ -152,6 +156,8 @@ export const auth = async (req, res, next) => {
         email: user.email,
         role: user.role,
         isDemo: false,
+        permissions: user.permissions || {},
+        effectivePermissions: getEffectivePermissions(user),
         branch: {
           _id: user.branch._id.toString(),
           id: user.branch._id.toString(),
@@ -177,6 +183,33 @@ export const authorize = (...roles) => {
     if (!req.user || !roles.includes(req.user.role)) {
       return res.status(403).json({ success: false, message: 'Access denied' });
     }
+    next();
+  };
+};
+
+/**
+ * Middleware to enforce feature-level permissions (e.g. 'equityFinance', 'aiAssistant')
+ * Checks both individual user overrides and role defaults.
+ */
+export const requirePermission = (permissionKey) => {
+  return (req, res, next) => {
+    if (!req.user) {
+      return res.status(401).json({ success: false, message: 'Authentication required' });
+    }
+
+    const effective = req.user.effectivePermissions || getEffectivePermissions(req.user);
+    const hasPermission = Boolean(effective && effective[permissionKey]);
+
+    if (!hasPermission) {
+      const featureLabel = permissionKey === 'equityFinance' ? 'Equity & Financial Management' : 'AI Business Assistant';
+      return res.status(403).json({
+        success: false,
+        message: `Access denied: You do not have permission to access ${featureLabel}. Please contact an administrator.`,
+        code: 'FORBIDDEN',
+        requiredPermission: permissionKey
+      });
+    }
+
     next();
   };
 };

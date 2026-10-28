@@ -779,11 +779,57 @@ export const realApi = {
     }
   },
 
+  // Equity & Finance API
+  getEquityFinanceDashboard: (params) => api.get('/equity-finance/dashboard', { params }),
+  getCashFlowStatement: (params) => api.get('/equity-finance/cash-flow', { params }),
+  getProfitAndLossStatement: (params) => api.get('/equity-finance/profit-and-loss', { params }),
+  getBalanceSheetStatement: (params) => api.get('/equity-finance/balance-sheet', { params }),
+  getFinancialAccounts: () => api.get('/equity-finance/accounts'),
+  createFinancialAccount: (data) => api.post('/equity-finance/accounts', data),
+  transferFinancialFunds: (data) => api.post('/equity-finance/transfers', data),
+  getEquityTransactions: () => api.get('/equity-finance/equity'),
+  recordCapitalContribution: (data) => api.post('/equity-finance/equity/contribution', data),
+  recordOwnerWithdrawal: (data) => api.post('/equity-finance/equity/withdrawal', data),
+  getGeneralLedgerEntries: (params) => api.get('/equity-finance/general-ledger', { params }),
+  createGeneralLedgerEntry: (data) => api.post('/equity-finance/journal-entry', data),
+  getAccountsReceivableData: () => api.get('/equity-finance/receivables'),
+  getAccountsPayableData: () => api.get('/equity-finance/payables'),
+  getInventoryValuationReport: () => api.get('/equity-finance/inventory-valuation'),
+
+  // AI Business Assistant API
+  queryAIAssistant: (query, context) => api.post('/ai-assistant/query', { query, context }),
+  getAIAssistantInsights: () => api.get('/ai-assistant/insights'),
+
   clearAuth: () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     sessionStorage.clear();
   }
+};
+
+// ─── Equity & Finance Module API ─────────────────────────────────────────────
+export const equityFinanceAPI = {
+  getDashboard: (params) => api.get('/equity-finance/dashboard', { params }),
+  getCashFlow: (params) => api.get('/equity-finance/cash-flow', { params }),
+  getProfitAndLoss: (params) => api.get('/equity-finance/profit-and-loss', { params }),
+  getBalanceSheet: (params) => api.get('/equity-finance/balance-sheet', { params }),
+  getAccounts: () => api.get('/equity-finance/accounts'),
+  createAccount: (data) => api.post('/equity-finance/accounts', data),
+  transferFunds: (data) => api.post('/equity-finance/transfers', data),
+  getEquity: () => api.get('/equity-finance/equity'),
+  recordContribution: (data) => api.post('/equity-finance/equity/contribution', data),
+  recordWithdrawal: (data) => api.post('/equity-finance/equity/withdrawal', data),
+  getGeneralLedger: (params) => api.get('/equity-finance/general-ledger', { params }),
+  createJournalEntry: (data) => api.post('/equity-finance/journal-entry', data),
+  getReceivables: () => api.get('/equity-finance/receivables'),
+  getPayables: () => api.get('/equity-finance/payables'),
+  getInventoryValuation: () => api.get('/equity-finance/inventory-valuation')
+};
+
+// ─── AI Business Assistant API ───────────────────────────────────────────────
+export const aiAssistantAPI = {
+  query: (query, context) => api.post('/ai-assistant/query', { query, context }),
+  getInsights: () => api.get('/ai-assistant/insights')
 };
 
 // ─── Migration Center API ────────────────────────────────────────────────────
@@ -802,7 +848,6 @@ export const demoLocalAPI = {
     success: false,
     message: 'Real API is required. Backend might be down.'
   }),
-  // Add other demo methods that return error messages
 };
 
 export const shouldUseDemoData = () => false;
