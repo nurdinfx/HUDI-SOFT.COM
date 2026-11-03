@@ -163,7 +163,8 @@ const ActivationPage = () => {
     };
 
     const handleLaunchLogin = () => {
-        navigate('/login', { replace: true });
+        // Use hash-based navigation to ensure HashRouter handles the route correctly
+        window.location.replace('/#/login');
     };
 
     if (status === 'checking') {

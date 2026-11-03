@@ -16,3 +16,19 @@ services:
       # FRONTEND_URL
     healthCheckPath: /api/health
     autoDeploy: true
+
+  - type: web
+    name: hudi-soft-com-online-pos
+    runtime: node
+    rootDir: Hudi-soft-pos.online/mama-africa2-main/backend
+    buildCommand: npm install
+    startCommand: node server.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      # Set these in the Render dashboard — do NOT hardcode secrets here:
+      # MONGO_URI
+      # JWT_SECRET
+      # PORT
+    healthCheckPath: /api/v1/health
+    autoDeploy: true

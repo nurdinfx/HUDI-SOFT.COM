@@ -174,7 +174,7 @@ const ProductCard = ({ title, description, productType, licenses, onDownload, pw
                         {pwaLink ? (
                             <a 
                                 href={productType === 'HMS' 
-                                    ? `${pwaLink}/activate?key=${activeLicense.licenseKey}`
+                                    ? `${pwaLink}/#/activate?key=${activeLicense.licenseKey}`
                                     : productType === 'POS_ONLINE'
                                     ? `${pwaLink}/#/activate?key=${activeLicense.licenseKey}`
                                     : `${pwaLink}/login?key=${activeLicense.licenseKey}`}
