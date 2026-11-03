@@ -129,9 +129,9 @@ const RequestDemo = () => {
                                     whileHover={{ scale: 1.01 }}
                                     whileTap={{ scale: 0.99 }}
                                     href={formData.systemType === 'POS Online' 
-                                        ? `https://hudi-soft-com-online-pos.onrender.com/activation?key=${trialInfo.licenseKey}` 
+                                        ? `https://pos.hudisoft.online/activate?key=${trialInfo.licenseKey}` 
                                         : formData.systemType === 'Hospital Management System (HMS)'
-                                        ? `https://daryeel-hms-com.vercel.app/activate?key=${trialInfo.licenseKey}`
+                                        ? `https://hms.hudisoft.online/activate?key=${trialInfo.licenseKey}`
                                         : formData.systemType === 'Detail Care'
                                         ? `https://hudisoftdatel.vercel.app/login?key=${trialInfo.licenseKey}`
                                         : trialInfo.downloadUrl}

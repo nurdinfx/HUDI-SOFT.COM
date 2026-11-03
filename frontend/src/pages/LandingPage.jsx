@@ -174,7 +174,7 @@ const LandingPage = () => {
                 { title: 'HUDI IQ', desc: 'The AI Assistant that takes action.', badge: 'New', image: '/images/ONE.jpg', link: '/request-demo' }
             ],
             columns: [
-                { title: 'Operations Suite', links: [{ name: 'Point of sale', url: 'https://hudi-soft-com-online-pos.onrender.com' }, { name: 'Hospital Management (HMS)', url: 'https://daryeel-hms-com.vercel.app/', isNew: true }, { name: 'Detail Care Clinic PWA', url: 'https://hudisoftdatel.vercel.app/login', isNew: true }, { name: 'Catering & events', url: '#' }, { name: 'HUDI Mobile Order', url: '#', isNew: true }, { name: 'Payment processing', url: '#' }] },
+                { title: 'Operations Suite', links: [{ name: 'Point of sale', url: 'https://pos.hudisoft.online' }, { name: 'Hospital Management (HMS)', url: 'https://hms.hudisoft.online', isNew: true }, { name: 'Detail Care Clinic PWA', url: 'https://hudisoftdatel.vercel.app/login', isNew: true }, { name: 'Catering & events', url: '#' }, { name: 'HUDI Mobile Order', url: '#', isNew: true }, { name: 'Payment processing', url: '#' }] },
                 { title: 'Digital Storefront', links: [{ name: 'Online ordering', url: '#' }, { name: 'Websites', url: '#' }, { name: 'Branded mobile app', url: '#' }, { name: 'HUDI Delivery Services', url: '#' }] },
                 { title: 'Marketing Suite', links: [{ name: 'Advertising', url: '#' }, { name: 'Loyalty', url: '#' }, { name: 'Email marketing', url: '#' }, { name: 'HUDI Tables', url: '#' }] },
                 { title: 'Hardware', links: [{ name: 'All hardware', url: '#' }, { name: 'Handheld POS', url: '#' }, { name: 'Self-ordering kiosk', url: '#' }, { name: 'Kitchen display system', url: '#' }] }
@@ -335,7 +335,7 @@ const LandingPage = () => {
                         </h1>
 
                         <p className="text-xl md:text-2xl text-slate-600 font-light max-w-xl leading-relaxed">
-                            Start your <span className="font-bold text-blue-600">3-Day Free Trial</span> today. Professional POS and <a href="https://daryeel-hms-com.vercel.app/" target="_blank" rel="noopener noreferrer" className="font-bold text-rose-500 underline decoration-rose-200 hover:text-rose-600 transition-colors">HMS PWA</a> systems built for scale.
+                            Start your <span className="font-bold text-blue-600">3-Day Free Trial</span> today. Professional POS and <a href="https://hms.hudisoft.online" target="_blank" rel="noopener noreferrer" className="font-bold text-rose-500 underline decoration-rose-200 hover:text-rose-600 transition-colors">HMS PWA</a> systems built for scale.
                         </p>
 
                         <div className="max-w-md">
@@ -353,7 +353,7 @@ const LandingPage = () => {
                                 </button>
                             </form>
                             <p className="mt-4 text-xs font-bold text-slate-500">
-                                🏥 Medical Center? <a href="https://daryeel-hms-com.vercel.app/" target="_blank" rel="noopener noreferrer" className="text-rose-500 hover:underline">Launch HMS PWA Demo immediately →</a>
+                                🏥 Medical Center? <a href="https://hms.hudisoft.online" target="_blank" rel="noopener noreferrer" className="text-rose-500 hover:underline">Launch HMS PWA Demo immediately →</a>
                             </p>
                             <div className="mt-6 flex items-center gap-6">
                                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">
@@ -524,7 +524,7 @@ const LandingPage = () => {
                                 ))}
                             </ul>
                             <div className="pt-6 flex flex-wrap gap-4">
-                                <a href="https://daryeel-hms-com.vercel.app/" target="_blank" rel="noopener noreferrer" className="px-8 py-4 bg-blue-400 text-slate-900 rounded-2xl font-black text-lg hover:bg-blue-300 transition-colors shadow-xl shadow-blue-400/20 inline-flex items-center gap-2">
+                                <a href="https://hms.hudisoft.online" target="_blank" rel="noopener noreferrer" className="px-8 py-4 bg-blue-400 text-slate-900 rounded-2xl font-black text-lg hover:bg-blue-300 transition-colors shadow-xl shadow-blue-400/20 inline-flex items-center gap-2">
                                     <Play size={20} fill="currentColor" />
                                     Try HMS Demo
                                 </a>
@@ -567,7 +567,7 @@ const LandingPage = () => {
                                 ))}
                             </ul>
                             <div className="pt-6 flex flex-wrap gap-4">
-                                <a href="http://localhost:3000" target="_blank" rel="noopener noreferrer" className="px-8 py-4 bg-emerald-400 text-slate-900 rounded-2xl font-black text-lg hover:bg-emerald-300 transition-colors shadow-xl shadow-emerald-400/20 inline-flex items-center gap-2">
+                                <a href="https://hudisoftdatel.vercel.app/login" target="_blank" rel="noopener noreferrer" className="px-8 py-4 bg-emerald-400 text-slate-900 rounded-2xl font-black text-lg hover:bg-emerald-300 transition-colors shadow-xl shadow-emerald-400/20 inline-flex items-center gap-2">
                                     <Play size={20} fill="currentColor" />
                                     Launch Detail Care PWA
                                 </a>

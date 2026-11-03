@@ -66,6 +66,7 @@ function App() {
               <Route path="/login"         element={<Login />} />
               <Route path="/customer-view" element={<CustomerDisplay />} />
               <Route path="/activate"      element={<ActivationPage />} />
+              <Route path="/activation"    element={<ActivationPage />} />
               <Route path="/attendance/:id" element={<EmployeeAttendance />} />
 
               {/* ──────────────────────────────────────────────────────────

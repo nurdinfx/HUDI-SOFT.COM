@@ -13,6 +13,8 @@ const DEFAULT_ALLOWED_ORIGINS = [
     'https://hudisoft.online',
     'https://www.hudisoft.online',
     'https://main.hudisoft.online',
+    'https://pos.hudisoft.online',
+    'https://hms.hudisoft.online',
     // Production Vercel deployments
     'https://hudi-soft-com.vercel.app',
     'https://hudi-soft-com-sz9e.vercel.app',

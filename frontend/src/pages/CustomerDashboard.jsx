@@ -111,6 +111,7 @@ const CustomerDashboard = () => {
                         productType="POS_ONLINE"
                         licenses={licenses.filter(l => l.productType === 'POS_ONLINE')}
                         onDownload={() => handleDownload('POS_ONLINE')}
+                        pwaLink="https://pos.hudisoft.online"
                     />
 
                     {/* HMS System Card */}
@@ -120,7 +121,7 @@ const CustomerDashboard = () => {
                         productType="HMS"
                         licenses={licenses.filter(l => l.productType === 'HMS')}
                         onDownload={() => handleDownload('HMS')}
-                        pwaLink="https://daryeel-hms-com.vercel.app"
+                        pwaLink="https://hms.hudisoft.online"
                     />
 
                     {/* Detail Care Card */}
@@ -130,7 +131,7 @@ const CustomerDashboard = () => {
                         productType="DETAIL_CARE"
                         licenses={licenses.filter(l => l.productType === 'DETAIL_CARE')}
                         onDownload={() => handleDownload('DETAIL_CARE')}
-                        pwaLink="http://localhost:3000"
+                        pwaLink="https://hudisoftdatel.vercel.app"
                     />
                 </div>
             </main>
@@ -172,7 +173,7 @@ const ProductCard = ({ title, description, productType, licenses, onDownload, pw
                         </div>
                         {pwaLink ? (
                             <a 
-                                href={productType === 'HMS' 
+                                href={productType === 'HMS' || productType === 'POS_ONLINE'
                                     ? `${pwaLink}/activate?key=${activeLicense.licenseKey}`
                                     : `${pwaLink}/login?key=${activeLicense.licenseKey}`}
                                 target="_blank"
@@ -180,7 +181,7 @@ const ProductCard = ({ title, description, productType, licenses, onDownload, pw
                                 className="w-full bg-slate-900 text-white p-5 rounded-2xl font-black text-sm uppercase tracking-widest flex items-center justify-center gap-3 hover:bg-slate-800 transition-all shadow-xl shadow-slate-900/10 active:scale-[0.98]"
                             >
                                 <ArrowRight size={20} />
-                                Launch Clinic PWA
+                                {productType === 'POS_ONLINE' ? 'Launch Cloud POS' : productType === 'HMS' ? 'Launch HMS PWA' : 'Launch Clinic PWA'}
                             </a>
                         ) : (
                             <button 
