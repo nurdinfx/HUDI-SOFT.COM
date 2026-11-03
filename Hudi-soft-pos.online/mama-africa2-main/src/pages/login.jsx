@@ -18,6 +18,19 @@ const Login = () => {
 
   const { login, isAuthenticated, user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
+  const [activeKey, setActiveKey] = useState(localStorage.getItem('pos_license_key') || '');
+
+  // If a key is passed via URL query to login page, redirect immediately to activation
+  useEffect(() => {
+    const search = window.location.search || '';
+    const hash = window.location.hash || '';
+    const queryPart = search || (hash.includes('?') ? hash.substring(hash.indexOf('?')) : '');
+    const p = new URLSearchParams(queryPart);
+    const key = p.get('key') || p.get('license') || p.get('activation');
+    if (key && key.trim().length > 5) {
+      navigate(`/activate?key=${encodeURIComponent(key.trim().toUpperCase())}`, { replace: true });
+    }
+  }, [navigate]);
 
   useEffect(() => {
     if (isAuthenticated && user) {
@@ -159,10 +172,40 @@ const Login = () => {
               </div>
 
               <form onSubmit={handleSubmit} className="space-y-6 animate-fadeIn">
-                <div className="text-center mb-8">
+                <div className="text-center mb-6">
                   <h3 className="text-3xl font-black text-white tracking-tight">HUDI-SOFT</h3>
-                  <p className="text-white/60 text-sm mt-2 uppercase tracking-[0.2em]">Secure Terminal Access</p>
+                  <p className="text-white/60 text-sm mt-1 uppercase tracking-[0.2em]">Secure Terminal Access</p>
                 </div>
+
+                {/* Active License Badge & Switcher */}
+                {activeKey ? (
+                  <div className="flex items-center justify-between bg-white/5 border border-white/10 rounded-2xl px-4 py-2.5">
+                    <div className="flex items-center space-x-2 truncate mr-2">
+                      <ShieldCheck size={16} className="text-emerald-400 shrink-0" />
+                      <span className="text-[11px] font-mono text-emerald-300 truncate">
+                        Key: {activeKey.length > 14 ? `${activeKey.substring(0, 8)}...${activeKey.substring(activeKey.length - 4)}` : activeKey}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => navigate('/activate')}
+                      className="text-[11px] font-bold text-blue-400 hover:text-blue-300 underline tracking-wide shrink-0 cursor-pointer"
+                    >
+                      Change Key
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between bg-blue-500/10 border border-blue-500/20 rounded-2xl px-4 py-2.5">
+                    <span className="text-[11px] text-blue-300 font-medium">Need to activate license?</span>
+                    <button
+                      type="button"
+                      onClick={() => navigate('/activate')}
+                      className="text-[11px] font-bold text-white hover:text-blue-200 underline tracking-wide cursor-pointer"
+                    >
+                      Enter Key
+                    </button>
+                  </div>
+                )}
 
                 {error && (
                   <div className="bg-red-500/20 backdrop-blur-md text-red-200 p-4 rounded-2xl border border-red-500/30 text-sm flex items-start shadow-inner">
@@ -214,6 +257,24 @@ const Login = () => {
                       </button>
                     </div>
                   </div>
+                </div>
+
+                {/* Demo Quick Fill Card */}
+                <div className="bg-white/5 border border-white/10 rounded-2xl p-3 text-left flex items-center justify-between">
+                  <div>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-blue-400">Demo Credentials</p>
+                    <p className="text-xs text-white/70 font-mono mt-0.5">admin@demo.com • admin123</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFormData({ identifier: 'admin@demo.com', password: 'admin123' });
+                      if (error) setError('');
+                    }}
+                    className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-blue-500/20 cursor-pointer"
+                  >
+                    Auto-Fill
+                  </button>
                 </div>
 
                 <div className="pt-4">

@@ -3,6 +3,15 @@ import ReactDOM from 'react-dom/client'
 import App from './App.jsx'
 import './index.css'
 
+// URL normalization for HashRouter: redirect pathname-based /activate to hash-based /#/activate
+if (typeof window !== 'undefined') {
+  const pathname = window.location.pathname;
+  if (pathname.includes('/activate') || pathname.includes('/activation')) {
+    const search = window.location.search || '';
+    window.location.replace(`/#/activate${search}`);
+  }
+}
+
 
 /* 
 // Register PWA Service Worker (DISABLED TO PREVENT OFFLINE MODE ISSUES)

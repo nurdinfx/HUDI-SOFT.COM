@@ -112,6 +112,17 @@ const RequestDemo = () => {
                                 </div>
                             </motion.div>
 
+                            {formData.systemType === 'POS Online' && (
+                                <div className="p-5 bg-slate-950/30 rounded-2xl border border-slate-850 space-y-3 w-full">
+                                    <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-500">Cloud POS Demo Credentials</h4>
+                                    <div className="text-xs font-bold text-slate-400 space-y-1">
+                                        <p>Username / Email: <span className="text-white select-all">admin@demo.com</span></p>
+                                        <p>Password: <span className="text-white select-all">admin123</span></p>
+                                    </div>
+                                    <p className="text-[9px] text-slate-500 font-medium">Your license key is automatically bound to this terminal session. Click below to launch.</p>
+                                </div>
+                            )}
+
                             {formData.systemType === 'Detail Care' && (
                                 <div className="p-5 bg-slate-950/30 rounded-2xl border border-slate-850 space-y-3 w-full">
                                     <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-500">Secure Access Credentials</h4>
@@ -129,7 +140,7 @@ const RequestDemo = () => {
                                     whileHover={{ scale: 1.01 }}
                                     whileTap={{ scale: 0.99 }}
                                     href={formData.systemType === 'POS Online' 
-                                        ? `https://pos.hudisoft.online/activate?key=${trialInfo.licenseKey}` 
+                                        ? `https://pos.hudisoft.online/#/activate?key=${trialInfo.licenseKey}` 
                                         : formData.systemType === 'Hospital Management System (HMS)'
                                         ? `https://hms.hudisoft.online/activate?key=${trialInfo.licenseKey}`
                                         : formData.systemType === 'Detail Care'
