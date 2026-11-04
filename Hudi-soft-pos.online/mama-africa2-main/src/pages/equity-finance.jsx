@@ -51,6 +51,8 @@ export default function EquityFinance() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [settings, setSettings] = useState(null);
+  // Error guard: stop retrying after a fatal API error (e.g. 404 / backend down)
+  const [fatalError, setFatalError] = useState(false);
 
   // Date filters
   const [dateFilter, setDateFilter] = useState({
@@ -154,7 +156,9 @@ export default function EquityFinance() {
   };
 
   // Main Loader
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (forceRetry = false) => {
+    // If a fatal error (404/backend down) occurred, don't auto-retry; require explicit refresh
+    if (fatalError && !forceRetry) return;
     setLoading(true);
     try {
       const params = { startDate: dateFilter.startDate, endDate: dateFilter.endDate };
@@ -196,20 +200,28 @@ export default function EquityFinance() {
 
     } catch (err) {
       console.error('Failed to load financial records:', err);
-      toast.error('Failed to load financial records');
+      // Set fatalError to stop auto-retry loop on 404 / network error
+      const statusCode = err?.response?.status;
+      if (statusCode === 404 || statusCode === 503 || statusCode === 502) {
+        setFatalError(true);
+        toast.error('Finance module unavailable. Click Refresh to retry.');
+      } else {
+        toast.error('Failed to load financial records');
+      }
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [activeTab, dateFilter]);
+  }, [activeTab, dateFilter, fatalError]);
 
   useEffect(() => {
     loadData();
   }, [loadData]);
 
   const handleRefresh = () => {
+    setFatalError(false); // Allow retry on manual refresh
     setRefreshing(true);
-    loadData();
+    loadData(true);
   };
 
   // Capital Contribution Submit
