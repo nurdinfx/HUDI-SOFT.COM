@@ -84,7 +84,7 @@ const activate = async (req, res) => {
     );
     const newClinicId = newClinicRows[0].id;
 
-    // Step 4: Create default super_admin
+    // Step 4: Create default super_admin & demo credentials
     const defaultPassword = 'detailcare123';
     const hash = await bcrypt.hash(defaultPassword, 10);
     const adminEmail = `admin@${licenseKey.toLowerCase().substring(0, 5)}.clinic.com`;
@@ -94,6 +94,14 @@ const activate = async (req, res) => {
        VALUES ($1, $2, $3, $4, 'super_admin')
        ON CONFLICT (email) DO UPDATE SET password_hash = $4, is_active = true`,
       [newClinicId, `${companyName} Admin`, adminEmail, hash]
+    );
+
+    // Also auto-provision the universal demo login: detailcare@demo.com / detailcare123
+    await query(
+      `INSERT INTO clinic_users (clinic_id, full_name, email, password_hash, role)
+       VALUES ($1, 'Detail Care Admin', 'detailcare@demo.com', $2, 'super_admin')
+       ON CONFLICT (email) DO UPDATE SET clinic_id = $1, password_hash = $2, is_active = true`,
+      [newClinicId, hash]
     );
 
     return res.status(201).json({ 
@@ -115,15 +123,42 @@ const activate = async (req, res) => {
 /** POST /api/auth/login */
 const login = async (req, res) => {
   const { email, password } = req.body;
-  const licenseKey = req.headers['x-license-key'];
+  let licenseKey = req.headers['x-license-key'];
 
   if (!email || !password)
     return res.status(400).json({ message: 'Email and password are required' });
-  
-  if (!licenseKey)
-    return res.status(400).json({ message: 'License key header is required' });
 
   try {
+    const cleanEmail = email.toLowerCase().trim();
+
+    // If license key header was not provided by browser, fallback to active clinic
+    if (!licenseKey) {
+      const { rows: activeClinics } = await query(
+        `SELECT license_key FROM clinics WHERE is_active = true ORDER BY created_at DESC LIMIT 1`
+      );
+      if (activeClinics.length > 0) {
+        licenseKey = activeClinics[0].license_key;
+      }
+    }
+
+    if (!licenseKey) {
+      return res.status(400).json({ message: 'System not activated. Please activate with your license key first.' });
+    }
+
+    // Auto-provision demo account detailcare@demo.com if requested
+    if (cleanEmail === 'detailcare@demo.com') {
+      const { rows: clinicRows } = await query('SELECT id FROM clinics WHERE license_key = $1 LIMIT 1', [licenseKey]);
+      if (clinicRows.length > 0) {
+        const demoHash = await bcrypt.hash('detailcare123', 10);
+        await query(
+          `INSERT INTO clinic_users (clinic_id, full_name, email, password_hash, role)
+           VALUES ($1, 'Detail Care Admin', 'detailcare@demo.com', $2, 'super_admin')
+           ON CONFLICT (email) DO UPDATE SET clinic_id = $1, password_hash = $2, is_active = true`,
+          [clinicRows[0].id, demoHash]
+        );
+      }
+    }
+
     const { rows } = await query(
       `SELECT cu.*, c.name AS clinic_name, c.subscription_status, c.subscription_plan,
               c.subscription_expiry, c.days_remaining, c.is_active AS clinic_active,
@@ -131,7 +166,7 @@ const login = async (req, res) => {
        FROM clinic_users cu
        JOIN clinics c ON c.id = cu.clinic_id
        WHERE cu.email = $1 AND c.license_key = $2`,
-      [email.toLowerCase().trim(), licenseKey]
+      [cleanEmail, licenseKey]
     );
 
     if (!rows.length)
