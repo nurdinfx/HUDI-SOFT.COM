@@ -88,27 +88,19 @@ const activate = async (req, res) => {
     const expiryDate = licenseData.expiryDate || null;
     const daysRemaining = licenseData.daysRemaining || 30;
 
-    // Step 2: Check if clinic already exists
-    const { rows } = await query('SELECT * FROM clinics WHERE license_key = $1', [licenseKey]);
-    
-    if (rows.length > 0) {
-      await query(
-        `UPDATE clinics SET 
-          subscription_status = 'Active', 
-          subscription_expiry = $1, 
-          days_remaining = $2,
-          is_active = true
-         WHERE license_key = $3`,
-        [expiryDate, daysRemaining, licenseKey]
-      );
-      return res.json({ message: 'License activated successfully', clinicId: rows[0].id, valid: true });
-    }
+    // Step 2 & 3: Create or update clinic
+    const cleanKeySuffix = licenseKey.replace(/[^a-zA-Z0-9]/g, '').toLowerCase().slice(0, 8) || 'active';
+    const clinicEmail = licenseData.email || `clinic-${cleanKeySuffix}-${Date.now()}@hudidentalcare.com`;
 
-    // Step 3: Create new clinic
-    const clinicEmail = `admin@${companyName.replace(/\s+/g, '').toLowerCase()}.com`;
     const { rows: newClinicRows } = await query(
-      `INSERT INTO clinics (name, email, license_key, subscription_status, subscription_start, subscription_expiry, days_remaining)
-       VALUES ($1, $2, $3, 'Active', NOW(), $4, $5) RETURNING id`,
+      `INSERT INTO clinics (name, email, license_key, subscription_status, subscription_start, subscription_expiry, days_remaining, is_active)
+       VALUES ($1, $2, $3, 'Active', NOW(), $4, $5, true)
+       ON CONFLICT (license_key) DO UPDATE SET 
+         subscription_status = 'Active', 
+         subscription_expiry = COALESCE(EXCLUDED.subscription_expiry, clinics.subscription_expiry), 
+         days_remaining = COALESCE(EXCLUDED.days_remaining, clinics.days_remaining),
+         is_active = true
+       RETURNING id`,
       [companyName, clinicEmail, licenseKey, expiryDate, daysRemaining]
     );
     const newClinicId = newClinicRows[0].id;
@@ -116,7 +108,7 @@ const activate = async (req, res) => {
     // Step 4: Create default super_admin & demo credentials
     const defaultPassword = 'detailcare123';
     const hash = await bcrypt.hash(defaultPassword, 10);
-    const adminEmail = `admin@${licenseKey.toLowerCase().substring(0, 5)}.clinic.com`;
+    const adminEmail = `admin@${licenseKey.toLowerCase().replace(/[^a-z0-9]/g, '').substring(0, 8) || 'dental'}.clinic.com`;
     
     await query(
       `INSERT INTO clinic_users (clinic_id, full_name, email, password_hash, role)

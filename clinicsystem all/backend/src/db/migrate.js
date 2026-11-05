@@ -535,6 +535,14 @@ async function runMigrations() {
   try {
     console.log('🔄 Checking / creating PostgreSQL tables for Datel Clinic...');
     await pool.query(CREATE_TABLES);
+    
+    // Ensure clinics_email_key is dropped if it exists so duplicate contact emails across licenses don't fail
+    try {
+      await pool.query('ALTER TABLE clinics DROP CONSTRAINT IF EXISTS clinics_email_key');
+    } catch (e) {
+      // ignore
+    }
+
     console.log('✅ PostgreSQL tables verified / created successfully.');
     return true;
   } catch (err) {
