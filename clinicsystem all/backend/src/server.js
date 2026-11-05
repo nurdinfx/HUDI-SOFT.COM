@@ -5,6 +5,7 @@ const morgan = require('morgan');
 const rateLimit = require('express-rate-limit');
 const { corsMiddleware } = require('./middleware/cors');
 const { pool } = require('./db/pool');
+const { runMigrations } = require('./db/migrate');
 
 const BUILD_TAG = 'v1.0.0';
 console.log(`\n🏥 Datel Clinic System — Backend API ${BUILD_TAG}`);
@@ -52,9 +53,16 @@ app.get('/', (req, res) => res.json({
 
 app.get('/api/health', async (req, res) => {
   let dbOk = false;
-  try { await pool.query('SELECT 1'); dbOk = true; } catch (_) {}
+  let dbError = null;
+  try {
+    await pool.query('SELECT 1');
+    dbOk = true;
+  } catch (err) {
+    dbError = err.message;
+  }
   res.status(dbOk ? 200 : 503).json({
     ok: dbOk,
+    dbError,
     product: 'Datel Clinic System',
     build: BUILD_TAG,
     uptime: Math.round(process.uptime()),
@@ -77,10 +85,17 @@ app.use((err, req, res, next) => {
 require('./jobs/subscriptionSync');
 
 // ── Start ─────────────────────────────────────────────────────────────────────
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log(`🚀 Server running on http://localhost:${PORT}`);
   console.log(`   Health:  http://localhost:${PORT}/api/health`);
   startKeepAlive();
+  
+  // Verify database connection & run initial migrations
+  try {
+    await runMigrations();
+  } catch (err) {
+    console.error('⚠️ Startup migration check error:', err.message);
+  }
 });
 
 function startKeepAlive() {

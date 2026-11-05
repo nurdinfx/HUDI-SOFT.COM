@@ -362,6 +362,18 @@ CREATE TABLE IF NOT EXISTS notifications (
 CREATE INDEX IF NOT EXISTS idx_notifications_user_unread ON notifications(user_id, is_read);
 `;
 
+async function runMigrations() {
+  try {
+    console.log('🔄 Checking / creating PostgreSQL tables for Datel Clinic...');
+    await pool.query(CREATE_TABLES);
+    console.log('✅ PostgreSQL tables verified / created successfully.');
+    return true;
+  } catch (err) {
+    console.error('⚠️ Auto-migration check warning:', err.message);
+    return false;
+  }
+}
+
 async function migrate() {
   const client = await pool.connect();
   try {
@@ -383,4 +395,8 @@ async function migrate() {
   }
 }
 
-migrate();
+if (require.main === module) {
+  migrate();
+}
+
+module.exports = { runMigrations, CREATE_TABLES };

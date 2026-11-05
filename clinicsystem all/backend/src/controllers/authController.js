@@ -91,7 +91,8 @@ const activate = async (req, res) => {
     
     await query(
       `INSERT INTO clinic_users (clinic_id, full_name, email, password_hash, role)
-       VALUES ($1, $2, $3, $4, 'super_admin')`,
+       VALUES ($1, $2, $3, $4, 'super_admin')
+       ON CONFLICT (email) DO UPDATE SET password_hash = $4, is_active = true`,
       [newClinicId, `${companyName} Admin`, adminEmail, hash]
     );
 
@@ -103,7 +104,10 @@ const activate = async (req, res) => {
     });
   } catch (err) {
     console.error('[Auth] Activate error:', err);
-    res.status(500).json({ message: 'Internal server error during activation' });
+    res.status(500).json({ 
+      message: err.message || 'Internal server error during activation',
+      detail: err.message
+    });
   }
 };
 
