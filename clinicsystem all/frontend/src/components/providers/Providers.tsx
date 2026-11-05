@@ -9,12 +9,12 @@ import { LicenseGate } from './LicenseGate'
 
 export function Providers({ children }: { children: ReactNode }) {
   useEffect(() => {
-    if ('serviceWorker' in navigator && window.self === window.top) {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/sw.js').then(
-          (reg) => console.log('🚀 PWA Service Worker registered:', reg.scope),
-          (err) => console.warn('❌ Service Worker registration failed:', err)
-        )
+    // Unregister legacy Service Worker to avoid PWA fetch redirect crash (ERR_FAILED)
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations().then((registrations) => {
+        for (const reg of registrations) {
+          reg.unregister()
+        }
       })
     }
   }, [])
