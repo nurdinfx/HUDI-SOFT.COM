@@ -32,3 +32,23 @@ services:
       # PORT
     healthCheckPath: /api/v1/health
     autoDeploy: true
+
+  - type: web
+    name: hudi-soft-com-2
+    runtime: node
+    rootDir: clinicsystem all/backend
+    buildCommand: npm install
+    startCommand: node src/server.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 6000
+      - key: HUDI_SOFT_API_URL
+        value: https://hudi-soft-com.onrender.com/api
+      # Set these in the Render dashboard — do NOT hardcode secrets here:
+      # DATABASE_URL
+      # JWT_SECRET
+    healthCheckPath: /api/health
+    autoDeploy: true
+

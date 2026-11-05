@@ -20,20 +20,37 @@ export default function ActivationPage() {
     setLoading(true)
 
     try {
-      // Call our OWN backend — it validates with HUDI-SOFT server-side (no CORS issue)
-      const backendApi = process.env.NEXT_PUBLIC_API_URL || 'https://hudi-soft-com-2.onrender.com/api'
-      const response = await axios.post(`${backendApi}/auth/activate`, {
-        licenseKey: licenseKey,
-      })
+      // Directly validate with HUDI-SOFT central licensing API
+      // Falls back to own backend if NEXT_PUBLIC_API_URL is set (self-hosted)
+      const hudiSoftApi = process.env.NEXT_PUBLIC_HUDI_SOFT_API_URL || 'https://hudi-soft-com.onrender.com/api'
+      const ownBackendApi = process.env.NEXT_PUBLIC_API_URL || ''
 
-      if (response.data.valid) {
+      let responseData: any = null
+
+      if (ownBackendApi) {
+        // Use own backend (which does server-side validation)
+        const response = await axios.post(`${ownBackendApi}/auth/activate`, { licenseKey })
+        responseData = response.data
+      } else {
+        // Direct call to HUDI-SOFT licensing API (CORS allowed for hudisoftdatel.vercel.app)
+        const response = await axios.post(`${hudiSoftApi}/licenses/validate`, {
+          licenseKey,
+          machineID: 'datel-clinic-web',
+        })
+        responseData = {
+          valid: response.data.valid,
+          message: response.data.message,
+        }
+      }
+
+      if (responseData.valid) {
         setSuccess('License activated successfully!')
         localStorage.setItem('hudi_license_key', licenseKey)
         setTimeout(() => {
           router.push('/login')
         }, 1500)
       } else {
-        setError(response.data.message || 'Invalid license key.')
+        setError(responseData.message || 'Invalid license key.')
       }
     } catch (err: any) {
       setError(err.response?.data?.message || 'Activation failed. Please check your key or connection.')
