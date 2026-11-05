@@ -7,32 +7,40 @@ import {
   LayoutDashboard, Users, Calendar, Stethoscope, FlaskConical,
   Pill, Receipt, BarChart3, Settings, LogOut, Menu, X,
   ChevronRight, Heart, Bell, Sun, Moon, ClipboardList, UserCog, Clock,
+  HeartPulse, FileText, Camera, Building2, Sparkles,
 } from 'lucide-react'
 import { useState } from 'react'
 import { useAuth } from '@/context/AuthContext'
 import { useTheme } from '@/components/providers/ThemeProvider'
+import { useLanguage } from '@/context/LanguageContext'
 import { cn, getInitials } from '@/lib/utils'
 
 const NAV = [
-  { href: '/dashboard',      icon: LayoutDashboard, label: 'Dashboard',      roles: ['*'] },
-  { href: '/patients',       icon: Users,           label: 'Patients',       roles: ['*'] },
-  { href: '/appointments',   icon: Calendar,        label: 'Appointments',   roles: ['*'] },
-  { href: '/consultations',  icon: Stethoscope,     label: 'Consultations',  roles: ['super_admin','clinic_manager','doctor'] },
-  { href: '/prescriptions',  icon: ClipboardList,   label: 'Prescriptions',  roles: ['super_admin','clinic_manager','doctor'] },
-  { href: '/laboratory',     icon: FlaskConical,    label: 'Laboratory',     roles: ['super_admin','clinic_manager','doctor','lab_staff'] },
-  { href: '/pharmacy',       icon: Pill,            label: 'Pharmacy',       roles: ['super_admin','clinic_manager','pharmacist','doctor'] },
-  { href: '/billing',        icon: Receipt,         label: 'Billing',        roles: ['super_admin','clinic_manager','accountant','receptionist'] },
-  { href: '/attendance',     icon: Clock,           label: 'Attendance',     roles: ['*'] },
-  { href: '/employees',      icon: UserCog,         label: 'Employees',      roles: ['super_admin','clinic_manager'] },
-  { href: '/reports',        icon: BarChart3,       label: 'Reports',        roles: ['super_admin','clinic_manager','accountant'] },
-  { href: '/notifications',  icon: Bell,            label: 'Notifications',  roles: ['*'] },
-  { href: '/settings',       icon: Settings,        label: 'Settings',       roles: ['super_admin','clinic_manager'] },
+  { href: '/dashboard',       icon: LayoutDashboard, labelKey: 'dashboard', label: 'Dashboard',             roles: ['*'] },
+  { href: '/dental',          icon: HeartPulse,      labelKey: 'odontogram', label: 'Dental Odontogram',     roles: ['*'] },
+  { href: '/treatment-plans', icon: FileText,        labelKey: 'treatmentPlans', label: 'Treatment Plans',   roles: ['super_admin','clinic_manager','doctor'] },
+  { href: '/dental-imaging',  icon: Camera,          labelKey: 'imaging', label: 'Dental Imaging',           roles: ['super_admin','clinic_manager','doctor'] },
+  { href: '/dental-lab',      icon: FlaskConical,    labelKey: 'dentalLab', label: 'Dental Laboratory',      roles: ['super_admin','clinic_manager','doctor','lab_staff'] },
+  { href: '/patients',        icon: Users,           labelKey: 'patients', label: 'Patients',              roles: ['*'] },
+  { href: '/appointments',    icon: Calendar,        labelKey: 'appointments', label: 'Appointments',       roles: ['*'] },
+  { href: '/consultations',   icon: Stethoscope,     label: 'Consultations',         roles: ['super_admin','clinic_manager','doctor'] },
+  { href: '/prescriptions',   icon: ClipboardList,   label: 'Prescriptions',         roles: ['super_admin','clinic_manager','doctor'] },
+  { href: '/pharmacy',        icon: Pill,            label: 'Pharmacy',              roles: ['super_admin','clinic_manager','pharmacist','doctor'] },
+  { href: '/billing',         icon: Receipt,         labelKey: 'invoices', label: 'Billing',               roles: ['super_admin','clinic_manager','accountant','receptionist'] },
+  { href: '/branches',        icon: Building2,       labelKey: 'branches', label: 'Clinic Branches',       roles: ['super_admin','clinic_manager'] },
+  { href: '/ai-assistant',    icon: Sparkles,        labelKey: 'aiAssistant', label: 'AI Dental Assistant', roles: ['*'] },
+  { href: '/attendance',      icon: Clock,           label: 'Attendance',            roles: ['*'] },
+  { href: '/employees',       icon: UserCog,         label: 'Employees',             roles: ['super_admin','clinic_manager'] },
+  { href: '/reports',         icon: BarChart3,       labelKey: 'reports', label: 'Reports',               roles: ['super_admin','clinic_manager','accountant'] },
+  { href: '/notifications',   icon: Bell,            label: 'Notifications',         roles: ['*'] },
+  { href: '/settings',        icon: Settings,        labelKey: 'settings', label: 'Settings',              roles: ['super_admin','clinic_manager'] },
 ]
 
 export default function Sidebar() {
   const pathname = usePathname()
   const { user, logout } = useAuth()
   const { theme, toggleTheme } = useTheme()
+  const { t } = useLanguage()
   const [collapsed, setCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
 
@@ -43,15 +51,16 @@ export default function Sidebar() {
   const NavItem = ({ item }: { item: typeof NAV[0] }) => {
     const active = pathname.startsWith(item.href)
     const Icon = item.icon
+    const displayLabel = item.labelKey ? t(item.labelKey, item.label) : item.label
     return (
       <Link
         href={item.href}
         onClick={() => setMobileOpen(false)}
         className={cn('nav-link', active && 'active')}
-        title={collapsed ? item.label : undefined}
+        title={collapsed ? displayLabel : undefined}
       >
         <Icon className="w-5 h-5 shrink-0" />
-        {!collapsed && <span className="truncate">{item.label}</span>}
+        {!collapsed && <span className="truncate">{displayLabel}</span>}
         {!collapsed && active && <ChevronRight className="w-4 h-4 ml-auto opacity-60" />}
       </Link>
     )
@@ -67,7 +76,8 @@ export default function Sidebar() {
           </div>
           {!collapsed && (
             <div>
-              <p className="font-bold text-xs text-slate-900 dark:text-white leading-tight tracking-wide">HUDI-SOFT-CLINICSYSTEM</p>
+              <p className="font-black text-xs text-slate-900 dark:text-white leading-tight tracking-wide">{t('brandTitle')}</p>
+              <p className="text-[10px] text-teal-600 dark:text-teal-400 font-bold">{t('practiceSaas')}</p>
             </div>
           )}
           <button

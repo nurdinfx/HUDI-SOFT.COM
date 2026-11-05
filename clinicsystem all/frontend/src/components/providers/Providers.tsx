@@ -2,6 +2,7 @@
 
 import { ReactNode, useEffect } from 'react'
 import { AuthProvider } from '@/context/AuthContext'
+import { LanguageProvider } from '@/context/LanguageContext'
 import { ThemeProvider } from './ThemeProvider'
 import QueryProvider from './QueryProvider'
 import { Toaster } from '@/components/ui/Toaster'
@@ -22,10 +23,12 @@ export function Providers({ children }: { children: ReactNode }) {
     <LicenseGate>
       <QueryProvider>
         <ThemeProvider>
-          <AuthProvider>
-            {children}
-            <Toaster />
-          </AuthProvider>
+          <LanguageProvider>
+            <AuthProvider>
+              {children}
+              <Toaster />
+            </AuthProvider>
+          </LanguageProvider>
         </ThemeProvider>
       </QueryProvider>
     </LicenseGate>

@@ -360,6 +360,175 @@ CREATE TABLE IF NOT EXISTS notifications (
   created_at  TIMESTAMPTZ DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_notifications_user_unread ON notifications(user_id, is_read);
+
+-- ============================================================
+-- MULTI-BRANCH (Branches per Clinic Tenant)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS branches (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  clinic_id   UUID NOT NULL REFERENCES clinics(id) ON DELETE CASCADE,
+  name        VARCHAR(255) NOT NULL,
+  code        VARCHAR(50),
+  phone       VARCHAR(50),
+  email       VARCHAR(255),
+  address     TEXT,
+  city        VARCHAR(100),
+  is_main     BOOLEAN DEFAULT FALSE,
+  is_active   BOOLEAN DEFAULT TRUE,
+  created_at  TIMESTAMPTZ DEFAULT NOW(),
+  updated_at  TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_branches_clinic ON branches(clinic_id);
+
+-- ============================================================
+-- DENTAL TREATMENT CATALOG
+-- ============================================================
+CREATE TABLE IF NOT EXISTS dental_treatments (
+  id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  clinic_id           UUID NOT NULL REFERENCES clinics(id) ON DELETE CASCADE,
+  category            VARCHAR(100) NOT NULL,
+  treatment_name      VARCHAR(255) NOT NULL,
+  code                VARCHAR(50),
+  description         TEXT,
+  default_price       NUMERIC(12,2) NOT NULL DEFAULT 0.00,
+  duration_minutes    INTEGER DEFAULT 30,
+  required_materials  TEXT,
+  is_active           BOOLEAN DEFAULT TRUE,
+  created_at          TIMESTAMPTZ DEFAULT NOW(),
+  updated_at          TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_dental_treatments_clinic ON dental_treatments(clinic_id);
+
+-- ============================================================
+-- DENTAL ODONTOGRAM CHARTS (Historical & Current Snapshots)
+-- ============================================================
+CREATE TABLE IF NOT EXISTS dental_charts (
+  id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  clinic_id           UUID NOT NULL REFERENCES clinics(id) ON DELETE CASCADE,
+  patient_id          UUID NOT NULL REFERENCES patients(id) ON DELETE CASCADE,
+  doctor_id           UUID REFERENCES clinic_users(id),
+  chart_type          VARCHAR(50) DEFAULT 'Adult',
+  teeth_data          JSONB NOT NULL DEFAULT '[]',
+  general_notes       TEXT,
+  occlusion_notes     TEXT,
+  periodontal_notes   TEXT,
+  is_signed           BOOLEAN DEFAULT FALSE,
+  signed_at           TIMESTAMPTZ,
+  created_at          TIMESTAMPTZ DEFAULT NOW(),
+  updated_at          TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_dental_charts_patient ON dental_charts(clinic_id, patient_id);
+
+-- ============================================================
+-- DENTAL TREATMENT PLANS
+-- ============================================================
+CREATE TABLE IF NOT EXISTS treatment_plans (
+  id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  clinic_id             UUID NOT NULL REFERENCES clinics(id) ON DELETE CASCADE,
+  patient_id            UUID NOT NULL REFERENCES patients(id) ON DELETE CASCADE,
+  doctor_id             UUID REFERENCES clinic_users(id),
+  branch_id             UUID REFERENCES branches(id),
+  plan_number           VARCHAR(50) NOT NULL,
+  title                 VARCHAR(255) NOT NULL,
+  status                VARCHAR(50) DEFAULT 'Draft'
+                          CHECK (status IN ('Draft','Proposed','Awaiting Approval','Approved','In Progress','On Hold','Completed','Cancelled')),
+  total_estimated_cost  NUMERIC(12,2) DEFAULT 0.00,
+  patient_consent       BOOLEAN DEFAULT FALSE,
+  consent_signed_at     TIMESTAMPTZ,
+  clinical_notes        TEXT,
+  created_at            TIMESTAMPTZ DEFAULT NOW(),
+  updated_at            TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(clinic_id, plan_number)
+);
+CREATE INDEX IF NOT EXISTS idx_treatment_plans_patient ON treatment_plans(clinic_id, patient_id);
+
+-- ============================================================
+-- TREATMENT PLAN ITEMS / PROCEDURES
+-- ============================================================
+CREATE TABLE IF NOT EXISTS treatment_plan_items (
+  id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  treatment_plan_id     UUID NOT NULL REFERENCES treatment_plans(id) ON DELETE CASCADE,
+  treatment_id          UUID REFERENCES dental_treatments(id) ON DELETE SET NULL,
+  treatment_name        VARCHAR(255) NOT NULL,
+  tooth_number          VARCHAR(10),
+  surfaces              VARCHAR(20),
+  stage                 INTEGER DEFAULT 1,
+  session_number        INTEGER DEFAULT 1,
+  estimated_cost        NUMERIC(12,2) DEFAULT 0.00,
+  status                VARCHAR(50) DEFAULT 'Planned'
+                          CHECK (status IN ('Planned','Scheduled','In Progress','Completed','Cancelled')),
+  completed_at          TIMESTAMPTZ,
+  completed_by          UUID REFERENCES clinic_users(id),
+  notes                 TEXT,
+  created_at            TIMESTAMPTZ DEFAULT NOW(),
+  updated_at            TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_plan_items_plan ON treatment_plan_items(treatment_plan_id);
+
+-- ============================================================
+-- DENTAL LABORATORY ORDERS
+-- ============================================================
+CREATE TABLE IF NOT EXISTS dental_lab_orders (
+  id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  clinic_id           UUID NOT NULL REFERENCES clinics(id) ON DELETE CASCADE,
+  patient_id          UUID NOT NULL REFERENCES patients(id) ON DELETE CASCADE,
+  doctor_id           UUID REFERENCES clinic_users(id),
+  lab_name            VARCHAR(255) NOT NULL,
+  order_type          VARCHAR(100) NOT NULL,
+  tooth_numbers       VARCHAR(100),
+  shade_guide         VARCHAR(50),
+  instructions        TEXT,
+  status              VARCHAR(50) DEFAULT 'Pending'
+                        CHECK (status IN ('Pending','Sent to Laboratory','In Production','Quality Check','Ready','Delivered','Rejected')),
+  sent_date           DATE,
+  due_date            DATE,
+  delivered_date      DATE,
+  lab_cost            NUMERIC(12,2) DEFAULT 0.00,
+  payment_status      VARCHAR(50) DEFAULT 'Unpaid'
+                        CHECK (payment_status IN ('Unpaid','Partially Paid','Paid')),
+  created_at          TIMESTAMPTZ DEFAULT NOW(),
+  updated_at          TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_dental_lab_clinic ON dental_lab_orders(clinic_id, patient_id);
+
+-- ============================================================
+-- DENTAL IMAGING & X-RAY CENTER
+-- ============================================================
+CREATE TABLE IF NOT EXISTS dental_images (
+  id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  clinic_id           UUID NOT NULL REFERENCES clinics(id) ON DELETE CASCADE,
+  patient_id          UUID NOT NULL REFERENCES patients(id) ON DELETE CASCADE,
+  doctor_id           UUID REFERENCES clinic_users(id),
+  image_type          VARCHAR(50) NOT NULL
+                        CHECK (image_type IN ('Periapical','Bitewing','Panoramic','CBCT','Intraoral','Before/After','Other')),
+  title               VARCHAR(255) NOT NULL,
+  image_url           TEXT NOT NULL,
+  tooth_numbers       VARCHAR(100),
+  clinical_notes      TEXT,
+  taken_at            TIMESTAMPTZ DEFAULT NOW(),
+  created_at          TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_dental_images_patient ON dental_images(clinic_id, patient_id);
+
+-- ============================================================
+-- DOCTOR COMMISSIONS
+-- ============================================================
+CREATE TABLE IF NOT EXISTS doctor_commissions (
+  id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  clinic_id           UUID NOT NULL REFERENCES clinics(id) ON DELETE CASCADE,
+  doctor_id           UUID NOT NULL REFERENCES clinic_users(id) ON DELETE CASCADE,
+  treatment_name      VARCHAR(255) NOT NULL,
+  patient_name        VARCHAR(255),
+  commission_type     VARCHAR(50) DEFAULT 'Percentage'
+                        CHECK (commission_type IN ('Percentage','Fixed')),
+  rate                NUMERIC(8,2) DEFAULT 0.00,
+  amount              NUMERIC(12,2) NOT NULL DEFAULT 0.00,
+  status              VARCHAR(50) DEFAULT 'Pending'
+                        CHECK (status IN ('Pending','Approved','Paid')),
+  paid_at             TIMESTAMPTZ,
+  created_at          TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_commissions_doctor ON doctor_commissions(clinic_id, doctor_id);
 `;
 
 async function runMigrations() {

@@ -1,13 +1,15 @@
 'use client'
 
-import { Bell, Search, Menu } from 'lucide-react'
+import { Bell, Search, Menu, Globe } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
+import { useLanguage, Language } from '@/context/LanguageContext'
 import { getInitials } from '@/lib/utils'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 
 export default function TopBar() {
   const { user } = useAuth()
+  const { language, setLanguage, t } = useLanguage()
   const router = useRouter()
   const [searchValue, setSearchValue] = useState('')
 
@@ -29,7 +31,7 @@ export default function TopBar() {
             value={searchValue}
             onChange={e => setSearchValue(e.target.value)}
             onKeyDown={handleSearch}
-            placeholder="Search patients… (press Enter)"
+            placeholder={t('searchPatients')}
             className="dcs-input pl-9 py-2 text-xs"
           />
         </div>
@@ -37,6 +39,31 @@ export default function TopBar() {
 
       {/* Right side */}
       <div className="flex items-center gap-3">
+        {/* Language Switcher */}
+        <div className="flex items-center bg-slate-100 dark:bg-slate-800 rounded-lg p-0.5 text-xs font-semibold">
+          <button
+            type="button"
+            onClick={() => setLanguage('en')}
+            className={`px-2 py-1 rounded-md transition-all ${language === 'en' ? 'bg-white dark:bg-slate-700 text-teal-600 dark:text-teal-400 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
+          >
+            EN
+          </button>
+          <button
+            type="button"
+            onClick={() => setLanguage('so')}
+            className={`px-2 py-1 rounded-md transition-all ${language === 'so' ? 'bg-white dark:bg-slate-700 text-teal-600 dark:text-teal-400 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
+          >
+            SO
+          </button>
+          <button
+            type="button"
+            onClick={() => setLanguage('ar')}
+            className={`px-2 py-1 rounded-md transition-all ${language === 'ar' ? 'bg-white dark:bg-slate-700 text-teal-600 dark:text-teal-400 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
+          >
+            العربية
+          </button>
+        </div>
+
         {/* Subscription warning */}
         {user?.daysRemaining !== undefined && user.daysRemaining <= 7 && user.daysRemaining > 0 && (
           <span className="badge-yellow hidden sm:inline-flex">

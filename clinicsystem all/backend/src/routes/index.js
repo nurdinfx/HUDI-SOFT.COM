@@ -16,6 +16,8 @@ router.use('/pharmacy', protect, requireActiveSubscription, require('./pharmacyR
 router.use('/invoices', protect, requireActiveSubscription, require('./invoiceRoutes'));
 router.use('/dental', protect, requireActiveSubscription, require('./dentalRoutes'));
 router.use('/clinic', protect, require('./clinicRoutes'));
+router.use('/branches', protect, requireActiveSubscription, require('./branchRoutes'));
+router.use('/dental-ai', protect, requireActiveSubscription, require('./aiDentalRoutes'));
 router.use('/notifications', protect, requireActiveSubscription, require('./notificationRoutes'));
 router.use('/attendance', protect, requireActiveSubscription, require('./attendanceRoutes'));
 
