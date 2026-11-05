@@ -3,8 +3,8 @@ import './globals.css'
 import { Providers } from '@/components/providers/Providers'
 
 export const metadata: Metadata = {
-  title: 'Datel Clinic System',
-  description: 'Premium SaaS Clinic Management Platform — by HUDI SOFT',
+  title: 'HUDI DENTAL CARE — Enterprise Practice SaaS',
+  description: 'Enterprise Dental Practice Management Platform — Digital Odontogram, Dental Imaging, Lab Tracking, Multi-Branch & AI Assistant',
   manifest: '/manifest.json',
   icons: { icon: '/favicon.ico' },
 }
