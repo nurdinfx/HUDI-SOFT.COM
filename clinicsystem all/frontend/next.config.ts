@@ -1,12 +1,13 @@
 import type { NextConfig } from 'next'
 
+// HUDI DENTAL CARE — Enterprise Practice SaaS
+// Build: v1.1.1 — TS/ESLint errors suppressed for clean Vercel deployment
 const nextConfig: NextConfig = {
   output: 'export',
   trailingSlash: true,
   images: {
     unoptimized: true,
   },
-  // Suppress TypeScript build errors (warnings shown but build succeeds)
   typescript: {
     ignoreBuildErrors: true,
   },
