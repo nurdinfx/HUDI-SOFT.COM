@@ -1,8 +1,8 @@
 'use client'
 
-import { Bell, Search, Menu, Globe } from 'lucide-react'
+import { Bell, Search } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
-import { useLanguage, Language } from '@/context/LanguageContext'
+import { useLanguage } from '@/context/LanguageContext'
 import { getInitials } from '@/lib/utils'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'

@@ -6,34 +6,43 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   LayoutDashboard, Users, Calendar, Stethoscope, FlaskConical,
   Pill, Receipt, BarChart3, Settings, LogOut, Menu, X,
-  ChevronRight, Heart, Bell, Sun, Moon, ClipboardList, UserCog, Clock,
+  ChevronRight, Bell, Sun, Moon, ClipboardList, UserCog, Clock,
   HeartPulse, FileText, Camera, Building2, Sparkles,
 } from 'lucide-react'
+import { LucideIcon } from 'lucide-react'
 import { useState } from 'react'
 import { useAuth } from '@/context/AuthContext'
 import { useTheme } from '@/components/providers/ThemeProvider'
 import { useLanguage } from '@/context/LanguageContext'
 import { cn, getInitials } from '@/lib/utils'
 
-const NAV = [
-  { href: '/dashboard',       icon: LayoutDashboard, labelKey: 'dashboard', label: 'Dashboard',             roles: ['*'] },
-  { href: '/dental',          icon: HeartPulse,      labelKey: 'odontogram', label: 'Dental Odontogram',     roles: ['*'] },
-  { href: '/treatment-plans', icon: FileText,        labelKey: 'treatmentPlans', label: 'Treatment Plans',   roles: ['super_admin','clinic_manager','doctor'] },
-  { href: '/dental-imaging',  icon: Camera,          labelKey: 'imaging', label: 'Dental Imaging',           roles: ['super_admin','clinic_manager','doctor'] },
-  { href: '/dental-lab',      icon: FlaskConical,    labelKey: 'dentalLab', label: 'Dental Laboratory',      roles: ['super_admin','clinic_manager','doctor','lab_staff'] },
-  { href: '/patients',        icon: Users,           labelKey: 'patients', label: 'Patients',              roles: ['*'] },
-  { href: '/appointments',    icon: Calendar,        labelKey: 'appointments', label: 'Appointments',       roles: ['*'] },
-  { href: '/consultations',   icon: Stethoscope,     label: 'Consultations',         roles: ['super_admin','clinic_manager','doctor'] },
-  { href: '/prescriptions',   icon: ClipboardList,   label: 'Prescriptions',         roles: ['super_admin','clinic_manager','doctor'] },
-  { href: '/pharmacy',        icon: Pill,            label: 'Pharmacy',              roles: ['super_admin','clinic_manager','pharmacist','doctor'] },
-  { href: '/billing',         icon: Receipt,         labelKey: 'invoices', label: 'Billing',               roles: ['super_admin','clinic_manager','accountant','receptionist'] },
-  { href: '/branches',        icon: Building2,       labelKey: 'branches', label: 'Clinic Branches',       roles: ['super_admin','clinic_manager'] },
-  { href: '/ai-assistant',    icon: Sparkles,        labelKey: 'aiAssistant', label: 'AI Dental Assistant', roles: ['*'] },
-  { href: '/attendance',      icon: Clock,           label: 'Attendance',            roles: ['*'] },
-  { href: '/employees',       icon: UserCog,         label: 'Employees',             roles: ['super_admin','clinic_manager'] },
-  { href: '/reports',         icon: BarChart3,       labelKey: 'reports', label: 'Reports',               roles: ['super_admin','clinic_manager','accountant'] },
-  { href: '/notifications',   icon: Bell,            label: 'Notifications',         roles: ['*'] },
-  { href: '/settings',        icon: Settings,        labelKey: 'settings', label: 'Settings',              roles: ['super_admin','clinic_manager'] },
+interface NavItemConfig {
+  href: string
+  icon: LucideIcon
+  label: string
+  labelKey?: string
+  roles: string[]
+}
+
+const NAV: NavItemConfig[] = [
+  { href: '/dashboard',       icon: LayoutDashboard, labelKey: 'dashboard',     label: 'Dashboard',           roles: ['*'] },
+  { href: '/dental',          icon: HeartPulse,      labelKey: 'odontogram',    label: 'Dental Odontogram',   roles: ['*'] },
+  { href: '/treatment-plans', icon: FileText,        labelKey: 'treatmentPlans',label: 'Treatment Plans',     roles: ['super_admin','clinic_manager','doctor'] },
+  { href: '/dental-imaging',  icon: Camera,          labelKey: 'imaging',       label: 'Dental Imaging',      roles: ['super_admin','clinic_manager','doctor'] },
+  { href: '/dental-lab',      icon: FlaskConical,    labelKey: 'dentalLab',     label: 'Dental Laboratory',   roles: ['super_admin','clinic_manager','doctor','lab_staff'] },
+  { href: '/patients',        icon: Users,           labelKey: 'patients',      label: 'Patients',            roles: ['*'] },
+  { href: '/appointments',    icon: Calendar,        labelKey: 'appointments',  label: 'Appointments',        roles: ['*'] },
+  { href: '/consultations',   icon: Stethoscope,                                label: 'Consultations',       roles: ['super_admin','clinic_manager','doctor'] },
+  { href: '/prescriptions',   icon: ClipboardList,                             label: 'Prescriptions',       roles: ['super_admin','clinic_manager','doctor'] },
+  { href: '/pharmacy',        icon: Pill,                                       label: 'Pharmacy',            roles: ['super_admin','clinic_manager','pharmacist','doctor'] },
+  { href: '/billing',         icon: Receipt,         labelKey: 'invoices',      label: 'Billing',             roles: ['super_admin','clinic_manager','accountant','receptionist'] },
+  { href: '/branches',        icon: Building2,       labelKey: 'branches',      label: 'Clinic Branches',     roles: ['super_admin','clinic_manager'] },
+  { href: '/ai-assistant',    icon: Sparkles,        labelKey: 'aiAssistant',   label: 'AI Dental Assistant', roles: ['*'] },
+  { href: '/attendance',      icon: Clock,                                      label: 'Attendance',          roles: ['*'] },
+  { href: '/employees',       icon: UserCog,                                    label: 'Employees',           roles: ['super_admin','clinic_manager'] },
+  { href: '/reports',         icon: BarChart3,       labelKey: 'reports',       label: 'Reports',             roles: ['super_admin','clinic_manager','accountant'] },
+  { href: '/notifications',   icon: Bell,                                       label: 'Notifications',       roles: ['*'] },
+  { href: '/settings',        icon: Settings,        labelKey: 'settings',      label: 'Settings',            roles: ['super_admin','clinic_manager'] },
 ]
 
 export default function Sidebar() {
@@ -48,7 +57,7 @@ export default function Sidebar() {
     n.roles.includes('*') || n.roles.includes(user?.role || '')
   )
 
-  const NavItem = ({ item }: { item: typeof NAV[0] }) => {
+  const NavItem = ({ item }: { item: NavItemConfig }) => {
     const active = pathname.startsWith(item.href)
     const Icon = item.icon
     const displayLabel = item.labelKey ? t(item.labelKey, item.label) : item.label
