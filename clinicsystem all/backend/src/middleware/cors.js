@@ -1,11 +1,16 @@
 const DEFAULT_ORIGINS = [
+  'https://dental.hudisoft.online',
+  'https://hudisoftdatel.vercel.app',
   'https://datel-clinic.vercel.app',
   'https://www.datel-clinic.com',
   'https://datel-clinic.com',
   'https://hudisoft.online',
+  'https://main.hudisoft.online',
+  'https://pos.hudisoft.online',
+  'https://hms.hudisoft.online',
   'https://hudi-soft-com.vercel.app',
   'https://hudi-soft-com.onrender.com',
-  'https://hudi-soft-com.onrender.com',
+  'https://hudi-soft-com-2.onrender.com',
   'http://localhost:3000',
   'http://localhost:3001',
   'http://localhost:5173',
@@ -27,11 +32,12 @@ function buildAllowedSet() {
 
 const ALLOWED_SET = buildAllowedSet();
 const VERCEL_PATTERN = /^https:\/\/[a-zA-Z0-9-]+\.vercel\.app$/;
+const HUDISOFT_PATTERN = /^https:\/\/[a-zA-Z0-9-]+\.hudisoft\.online$/;
 
 function isAllowed(origin) {
   if (!origin) return true;
   const clean = origin.replace(/\/$/, '');
-  return ALLOWED_SET.has(clean) || VERCEL_PATTERN.test(clean);
+  return ALLOWED_SET.has(clean) || VERCEL_PATTERN.test(clean) || HUDISOFT_PATTERN.test(clean);
 }
 
 function corsMiddleware(req, res, next) {
