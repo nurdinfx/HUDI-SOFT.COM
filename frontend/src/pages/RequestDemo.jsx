@@ -144,7 +144,7 @@ const RequestDemo = () => {
                                         : formData.systemType === 'Hospital Management System (HMS)'
                                         ? `https://hms.hudisoft.online/activate?key=${trialInfo.licenseKey}`
                                         : formData.systemType === 'Detail Care'
-                                        ? `https://hudisoftdatel.vercel.app/login?key=${trialInfo.licenseKey}`
+                                        ? `https://dental.hudisoft.online/login?key=${trialInfo.licenseKey}`
                                         : trialInfo.downloadUrl}
                                     target={formData.systemType === 'POS Online' || formData.systemType === 'Hospital Management System (HMS)' || formData.systemType === 'Detail Care' ? "_blank" : "_self"}
                                     rel="noopener noreferrer"

@@ -131,7 +131,7 @@ const CustomerDashboard = () => {
                         productType="DETAIL_CARE"
                         licenses={licenses.filter(l => l.productType === 'DETAIL_CARE')}
                         onDownload={() => handleDownload('DETAIL_CARE')}
-                        pwaLink="https://hudisoftdatel.vercel.app"
+                        pwaLink="https://dental.hudisoft.online"
                     />
                 </div>
             </main>

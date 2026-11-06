@@ -174,7 +174,7 @@ const LandingPage = () => {
                 { title: 'HUDI IQ', desc: 'The AI Assistant that takes action.', badge: 'New', image: '/images/ONE.jpg', link: '/request-demo' }
             ],
             columns: [
-                { title: 'Operations Suite', links: [{ name: 'Point of sale', url: 'https://pos.hudisoft.online' }, { name: 'Hospital Management (HMS)', url: 'https://hms.hudisoft.online', isNew: true }, { name: 'Detail Care Clinic PWA', url: 'https://hudisoftdatel.vercel.app/login', isNew: true }, { name: 'Catering & events', url: '#' }, { name: 'HUDI Mobile Order', url: '#', isNew: true }, { name: 'Payment processing', url: '#' }] },
+                { title: 'Operations Suite', links: [{ name: 'Point of sale', url: 'https://pos.hudisoft.online' }, { name: 'Hospital Management (HMS)', url: 'https://hms.hudisoft.online', isNew: true }, { name: 'Detail Care Clinic PWA', url: 'https://dental.hudisoft.online/login', isNew: true }, { name: 'Catering & events', url: '#' }, { name: 'HUDI Mobile Order', url: '#', isNew: true }, { name: 'Payment processing', url: '#' }] },
                 { title: 'Digital Storefront', links: [{ name: 'Online ordering', url: '#' }, { name: 'Websites', url: '#' }, { name: 'Branded mobile app', url: '#' }, { name: 'HUDI Delivery Services', url: '#' }] },
                 { title: 'Marketing Suite', links: [{ name: 'Advertising', url: '#' }, { name: 'Loyalty', url: '#' }, { name: 'Email marketing', url: '#' }, { name: 'HUDI Tables', url: '#' }] },
                 { title: 'Hardware', links: [{ name: 'All hardware', url: '#' }, { name: 'Handheld POS', url: '#' }, { name: 'Self-ordering kiosk', url: '#' }, { name: 'Kitchen display system', url: '#' }] }
@@ -567,7 +567,7 @@ const LandingPage = () => {
                                 ))}
                             </ul>
                             <div className="pt-6 flex flex-wrap gap-4">
-                                <a href="https://hudisoftdatel.vercel.app/login" target="_blank" rel="noopener noreferrer" className="px-8 py-4 bg-emerald-400 text-slate-900 rounded-2xl font-black text-lg hover:bg-emerald-300 transition-colors shadow-xl shadow-emerald-400/20 inline-flex items-center gap-2">
+                                <a href="https://dental.hudisoft.online/login" target="_blank" rel="noopener noreferrer" className="px-8 py-4 bg-emerald-400 text-slate-900 rounded-2xl font-black text-lg hover:bg-emerald-300 transition-colors shadow-xl shadow-emerald-400/20 inline-flex items-center gap-2">
                                     <Play size={20} fill="currentColor" />
                                     Launch Detail Care PWA
                                 </a>

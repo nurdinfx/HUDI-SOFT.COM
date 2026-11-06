@@ -19,6 +19,7 @@ const DEFAULT_ALLOWED_ORIGINS = [
     'https://hudi-soft-com.vercel.app',
     'https://hudi-soft-com-sz9e.vercel.app',
     'https://hudisoftdatel.vercel.app',
+    'https://dental.hudisoft.online',
     'https://hudi-soft-com-m48c.vercel.app',
     'https://hudi-soft-hms.vercel.app',
     'https://hudi-soft-com-hms.vercel.app',
