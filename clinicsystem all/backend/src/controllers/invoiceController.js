@@ -88,14 +88,25 @@ const createInvoice = async (req, res) => {
     if (!patientId || !items.length)
       return res.status(400).json({ message: 'Patient and items are required' });
 
+    // Validate paymentMethod against check constraint
+    const validMethods = ['Cash','EVC Plus','Zaad','Sahal','Card','Insurance','Other'];
+    let safePaymentMethod = 'Cash';
+    if (validMethods.includes(paymentMethod)) {
+      safePaymentMethod = paymentMethod;
+    } else {
+      safePaymentMethod = 'Other';
+    }
+
+    const safeDueDate = (dueDate && typeof dueDate === 'string' && dueDate.trim()) ? dueDate.trim() : null;
+
     const invoiceNumber = await nextInvoiceNumber(cid);
-    const subtotal = items.reduce((s, i) => s + (i.unitPrice * (i.quantity || 1)), 0);
-    const discountAmount = (subtotal * discountPercent) / 100;
+    const subtotal = items.reduce((s, i) => s + (Number(i.unitPrice || 0) * (Number(i.quantity) || 1)), 0);
+    const discountAmount = (subtotal * Number(discountPercent || 0)) / 100;
     const afterDiscount = subtotal - discountAmount;
-    const taxAmount = (afterDiscount * taxPercent) / 100;
+    const taxAmount = (afterDiscount * Number(taxPercent || 0)) / 100;
     const totalAmount = afterDiscount + taxAmount;
-    const paidAmount = req.body.paidAmount || 0;
-    const balanceDue = totalAmount - paidAmount;
+    const paidAmount = Number(req.body.paidAmount || 0);
+    const balanceDue = Math.max(0, totalAmount - paidAmount);
     const paymentStatus = balanceDue <= 0 ? 'Paid' : paidAmount > 0 ? 'Partial' : 'Unpaid';
 
     const { rows } = await client.query(
@@ -106,9 +117,9 @@ const createInvoice = async (req, res) => {
        VALUES (gen_random_uuid(),$1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,
                $17,$18,$19) RETURNING *`,
       [cid, patientId, appointmentId||null, consultationId||null, invoiceNumber,
-       dueDate||null, subtotal, discountPercent, discountAmount,
+       safeDueDate, subtotal, discountPercent, discountAmount,
        taxPercent, taxAmount, totalAmount, paidAmount, balanceDue,
-       paymentMethod, paymentStatus, paymentStatus==='Paid' ? new Date() : null,
+       safePaymentMethod, paymentStatus, paymentStatus==='Paid' ? new Date() : null,
        notes||null, req.user.id]
     );
 
@@ -140,17 +151,25 @@ const recordPayment = async (req, res) => {
     if (!existing.length) return res.status(404).json({ message: 'Invoice not found' });
 
     const inv = existing[0];
-    const newPaid = parseFloat(inv.paid_amount) + parseFloat(amount);
-    const newBalance = parseFloat(inv.total_amount) - newPaid;
+    const newPaid = parseFloat(inv.paid_amount || 0) + parseFloat(amount || 0);
+    const newBalance = Math.max(0, parseFloat(inv.total_amount) - newPaid);
     const newStatus = newBalance <= 0 ? 'Paid' : newPaid > 0 ? 'Partial' : 'Unpaid';
+
+    const validMethods = ['Cash','EVC Plus','Zaad','Sahal','Card','Insurance','Other'];
+    let safePaymentMethod = inv.payment_method;
+    if (paymentMethod && validMethods.includes(paymentMethod)) {
+      safePaymentMethod = paymentMethod;
+    } else if (paymentMethod) {
+      safePaymentMethod = 'Other';
+    }
 
     const { rows } = await query(
       `UPDATE invoices SET paid_amount=$1, balance_due=$2, payment_status=$3,
-        payment_method=COALESCE($4, payment_method),
+        payment_method=$4,
         paid_at=CASE WHEN $3='Paid' THEN NOW() ELSE paid_at END,
         updated_at=NOW()
        WHERE id=$5 RETURNING *`,
-      [newPaid, Math.max(0, newBalance), newStatus, paymentMethod||null, req.params.id]
+      [newPaid, newBalance, newStatus, safePaymentMethod, req.params.id]
     );
     res.json(rows[0]);
   } catch (err) {

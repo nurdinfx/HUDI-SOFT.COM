@@ -83,11 +83,15 @@ export default function BillingPage() {
 
     setSubmitting(true)
     try {
+      const loanNotes = form.paymentType === 'credit'
+        ? (form.notes ? `[Dayn / Loan] ${form.notes}` : '[Dayn / Loan]')
+        : form.notes
+
       await api.post('/invoices', {
         patientId: form.patientId,
-        paymentMethod: form.paymentType === 'credit' ? 'Credit / Dayn (Amaah)' : form.paymentMethod,
+        paymentMethod: form.paymentType === 'credit' ? 'Other' : form.paymentMethod,
         discountPercent: form.discountPercent,
-        notes: form.notes,
+        notes: loanNotes,
         dueDate: form.dueDate || undefined,
         items: validItems,
         paidAmount: calculatedPaidAmount,
@@ -335,7 +339,15 @@ export default function BillingPage() {
                 <div className="space-y-1">
                   <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Habka uu u bixiyey (Payment Method)</label>
                   <select value={payMethod} onChange={e => setPayMethod(e.target.value)} className="dcs-input">
-                    {['Cash (Kaash)','EVC Plus','Zaad','Sahal','eDahab','Card (Kaadh)','Insurance','Other'].map(m => <option key={m}>{m}</option>)}
+                    {[
+                      { val: 'Cash', label: 'Cash (Kaash)' },
+                      { val: 'EVC Plus', label: 'EVC Plus' },
+                      { val: 'Zaad', label: 'Zaad' },
+                      { val: 'Sahal', label: 'Sahal' },
+                      { val: 'Card', label: 'Card (Kaadh)' },
+                      { val: 'Insurance', label: 'Insurance' },
+                      { val: 'Other', label: 'Other (Kale)' },
+                    ].map(m => <option key={m.val} value={m.val}>{m.label}</option>)}
                   </select>
                 </div>
 
@@ -397,8 +409,16 @@ export default function BillingPage() {
                       className="dcs-input"
                       disabled={form.paymentType === 'credit'}
                     >
-                      {['Cash (Kaash)','EVC Plus','Zaad','Sahal','eDahab','Card (Kaadh)','Credit / Dayn (Amaah)','Insurance (Caymis)','Other'].map(m => (
-                        <option key={m}>{m}</option>
+                      {[
+                        { val: 'Cash', label: 'Cash (Kaash)' },
+                        { val: 'EVC Plus', label: 'EVC Plus' },
+                        { val: 'Zaad', label: 'Zaad' },
+                        { val: 'Sahal', label: 'Sahal' },
+                        { val: 'Card', label: 'Card (Kaadh)' },
+                        { val: 'Insurance', label: 'Insurance (Caymis)' },
+                        { val: 'Other', label: 'Other (Kale / Amaah)' },
+                      ].map(m => (
+                        <option key={m.val} value={m.val}>{m.label}</option>
                       ))}
                     </select>
                   </div>

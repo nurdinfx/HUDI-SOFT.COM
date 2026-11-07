@@ -539,6 +539,7 @@ async function runMigrations() {
     // Ensure clinics_email_key is dropped if it exists so duplicate contact emails across licenses don't fail
     try {
       await pool.query('ALTER TABLE clinics DROP CONSTRAINT IF EXISTS clinics_email_key');
+      await pool.query('ALTER TABLE invoices DROP CONSTRAINT IF EXISTS invoices_payment_method_check');
     } catch (e) {
       // ignore
     }
