@@ -43,6 +43,7 @@ export const DICTIONARY: Translations = {
   print: { en: 'Print', so: 'Daabac', ar: 'طباعة' },
   adultDentition: { en: 'Adult Dentition (32 Teeth)', so: 'Ilkaha Dadka Waaweyn (32 Ilig)', ar: 'الأسنان الدائمة (32 سن)' },
   pediatricDentition: { en: 'Pediatric Dentition (20 Teeth)', so: 'Ilkaha Carruurta (20 Ilig)', ar: 'الأسنان اللبنية (20 سن)' },
+  procedures: { en: 'Procedures Catalog', so: 'Liiska Adeegyada', ar: 'كتالوج الإجراءات' },
 
   // Pharmacy & POS
   pharmacyTitle: { en: 'Pharmacy & Drug Store', so: 'Farmashiyaha & Daawooyinka', ar: 'الصيدلية ومخزن الأدوية' },

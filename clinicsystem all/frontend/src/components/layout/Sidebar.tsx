@@ -7,7 +7,7 @@ import {
   LayoutDashboard, Users, Calendar, Stethoscope, FlaskConical,
   Pill, Receipt, BarChart3, Settings, LogOut, Menu, X,
   ChevronRight, Bell, Sun, Moon, ClipboardList, UserCog, Clock,
-  HeartPulse, FileText, Camera, Building2, Sparkles,
+  HeartPulse, FileText, Camera, Building2, Sparkles, ListChecks,
 } from 'lucide-react'
 import { LucideIcon } from 'lucide-react'
 import { useState } from 'react'
@@ -28,6 +28,7 @@ const NAV: NavItemConfig[] = [
   { href: '/dashboard',       icon: LayoutDashboard, labelKey: 'dashboard',     label: 'Dashboard',           roles: ['*'] },
   { href: '/dental',          icon: HeartPulse,      labelKey: 'odontogram',    label: 'Dental Odontogram',   roles: ['*'] },
   { href: '/treatment-plans', icon: FileText,        labelKey: 'treatmentPlans',label: 'Treatment Plans',     roles: ['super_admin','clinic_manager','doctor'] },
+  { href: '/procedures',      icon: ListChecks,      labelKey: 'procedures',    label: 'Procedures Catalog',  roles: ['super_admin','clinic_manager','doctor'] },
   { href: '/dental-imaging',  icon: Camera,          labelKey: 'imaging',       label: 'Dental Imaging',      roles: ['super_admin','clinic_manager','doctor'] },
   { href: '/dental-lab',      icon: FlaskConical,    labelKey: 'dentalLab',     label: 'Dental Laboratory',   roles: ['super_admin','clinic_manager','doctor','lab_staff'] },
   { href: '/patients',        icon: Users,           labelKey: 'patients',      label: 'Patients',            roles: ['*'] },

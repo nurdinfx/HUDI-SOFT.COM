@@ -177,8 +177,8 @@ export default function TreatmentPlansPage() {
           ) : (
             plans.map(p => {
               const isSelected = selectedPlan?.id === p.id
-              const total = Number(p.total_items) || 0
-              const completed = Number(p.completed_items) || 0
+              const total = Number(p.totalItems ?? p.total_items) || 0
+              const completed = Number(p.completedItems ?? p.completed_items) || 0
               const progressPct = total > 0 ? Math.round((completed / total) * 100) : 0
 
               return (
@@ -194,13 +194,13 @@ export default function TreatmentPlansPage() {
                   <div className="flex items-start justify-between gap-2 mb-2">
                     <div>
                       <span className="text-[10px] font-black text-blue-600 uppercase tracking-widest">
-                        {p.plan_number}
+                        {p.planNumber || p.plan_number}
                       </span>
                       <h4 className="font-black text-sm text-slate-900 dark:text-white">
                         {p.title}
                       </h4>
                       <p className="text-xs text-slate-500 font-medium">
-                        Patient: <strong>{p.patient_name}</strong>
+                        Patient: <strong>{p.patientName || p.patient_name}</strong>
                       </p>
                     </div>
 
@@ -221,9 +221,9 @@ export default function TreatmentPlansPage() {
                   </div>
 
                   <div className="flex justify-between items-center text-xs font-bold text-slate-600 dark:text-slate-300 mt-3 pt-3 border-t border-slate-100 dark:border-slate-800">
-                    <span>Est. Cost: ${Number(p.total_estimated_cost).toFixed(2)}</span>
-                    <span className={`text-[10px] ${p.patient_consent ? 'text-emerald-500' : 'text-amber-500'}`}>
-                      {p.patient_consent ? '✓ Patient Consented' : '⏳ Pending Consent'}
+                    <span>Est. Cost: ${Number(p.totalEstimatedCost ?? p.total_estimated_cost ?? 0).toFixed(2)}</span>
+                    <span className={`text-[10px] ${p.patientConsent ?? p.patient_consent ? 'text-emerald-500' : 'text-amber-500'}`}>
+                      {p.patientConsent ?? p.patient_consent ? '✓ Patient Consented' : '⏳ Pending Consent'}
                     </span>
                   </div>
                 </div>
@@ -240,7 +240,7 @@ export default function TreatmentPlansPage() {
               <div className="flex flex-wrap items-start justify-between gap-4 pb-4 border-b border-slate-100 dark:border-slate-800">
                 <div>
                   <div className="flex items-center gap-2">
-                    <span className="text-xs font-black text-blue-600">{selectedPlan.plan_number}</span>
+                    <span className="text-xs font-black text-blue-600">{selectedPlan.planNumber || selectedPlan.plan_number}</span>
                     <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase border ${STATUS_COLORS[selectedPlan.status]}`}>
                       {selectedPlan.status}
                     </span>
@@ -249,13 +249,13 @@ export default function TreatmentPlansPage() {
                     {selectedPlan.title}
                   </h3>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    Patient: {selectedPlan.patient_name} • Attending Dentist: {selectedPlan.doctor_name || 'Dr. Assigned'}
+                    Patient: {selectedPlan.patientName || selectedPlan.patient_name} • Attending Dentist: {selectedPlan.doctorName || selectedPlan.doctor_name || 'Dr. Assigned'}
                   </p>
                 </div>
 
                 {/* Consent & Approval Action Bar */}
                 <div className="flex flex-wrap items-center gap-2">
-                  {!selectedPlan.patient_consent && (
+                  {!(selectedPlan.patientConsent ?? selectedPlan.patient_consent) && (
                     <button
                       type="button"
                       onClick={() => handleUpdateStatus(selectedPlan.id, 'Approved', true)}
@@ -321,17 +321,17 @@ export default function TreatmentPlansPage() {
 
                           <div>
                             <p className={`text-xs font-black ${isDone ? 'line-through text-slate-400' : 'text-slate-900 dark:text-white'}`}>
-                              {item.treatment_name}
+                              {item.treatmentName || item.treatment_name}
                             </p>
                             <p className="text-[10px] text-slate-400">
-                              Tooth: <strong>{item.tooth_number || 'General'}</strong> {item.surfaces ? `(${item.surfaces})` : ''} • Session #{item.session_number} • Stage {item.stage}
+                              Tooth: <strong>{item.toothNumber || item.tooth_number || 'General'}</strong> {item.surfaces ? `(${item.surfaces})` : ''} • Session #{item.sessionNumber || item.session_number || 1} • Stage {item.stage || 1}
                             </p>
                           </div>
                         </div>
 
                         <div className="text-right">
                           <p className="text-xs font-black text-slate-800 dark:text-slate-200">
-                            ${Number(item.estimated_cost).toFixed(2)}
+                            ${Number(item.estimatedCost ?? item.estimated_cost ?? 0).toFixed(2)}
                           </p>
                           <span className={`text-[9px] font-bold ${isDone ? 'text-emerald-500' : 'text-slate-400'}`}>
                             {item.status}
@@ -446,22 +446,26 @@ export default function TreatmentPlansPage() {
                         <select
                           value={item.treatmentName}
                           onChange={e => {
-                            const found = treatmentsCatalog.find(t => t.treatment_name === e.target.value)
+                            const found = treatmentsCatalog.find(t => (t.treatmentName || t.treatment_name) === e.target.value)
                             const updated = [...formItems]
                             updated[idx].treatmentName = e.target.value
                             if (found) {
                               updated[idx].treatmentId = found.id
-                              updated[idx].estimatedCost = Number(found.default_price) || 0
+                              updated[idx].estimatedCost = Number(found.defaultPrice ?? found.default_price) || 0
                             }
                             setFormItems(updated)
                           }}
                           className="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-bold flex-1"
                         >
-                          {treatmentsCatalog.map(t => (
-                            <option key={t.id} value={t.treatment_name}>
-                              {t.treatment_name} (${t.default_price})
-                            </option>
-                          ))}
+                          {treatmentsCatalog.map(t => {
+                            const name = t.treatmentName || t.treatment_name || 'Procedure'
+                            const price = Number(t.defaultPrice ?? t.default_price ?? 0)
+                            return (
+                              <option key={t.id} value={name}>
+                                {name} (${price})
+                              </option>
+                            )
+                          })}
                         </select>
 
                         <input
