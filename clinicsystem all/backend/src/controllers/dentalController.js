@@ -553,6 +553,9 @@ module.exports = {
   getTreatments,
   createTreatment,
   updateTreatment,
+  deleteTreatment,
+  clearAllTreatments,
+  seedTemplateTreatments,
   // Odontogram
   getPatientCharts,
   getLatestPatientChart,
