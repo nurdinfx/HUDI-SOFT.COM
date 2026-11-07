@@ -102,27 +102,82 @@ const createSale = async (req, res) => {
       await client.query('UPDATE medications SET stock_quantity = stock_quantity - $1, updated_at=NOW() WHERE id=$2', [item.quantity, item.medicationId]);
     }
 
+    const isCredit = paymentMethod && (
+      paymentMethod.toLowerCase().includes('credit') ||
+      paymentMethod.toLowerCase().includes('dayn') ||
+      paymentMethod.toLowerCase().includes('amaah') ||
+      paymentMethod.toLowerCase().includes('loan')
+    );
+    const paymentStatus = isCredit ? 'Unpaid' : 'Paid';
+    const paidAmount = isCredit ? 0 : totalAmount;
+
     const validMethods = ['Cash','EVC Plus','Zaad','Sahal','Card','Insurance'];
-    let safePaymentMethod = validMethods.includes(paymentMethod) ? paymentMethod : 'Cash';
-    const saleNotes = paymentMethod && !validMethods.includes(paymentMethod)
-      ? (notes ? `[${paymentMethod}] ${notes}` : `[${paymentMethod}]`)
-      : notes;
+    let safePaymentMethod = isCredit ? 'Other' : (validMethods.includes(paymentMethod) ? paymentMethod : 'Cash');
+    const saleNotes = isCredit
+      ? (notes ? `[Dayn / Credit] ${notes}` : `[Dayn / Credit]`)
+      : (paymentMethod && !validMethods.includes(paymentMethod)
+        ? (notes ? `[${paymentMethod}] ${notes}` : `[${paymentMethod}]`)
+        : notes);
 
     const { rows: sale } = await client.query(
       `INSERT INTO pharmacy_sales (id, clinic_id, patient_id, prescription_id, sale_number,
          total_amount, paid_amount, payment_method, payment_status, served_by, notes)
-       VALUES (gen_random_uuid(),$1,$2,$3,$4,$5,$6,$7,'Paid',$8,$9) RETURNING *`,
-      [cid, patientId||null, prescriptionId||null, saleNumber, totalAmount, totalAmount, safePaymentMethod, req.user.id, saleNotes||null]
+       VALUES (gen_random_uuid(),$1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
+      [cid, patientId||null, prescriptionId||null, saleNumber, totalAmount, paidAmount, safePaymentMethod, paymentStatus, req.user.id, saleNotes||null]
     );
 
     for (const item of items) {
-      const { rows: med } = await client.query('SELECT selling_price FROM medications WHERE id=$1', [item.medicationId]);
+      const { rows: med } = await client.query('SELECT name, selling_price FROM medications WHERE id=$1', [item.medicationId]);
       const unitPrice = Number(item.unitPrice || med[0]?.selling_price || 0);
+      item.medicationName = med[0]?.name || 'Medication';
       await client.query(
         `INSERT INTO pharmacy_sale_items (id, sale_id, medication_id, quantity, unit_price, total_price)
          VALUES (gen_random_uuid(),$1,$2,$3,$4,$5)`,
         [sale[0].id, item.medicationId, item.quantity, unitPrice, unitPrice * item.quantity]
       );
+    }
+
+    // If sold on credit/dayn and patientId is provided, also create a linked invoice in the clinic's billing system
+    if (isCredit && patientId) {
+      try {
+        const { nextInvoiceNumber } = require('../utils/autoNumber');
+        const invoiceNumber = await nextInvoiceNumber(cid);
+        const { rows: inv } = await client.query(
+          `INSERT INTO invoices (
+            id, clinic_id, patient_id, invoice_number, subtotal, total_amount, paid_amount, balance_due,
+            payment_method, payment_status, notes, created_by
+          ) VALUES (
+            gen_random_uuid(), $1, $2, $3, $4, $5, 0, $6, 'Other', 'Unpaid', $7, $8
+          ) RETURNING id`,
+          [
+            cid,
+            patientId,
+            invoiceNumber,
+            totalAmount,
+            totalAmount,
+            totalAmount,
+            `[Pharmacy Dayn / Amaah] Sale #${saleNumber}`,
+            req.user.id
+          ]
+        );
+
+        for (const item of items) {
+          const unitPrice = Number(item.unitPrice || 0);
+          await client.query(
+            `INSERT INTO invoice_items (id, invoice_id, description, quantity, unit_price, total_price)
+             VALUES (gen_random_uuid(), $1, $2, $3, $4, $5)`,
+            [
+              inv[0].id,
+              `Pharmacy: ${item.medicationName || 'Medication'}`,
+              item.quantity,
+              unitPrice,
+              unitPrice * item.quantity
+            ]
+          );
+        }
+      } catch (invErr) {
+        console.error('[Pharmacy] Error creating linked credit invoice:', invErr);
+      }
     }
 
     await client.query('COMMIT');

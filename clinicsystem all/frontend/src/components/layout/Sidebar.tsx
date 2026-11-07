@@ -32,16 +32,16 @@ const NAV: NavItemConfig[] = [
   { href: '/dental-lab',      icon: FlaskConical,    labelKey: 'dentalLab',     label: 'Dental Laboratory',   roles: ['super_admin','clinic_manager','doctor','lab_staff'] },
   { href: '/patients',        icon: Users,           labelKey: 'patients',      label: 'Patients',            roles: ['*'] },
   { href: '/appointments',    icon: Calendar,        labelKey: 'appointments',  label: 'Appointments',        roles: ['*'] },
-  { href: '/consultations',   icon: Stethoscope,                                label: 'Consultations',       roles: ['super_admin','clinic_manager','doctor'] },
-  { href: '/prescriptions',   icon: ClipboardList,                             label: 'Prescriptions',       roles: ['super_admin','clinic_manager','doctor'] },
-  { href: '/pharmacy',        icon: Pill,                                       label: 'Pharmacy',            roles: ['super_admin','clinic_manager','pharmacist','doctor'] },
+  { href: '/consultations',   icon: Stethoscope,     labelKey: 'consultations', label: 'Consultations',       roles: ['super_admin','clinic_manager','doctor'] },
+  { href: '/prescriptions',   icon: ClipboardList,   labelKey: 'prescriptions', label: 'Prescriptions',       roles: ['super_admin','clinic_manager','doctor'] },
+  { href: '/pharmacy',        icon: Pill,            labelKey: 'pharmacy',      label: 'Pharmacy',            roles: ['super_admin','clinic_manager','pharmacist','doctor'] },
   { href: '/billing',         icon: Receipt,         labelKey: 'invoices',      label: 'Billing',             roles: ['super_admin','clinic_manager','accountant','receptionist'] },
   { href: '/branches',        icon: Building2,       labelKey: 'branches',      label: 'Clinic Branches',     roles: ['super_admin','clinic_manager'] },
   { href: '/ai-assistant',    icon: Sparkles,        labelKey: 'aiAssistant',   label: 'AI Dental Assistant', roles: ['*'] },
-  { href: '/attendance',      icon: Clock,                                      label: 'Attendance',          roles: ['*'] },
-  { href: '/employees',       icon: UserCog,                                    label: 'Employees',           roles: ['super_admin','clinic_manager'] },
+  { href: '/attendance',      icon: Clock,           labelKey: 'attendance',    label: 'Attendance',          roles: ['*'] },
+  { href: '/employees',       icon: UserCog,         labelKey: 'employees',     label: 'Employees',           roles: ['super_admin','clinic_manager'] },
   { href: '/reports',         icon: BarChart3,       labelKey: 'reports',       label: 'Reports',             roles: ['super_admin','clinic_manager','accountant'] },
-  { href: '/notifications',   icon: Bell,                                       label: 'Notifications',       roles: ['*'] },
+  { href: '/notifications',   icon: Bell,            labelKey: 'notifications', label: 'Notifications',       roles: ['*'] },
   { href: '/settings',        icon: Settings,        labelKey: 'settings',      label: 'Settings',            roles: ['super_admin','clinic_manager'] },
 ]
 
@@ -107,11 +107,11 @@ export default function Sidebar() {
       <div className="p-3 border-t border-slate-100 dark:border-slate-800 space-y-1">
         <button onClick={toggleTheme} className="nav-link w-full">
           {theme === 'dark' ? <Sun className="w-5 h-5 shrink-0" /> : <Moon className="w-5 h-5 shrink-0" />}
-          {!collapsed && <span>{theme === 'dark' ? 'Light Mode' : 'Dark Mode'}</span>}
+          {!collapsed && <span>{theme === 'dark' ? t('lightMode', 'Light Mode') : t('darkMode', 'Dark Mode')}</span>}
         </button>
         <button onClick={logout} className="nav-link w-full text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-600">
           <LogOut className="w-5 h-5 shrink-0" />
-          {!collapsed && <span>Sign Out</span>}
+          {!collapsed && <span>{t('signOut', 'Sign Out')}</span>}
         </button>
 
         {!collapsed && user && (

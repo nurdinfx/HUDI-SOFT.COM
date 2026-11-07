@@ -2,10 +2,15 @@
 
 import { useEffect, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Plus, Pill, Search, AlertTriangle, ShoppingCart, Package, DollarSign, TrendingUp, Receipt, CheckCircle, Trash2, Printer, User, ArrowRight } from 'lucide-react'
+import {
+  Plus, Pill, Search, AlertTriangle, ShoppingCart, Package, DollarSign,
+  TrendingUp, Receipt, CheckCircle, Trash2, Printer, User, UserPlus,
+  AlertCircle, X
+} from 'lucide-react'
 import api from '@/lib/api'
 import { Medication, Patient } from '@/types'
 import { formatDate, formatCurrency } from '@/lib/utils'
+import { useLanguage } from '@/context/LanguageContext'
 
 interface CartItem {
   medication: Medication
@@ -14,6 +19,7 @@ interface CartItem {
 }
 
 export default function PharmacyPage() {
+  const { t, language } = useLanguage()
   const [tab, setTab] = useState<'pos' | 'inventory' | 'sales' | 'lowstock'>('pos')
   const [medications, setMedications] = useState<Medication[]>([])
   const [lowStock, setLowStock] = useState<Medication[]>([])
@@ -41,6 +47,11 @@ export default function PharmacyPage() {
     expiryDate: ''
   })
 
+  // Quick Customer Registration Modal state
+  const [showNewCustomerModal, setShowNewCustomerModal] = useState(false)
+  const [newCustForm, setNewCustForm] = useState({ fullName: '', phone: '', gender: 'Male', address: '' })
+  const [savingCustomer, setSavingCustomer] = useState(false)
+
   // POS State
   const [cart, setCart] = useState<CartItem[]>([])
   const [customerType, setCustomerType] = useState<'walkin' | 'patient'>('walkin')
@@ -52,6 +63,8 @@ export default function PharmacyPage() {
   const [posNotes, setPosNotes] = useState('')
   const [processingSale, setProcessingSale] = useState(false)
   const [completedSale, setCompletedSale] = useState<any | null>(null)
+
+  const isDebtSale = posPaymentMethod.toLowerCase().includes('credit') || posPaymentMethod.toLowerCase().includes('dayn')
 
   const loadStats = async () => {
     try {
@@ -85,7 +98,7 @@ export default function PharmacyPage() {
 
   const loadPatients = async () => {
     try {
-      const { data } = await api.get('/patients', { params: { limit: 100 } })
+      const { data } = await api.get('/patients', { params: { limit: 200 } })
       setPatients(data.patients || [])
     } catch {}
   }
@@ -104,6 +117,13 @@ export default function PharmacyPage() {
     }
   }, [tab])
 
+  // When user switches to Credit/Dayn, force customerType to patient
+  useEffect(() => {
+    if (isDebtSale && customerType !== 'patient') {
+      setCustomerType('patient')
+    }
+  }, [posPaymentMethod, isDebtSale])
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     try {
@@ -117,17 +137,43 @@ export default function PharmacyPage() {
     } catch (err: any) { alert(err.response?.data?.message || 'Error saving medication') }
   }
 
+  // Quick Customer Registration
+  const handleQuickAddCustomer = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!newCustForm.fullName.trim() || !newCustForm.phone.trim()) {
+      return alert(language === 'so' ? 'Fadlan geli magaca iyo taleefanka macmiilka' : 'Please enter customer name and phone')
+    }
+    setSavingCustomer(true)
+    try {
+      const { data } = await api.post('/patients', {
+        ...newCustForm,
+        dateOfBirth: '1995-01-01'
+      })
+      const createdPatient = data.patient || data
+      setPatients(prev => [createdPatient, ...prev])
+      setSelectedPatientId(createdPatient.id)
+      setCustomerType('patient')
+      setShowNewCustomerModal(false)
+      setNewCustForm({ fullName: '', phone: '', gender: 'Male', address: '' })
+      alert(language === 'so' ? 'Macmiilka cusub waa la diiwaangeliyay!' : 'Customer successfully registered!')
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Error registering customer')
+    } finally {
+      setSavingCustomer(false)
+    }
+  }
+
   // POS Functions
   const addToCart = (med: Medication) => {
     if (med.stockQuantity <= 0) {
-      alert(`Daawada "${med.name}" kaydkeedu waa eber (0 Stock)!`)
+      alert(language === 'so' ? `Daawada "${med.name}" kaydkeedu waa eber (0)!` : `Medication "${med.name}" is out of stock!`)
       return
     }
     setCart(prev => {
       const existing = prev.find(item => item.medication.id === med.id)
       if (existing) {
         if (existing.quantity >= med.stockQuantity) {
-          alert(`Kama kordhin kartid kaydka yaalla (${med.stockQuantity})`)
+          alert(language === 'so' ? `Kama kordhin kartid kaydka yaalla (${med.stockQuantity})` : `Cannot exceed available stock (${med.stockQuantity})`)
           return prev
         }
         return prev.map(item =>
@@ -147,7 +193,7 @@ export default function PharmacyPage() {
       prev.map(item => {
         if (item.medication.id === medId) {
           if (qty > item.medication.stockQuantity) {
-            alert(`Kaydka ugu badan waa ${item.medication.stockQuantity}`)
+            alert(language === 'so' ? `Kaydka ugu badan waa ${item.medication.stockQuantity}` : `Max stock available is ${item.medication.stockQuantity}`)
             return { ...item, quantity: item.medication.stockQuantity }
           }
           return { ...item, quantity: qty }
@@ -168,12 +214,21 @@ export default function PharmacyPage() {
   const cartTotal = Math.max(0, cartSubtotal - cartDiscountAmount)
 
   const handleCheckout = async () => {
-    if (cart.length === 0) return alert('Dambiiluhu waa maran yahay! Fadlan dawo ku dar.')
-    if (customerType === 'patient' && !selectedPatientId) return alert('Fadlan dooro bukaanka diiwaangashan.')
+    if (cart.length === 0) {
+      return alert(language === 'so' ? 'Dambiiluhu waa maran yahay! Fadlan dawo ku dar.' : 'Cart is empty! Please add items.')
+    }
+    if (isDebtSale && !selectedPatientId) {
+      return alert(language === 'so' ? 'Iibka daynta ah wuxuu u baahan yahay in la doorto macmiil diiwaangashan.' : 'Credit / Debt sale requires selecting or registering a customer.')
+    }
+    if (customerType === 'patient' && !selectedPatientId) {
+      return alert(language === 'so' ? 'Fadlan dooro bukaanka ama diiwaangeli macmiil cusub.' : 'Please select a registered patient/customer.')
+    }
 
     setProcessingSale(true)
     try {
-      const saleNotes = customerType === 'walkin'
+      const saleNotes = isDebtSale
+        ? `[Dayn / Debt Sale] ${posNotes || ''}`
+        : customerType === 'walkin'
         ? `Walk-in Customer: ${walkinName || 'General'} ${walkinPhone ? `(${walkinPhone})` : ''} ${posNotes ? `- ${posNotes}` : ''}`
         : posNotes
 
@@ -192,9 +247,12 @@ export default function PharmacyPage() {
       setCompletedSale({
         ...data,
         items: [...cart],
-        customerName: customerType === 'patient' ? patients.find(p => p.id === selectedPatientId)?.fullName : (walkinName || 'Walk-in Customer'),
+        customerName: customerType === 'patient'
+          ? patients.find(p => p.id === selectedPatientId)?.fullName
+          : (walkinName || (language === 'so' ? 'Macmiil Socod ah' : 'Walk-in Customer')),
         totalAmount: cartTotal,
         paymentMethod: posPaymentMethod,
+        isDebt: isDebtSale,
         date: new Date()
       })
       clearCart()
@@ -215,6 +273,7 @@ export default function PharmacyPage() {
   const printReceipt = (saleData: any) => {
     const win = window.open('', '_blank')
     if (!win) return
+    const isDebt = saleData.isDebt || (saleData.payment_status === 'Unpaid') || (saleData.payment_method?.includes('Credit') || saleData.payment_method?.includes('Dayn'))
     win.document.write(`
       <html><head><title>Pharmacy Receipt</title>
       <style>
@@ -229,16 +288,18 @@ export default function PharmacyPage() {
         .totals { border-top: 1px dashed #000; padding-top: 8px; font-size: 13px; margin-top: 8px; }
         .row { display: flex; justify-content: space-between; margin: 3px 0; }
         .bold { font-weight: bold; }
+        .debt-banner { background: #fee2e2; border: 1px solid #ef4444; color: #b91c1c; font-weight: bold; text-align: center; padding: 6px; margin: 10px 0; border-radius: 4px; }
         .footer { text-align: center; font-size: 11px; border-top: 1px dashed #000; padding-top: 10px; margin-top: 15px; }
         @media print { button { display: none; } }
       </style></head><body>
       <div class="header center">
         <h1 class="title">HUDI DENTAL & PHARMACY</h1>
-        <p class="sub">Clinical Dispensary & POS</p>
-        <p class="sub">Receipt #: ${saleData.sale_number || 'SALE'}</p>
+        <p class="sub">Dispensary Point of Sale</p>
+        <p class="sub">Sale #: ${saleData.sale_number || 'SALE'}</p>
         <p class="sub">Date: ${new Date().toLocaleString()}</p>
         <p class="sub">Customer: ${saleData.customerName || saleData.patient_name || 'Walk-in'}</p>
       </div>
+      ${isDebt ? '<div class="debt-banner">*** LOAN / DAYN (UNPAID) ***</div>' : ''}
       <table>
         <thead>
           <tr><th>Item</th><th>Qty</th><th>Price</th><th>Total</th></tr>
@@ -246,7 +307,7 @@ export default function PharmacyPage() {
         <tbody>
           ${(saleData.items || []).map((it: any) => `
             <tr>
-              <td>${it.medication?.name || it.name || 'Medication'}</td>
+              <td>${it.medication?.name || it.name || it.medication_name || 'Medication'}</td>
               <td>${it.quantity}</td>
               <td>$${Number(it.unitPrice || it.unit_price || 0).toFixed(2)}</td>
               <td>$${(it.quantity * Number(it.unitPrice || it.unit_price || 0)).toFixed(2)}</td>
@@ -255,7 +316,8 @@ export default function PharmacyPage() {
         </tbody>
       </table>
       <div class="totals">
-        <div class="row bold"><span>Total Paid:</span><span>$${Number(saleData.totalAmount || saleData.total_amount || 0).toFixed(2)}</span></div>
+        <div class="row bold"><span>Total Amount:</span><span>$${Number(saleData.totalAmount || saleData.total_amount || 0).toFixed(2)}</span></div>
+        <div class="row"><span>Status:</span><span>${isDebt ? 'UNPAID / DAYN' : 'PAID'}</span></div>
         <div class="row"><span>Payment Method:</span><span>${saleData.paymentMethod || saleData.payment_method || 'Cash'}</span></div>
       </div>
       <div class="footer">
@@ -287,17 +349,17 @@ export default function PharmacyPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="page-title flex items-center gap-2">
-            <Pill className="w-6 h-6 text-primary" /> Pharmacy & Drug Store POS
+            <Pill className="w-6 h-6 text-primary" /> {t('pharmacyTitle', 'Pharmacy & Drug Store')}
           </h1>
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-            Iibinta Daawooyinka (POS) · Maamulka Kaydka (Inventory) · Xisaabaadka & Dakhliga
+            {t('pharmacySubtitle', 'Dispensary POS · Inventory · Sales & Accounts')}
           </p>
         </div>
         <div className="flex items-center gap-3">
           {lowStock.length > 0 && (
             <div onClick={() => setTab('lowstock')} className="cursor-pointer flex items-center gap-2 px-3 py-2 bg-rose-100 dark:bg-rose-950/40 text-rose-600 rounded-xl text-xs font-bold border border-rose-200">
               <AlertTriangle className="w-4 h-4" />
-              {lowStock.length} Low Stock
+              {lowStock.length} {t('lowStock', 'Low Stock')}
             </div>
           )}
           <button
@@ -306,7 +368,7 @@ export default function PharmacyPage() {
               tab === 'pos' ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/20' : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
             }`}
           >
-            <ShoppingCart className="w-4 h-4" /> Pharmacy POS (Iibi Dawo)
+            <ShoppingCart className="w-4 h-4" /> {t('posTerminal', 'Point of Sale (POS)')}
           </button>
           <button
             onClick={() => {
@@ -316,7 +378,7 @@ export default function PharmacyPage() {
             }}
             className="btn-primary text-xs"
           >
-            <Plus className="w-4 h-4" /> Add Medication
+            <Plus className="w-4 h-4" /> {t('addMedication', 'Add Medication')}
           </button>
         </div>
       </div>
@@ -327,7 +389,7 @@ export default function PharmacyPage() {
           <div className="kpi-card">
             <div className="flex items-start justify-between">
               <div>
-                <p className="text-xs text-slate-500 font-semibold">Iibka Maanta (Today's Sales)</p>
+                <p className="text-xs text-slate-500 font-semibold">{t('todaySales', "Today's Sales")}</p>
                 <p className="text-2xl font-extrabold text-emerald-600 mt-1">{formatCurrency(stats.todaySales)}</p>
               </div>
               <div className="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-600 flex items-center justify-center font-bold">
@@ -339,7 +401,7 @@ export default function PharmacyPage() {
           <div className="kpi-card">
             <div className="flex items-start justify-between">
               <div>
-                <p className="text-xs text-slate-500 font-semibold">Iibka Bishaan (Monthly Sales)</p>
+                <p className="text-xs text-slate-500 font-semibold">{t('monthlySales', 'Monthly Sales')}</p>
                 <p className="text-2xl font-extrabold text-primary mt-1">{formatCurrency(stats.monthSales)}</p>
               </div>
               <div className="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center font-bold">
@@ -351,7 +413,7 @@ export default function PharmacyPage() {
           <div className="kpi-card">
             <div className="flex items-start justify-between">
               <div>
-                <p className="text-xs text-slate-500 font-semibold">Tirada Iibka (Transactions)</p>
+                <p className="text-xs text-slate-500 font-semibold">{t('totalTransactions', 'Transactions')}</p>
                 <p className="text-2xl font-extrabold text-slate-900 dark:text-white mt-1">{stats.totalTransactions}</p>
               </div>
               <div className="w-10 h-10 rounded-xl bg-blue-500/10 text-blue-600 flex items-center justify-center">
@@ -363,9 +425,9 @@ export default function PharmacyPage() {
           <div className="kpi-card">
             <div className="flex items-start justify-between">
               <div>
-                <p className="text-xs text-slate-500 font-semibold">Qiimaha Kaydka (Stock Value)</p>
+                <p className="text-xs text-slate-500 font-semibold">{t('stockValue', 'Stock Value')}</p>
                 <p className="text-2xl font-extrabold text-slate-900 dark:text-white mt-1">{formatCurrency(stats.inventoryValue)}</p>
-                <p className="text-[11px] text-slate-400">{stats.totalMedications} Nooc Dawo ah</p>
+                <p className="text-[11px] text-slate-400">{stats.totalMedications} Items</p>
               </div>
               <div className="w-10 h-10 rounded-xl bg-purple-500/10 text-purple-600 flex items-center justify-center">
                 <Package className="w-5 h-5" />
@@ -378,24 +440,24 @@ export default function PharmacyPage() {
       {/* Tabs */}
       <div className="flex gap-2 p-1.5 bg-slate-100 dark:bg-slate-800 rounded-2xl w-fit border border-slate-200/50">
         {[
-          { id: 'pos', label: '🛒 Pharmacy POS (Terminal)', badge: cart.length > 0 ? `${cart.length}` : null },
-          { id: 'inventory', label: '📦 Kaydka Daawooyinka (Inventory)' },
-          { id: 'sales', label: '📊 Xisaabaadka Iibka (Sales Logs)' },
-          { id: 'lowstock', label: `⚠️ Low Stock (${lowStock.length})` },
-        ].map(t => (
+          { id: 'pos', label: t('posTerminal', 'Point of Sale (POS)'), badge: cart.length > 0 ? `${cart.length}` : null },
+          { id: 'inventory', label: t('inventory', 'Inventory') },
+          { id: 'sales', label: t('salesLogs', 'Sales Logs') },
+          { id: 'lowstock', label: `${t('lowStock', 'Low Stock')} (${lowStock.length})` },
+        ].map(tTab => (
           <button
-            key={t.id}
-            onClick={() => setTab(t.id as any)}
+            key={tTab.id}
+            onClick={() => setTab(tTab.id as any)}
             className={`px-4 py-2 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 ${
-              tab === t.id
+              tab === tTab.id
                 ? 'bg-white dark:bg-slate-700 text-primary shadow-sm'
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
             }`}
           >
-            <span>{t.label}</span>
-            {t.badge && (
+            <span>{tTab.label}</span>
+            {tTab.badge && (
               <span className="w-5 h-5 rounded-full bg-emerald-500 text-white text-[10px] flex items-center justify-center">
-                {t.badge}
+                {tTab.badge}
               </span>
             )}
           </button>
@@ -414,7 +476,7 @@ export default function PharmacyPage() {
                   value={posSearch}
                   onChange={e => setPosSearch(e.target.value)}
                   className="dcs-input pl-10 text-sm font-medium"
-                  placeholder="Raadi Dawo (Magaca, Generic, ama Qaybta)..."
+                  placeholder={t('searchMedications', 'Search medications...')}
                 />
               </div>
             </div>
@@ -423,7 +485,7 @@ export default function PharmacyPage() {
               {filteredMeds.length === 0 ? (
                 <div className="col-span-3 py-16 text-center text-slate-400 glass-card">
                   <Pill className="w-10 h-10 mx-auto mb-2 opacity-30" />
-                  <p className="text-sm">Wax dawo ah lama helin</p>
+                  <p className="text-sm">{language === 'so' ? 'Wax dawo ah lama helin' : 'No medications found'}</p>
                 </div>
               ) : filteredMeds.map(m => {
                 const inCart = cart.find(c => c.medication.id === m.id)
@@ -450,14 +512,14 @@ export default function PharmacyPage() {
 
                     <div className="mt-3 pt-2 border-t border-slate-100 dark:border-slate-700/50 flex items-center justify-between text-xs">
                       <span className={`font-bold ${isOutOfStock ? 'text-red-500' : m.stockQuantity <= m.reorderLevel ? 'text-amber-500' : 'text-slate-500'}`}>
-                        {isOutOfStock ? 'Eber (0)' : `Kayd: ${m.stockQuantity}`}
+                        {isOutOfStock ? (language === 'so' ? 'Eber (0)' : 'Out of stock') : `Stock: ${m.stockQuantity}`}
                       </span>
                       {inCart ? (
                         <span className="px-2 py-0.5 rounded-full bg-emerald-600 text-white font-black text-[10px]">
                           +{inCart.quantity}
                         </span>
                       ) : (
-                        <span className="text-primary font-bold text-xs hover:underline">+ Iibi</span>
+                        <span className="text-primary font-bold text-xs hover:underline">+ Add</span>
                       )}
                     </div>
                   </div>
@@ -472,31 +534,42 @@ export default function PharmacyPage() {
               <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
                 <div className="flex items-center gap-2">
                   <ShoppingCart className="w-5 h-5 text-primary" />
-                  <h2 className="font-extrabold text-base text-slate-900 dark:text-white">Dambiisha POS-ka</h2>
+                  <h2 className="font-extrabold text-base text-slate-900 dark:text-white">{t('cart', 'Cart')}</h2>
                 </div>
                 {cart.length > 0 && (
                   <button onClick={clearCart} className="text-xs text-rose-500 hover:underline font-semibold">
-                    Faaruqi Dambiisha
+                    {language === 'so' ? 'Faaruqi' : 'Clear'}
                   </button>
                 )}
               </div>
 
-              {/* Customer Selector */}
+              {/* Customer Selector with Quick Register */}
               <div className="space-y-2">
-                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider block">
-                  Macmiilka (Customer)
-                </label>
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider block">
+                    {t('customer', 'Customer')}
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setShowNewCustomerModal(true)}
+                    className="text-xs text-primary font-bold hover:underline flex items-center gap-1"
+                  >
+                    <UserPlus className="w-3.5 h-3.5" /> {t('newCustomer', '+ Register Customer')}
+                  </button>
+                </div>
+
                 <div className="grid grid-cols-2 gap-2">
                   <button
                     type="button"
+                    disabled={isDebtSale}
                     onClick={() => setCustomerType('walkin')}
                     className={`py-2 px-3 rounded-xl text-xs font-bold transition-all border ${
                       customerType === 'walkin'
                         ? 'bg-primary text-white border-primary shadow-sm'
                         : 'bg-white dark:bg-slate-800 text-slate-600 border-slate-200'
-                    }`}
+                    } ${isDebtSale ? 'opacity-40 cursor-not-allowed' : ''}`}
                   >
-                    🚶 Macmiil Socod ah (Walk-in)
+                    🚶 {t('walkin', 'Walk-in Customer')}
                   </button>
                   <button
                     type="button"
@@ -507,7 +580,7 @@ export default function PharmacyPage() {
                         : 'bg-white dark:bg-slate-800 text-slate-600 border-slate-200'
                     }`}
                   >
-                    🏥 Bukaan Diiwaangashan
+                    🏥 {t('registeredPatient', 'Registered Patient')}
                   </button>
                 </div>
 
@@ -516,36 +589,38 @@ export default function PharmacyPage() {
                     <input
                       value={walkinName}
                       onChange={e => setWalkinName(e.target.value)}
-                      placeholder="Magaca Macmiilka (Optional)"
+                      placeholder={language === 'so' ? 'Magaca (Optional)' : 'Name (Optional)'}
                       className="dcs-input text-xs"
                     />
                     <input
                       value={walkinPhone}
                       onChange={e => setWalkinPhone(e.target.value)}
-                      placeholder="Telefoonka (Optional)"
+                      placeholder={language === 'so' ? 'Telefoonka (Optional)' : 'Phone (Optional)'}
                       className="dcs-input text-xs"
                     />
                   </div>
                 ) : (
-                  <select
-                    value={selectedPatientId}
-                    onChange={e => setSelectedPatientId(e.target.value)}
-                    className="dcs-input text-xs"
-                  >
-                    <option value="">Dooro bukaanka…</option>
-                    {patients.map(p => (
-                      <option key={p.id} value={p.id}>{p.fullName} ({p.patientNumber})</option>
-                    ))}
-                  </select>
+                  <div className="space-y-1 pt-1">
+                    <select
+                      value={selectedPatientId}
+                      onChange={e => setSelectedPatientId(e.target.value)}
+                      className="dcs-input text-xs font-semibold"
+                    >
+                      <option value="">{t('selectPatient', 'Select patient...')}</option>
+                      {patients.map(p => (
+                        <option key={p.id} value={p.id}>{p.fullName} ({p.patientNumber})</option>
+                      ))}
+                    </select>
+                  </div>
                 )}
               </div>
 
               {/* Cart Items List */}
-              <div className="border border-slate-200/60 dark:border-slate-700/60 rounded-xl p-3 max-h-56 overflow-y-auto space-y-2">
+              <div className="border border-slate-200/60 dark:border-slate-700/60 rounded-xl p-3 max-h-52 overflow-y-auto space-y-2">
                 {cart.length === 0 ? (
                   <div className="py-8 text-center text-slate-400">
                     <ShoppingCart className="w-8 h-8 mx-auto mb-1 opacity-20" />
-                    <p className="text-xs">Dambiishu waa maran tahay. Guji dawo si aad ugu darto.</p>
+                    <p className="text-xs">{t('cartEmpty', 'Cart is empty. Click a medicine to add.')}</p>
                   </div>
                 ) : cart.map(it => (
                   <div key={it.medication.id} className="flex items-center justify-between text-xs py-1.5 border-b border-slate-100 dark:border-slate-800 last:border-none">
@@ -584,25 +659,57 @@ export default function PharmacyPage() {
               {/* Payment Method & Totals */}
               <div className="space-y-3 pt-1">
                 <div className="space-y-1">
-                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300">Habka Lacag-bixinta (Payment Method)</label>
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                      {t('paymentMethod', 'Payment Method')}
+                    </label>
+                    {isDebtSale && (
+                      <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded bg-rose-500 text-white">
+                        {language === 'so' ? 'Dayn (Loan)' : 'Debt Sale'}
+                      </span>
+                    )}
+                  </div>
                   <select
                     value={posPaymentMethod}
                     onChange={e => setPosPaymentMethod(e.target.value)}
-                    className="dcs-input text-xs font-semibold"
+                    className={`dcs-input text-xs font-bold ${isDebtSale ? 'border-rose-500 text-rose-600 dark:text-rose-400' : ''}`}
                   >
-                    {['Cash','EVC Plus','Zaad','Sahal','Card','Insurance'].map(m => (
-                      <option key={m} value={m}>{m}</option>
+                    {[
+                      { val: 'Cash', label: 'Cash (Kaash)' },
+                      { val: 'EVC Plus', label: 'EVC Plus' },
+                      { val: 'Zaad', label: 'Zaad' },
+                      { val: 'Sahal', label: 'Sahal' },
+                      { val: 'Card', label: 'Card (Kaadh)' },
+                      { val: 'Credit / Dayn (Amaah)', label: '🔴 Credit / Dayn (Amaah)' },
+                      { val: 'Insurance', label: 'Insurance (Caymis)' }
+                    ].map(m => (
+                      <option key={m.val} value={m.val}>{m.label}</option>
                     ))}
                   </select>
                 </div>
 
+                {/* Debt Notification Box */}
+                {isDebtSale && (
+                  <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/50 rounded-xl flex items-start gap-2 text-xs">
+                    <AlertCircle className="w-4 h-4 text-rose-600 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-bold text-rose-700 dark:text-rose-300">
+                        {language === 'so' ? 'Iibka Daynta ah (Loan Sale)' : 'Credit / Debt Sale'}
+                      </p>
+                      <p className="text-[11px] text-rose-600 dark:text-rose-400 mt-0.5">
+                        {t('debtNotice', 'Debt requires selecting a registered customer to track in accounts.')}
+                      </p>
+                    </div>
+                  </div>
+                )}
+
                 <div className="bg-slate-50 dark:bg-slate-800/80 rounded-xl p-3 space-y-1.5 text-xs">
                   <div className="flex justify-between">
-                    <span className="text-slate-500">Subtotal:</span>
+                    <span className="text-slate-500">{t('subtotal', 'Subtotal')}:</span>
                     <span className="font-semibold">{formatCurrency(cartSubtotal)}</span>
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="text-slate-500">Dhimis / Discount (%):</span>
+                    <span className="text-slate-500">{t('discount', 'Discount')} (%):</span>
                     <input
                       type="number"
                       min="0"
@@ -613,18 +720,28 @@ export default function PharmacyPage() {
                     />
                   </div>
                   <div className="flex justify-between text-base font-extrabold border-t border-slate-200 dark:border-slate-700 pt-2 text-slate-900 dark:text-white">
-                    <span>Wadarta Guud:</span>
-                    <span className="text-emerald-600 text-lg">{formatCurrency(cartTotal)}</span>
+                    <span>{t('total', 'Total')}:</span>
+                    <span className={`text-lg ${isDebtSale ? 'text-rose-600' : 'text-emerald-600'}`}>
+                      {formatCurrency(cartTotal)}
+                    </span>
                   </div>
                 </div>
 
                 <button
                   disabled={cart.length === 0 || processingSale}
                   onClick={handleCheckout}
-                  className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-xl font-bold text-sm shadow-lg shadow-emerald-600/20 flex items-center justify-center gap-2 transition-all cursor-pointer"
+                  className={`w-full py-3 text-white rounded-xl font-bold text-sm shadow-lg flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                    isDebtSale
+                      ? 'bg-rose-600 hover:bg-rose-700 shadow-rose-600/20'
+                      : 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-600/20'
+                  } disabled:opacity-50`}
                 >
                   <CheckCircle className="w-4 h-4" />
-                  {processingSale ? 'Iibinayaa...' : `Xaqiiji Iibka (${formatCurrency(cartTotal)})`}
+                  {processingSale
+                    ? (language === 'so' ? 'Iibinayaa...' : 'Processing...')
+                    : isDebtSale
+                    ? `${language === 'so' ? 'Diiwaangeli Daynta' : 'Save as Debt'} (${formatCurrency(cartTotal)})`
+                    : `${t('completeSale', 'Complete Sale')} (${formatCurrency(cartTotal)})`}
                 </button>
               </div>
             </div>
@@ -638,7 +755,12 @@ export default function PharmacyPage() {
           <div className="glass-card p-4">
             <div className="relative max-w-sm">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-              <input value={search} onChange={e => { setSearch(e.target.value); setPage(1) }} className="dcs-input pl-10" placeholder="Search medications…" />
+              <input
+                value={search}
+                onChange={e => { setSearch(e.target.value); setPage(1) }}
+                className="dcs-input pl-10"
+                placeholder={t('searchMedications', 'Search medications…')}
+              />
             </div>
           </div>
 
@@ -684,7 +806,7 @@ export default function PharmacyPage() {
                           }}
                           className="px-2.5 py-1 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 rounded-lg text-xs font-bold hover:bg-emerald-100 flex items-center gap-1"
                         >
-                          <ShoppingCart className="w-3 h-3" /> Iibi
+                          <ShoppingCart className="w-3 h-3" /> {language === 'so' ? 'Iibi' : 'Sell'}
                         </button>
                         <button onClick={() => {
                           setEditItem(m)
@@ -717,29 +839,45 @@ export default function PharmacyPage() {
                 {sales.length === 0 ? (
                   <tr><td colSpan={8} className="px-5 py-12 text-center text-slate-400">
                     <Receipt className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                    <p>Wax iib ah weli ma jiraan</p>
+                    <p>{language === 'so' ? 'Wax iib ah weli ma jiraan' : 'No sales recorded yet'}</p>
                   </td></tr>
-                ) : sales.map((s) => (
-                  <tr key={s.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                    <td className="px-5 py-4 text-sm font-mono font-semibold text-slate-700 dark:text-slate-300">{s.sale_number}</td>
-                    <td className="px-5 py-4 text-sm font-medium text-slate-900 dark:text-white">
-                      {s.patient_name || 'Walk-in Customer'}
-                    </td>
-                    <td className="px-5 py-4 text-sm font-bold text-emerald-600">{formatCurrency(s.total_amount)}</td>
-                    <td className="px-5 py-4 text-xs text-slate-600 dark:text-slate-400 font-medium">{s.payment_method}</td>
-                    <td className="px-5 py-4 text-xs text-slate-500">{s.served_by_name || 'Pharmacist'}</td>
-                    <td className="px-5 py-4"><span className="badge-green">{s.payment_status}</span></td>
-                    <td className="px-5 py-4 text-xs text-slate-500">{formatDate(s.created_at)}</td>
-                    <td className="px-5 py-4">
-                      <button
-                        onClick={() => printReceipt(s)}
-                        className="px-2.5 py-1 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 text-slate-700 dark:text-slate-300 rounded-lg text-xs font-bold flex items-center gap-1"
-                      >
-                        <Printer className="w-3.5 h-3.5" /> Rasiidh
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                ) : sales.map((s) => {
+                  const isSaleDebt = s.payment_status === 'Unpaid' || s.payment_method?.includes('Credit') || s.payment_method?.includes('Dayn')
+                  return (
+                    <tr key={s.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                      <td className="px-5 py-4 text-sm font-mono font-semibold text-slate-700 dark:text-slate-300">{s.sale_number}</td>
+                      <td className="px-5 py-4 text-sm font-medium text-slate-900 dark:text-white">
+                        {s.patient_name || 'Walk-in Customer'}
+                        {s.patient_number && <span className="block text-xs text-slate-400">{s.patient_number}</span>}
+                      </td>
+                      <td className="px-5 py-4 text-sm font-bold text-slate-900 dark:text-white">
+                        <span className={isSaleDebt ? 'text-rose-600' : 'text-emerald-600'}>
+                          {formatCurrency(s.total_amount)}
+                        </span>
+                      </td>
+                      <td className="px-5 py-4 text-xs text-slate-600 dark:text-slate-400 font-medium">{s.payment_method}</td>
+                      <td className="px-5 py-4 text-xs text-slate-500">{s.served_by_name || 'Pharmacist'}</td>
+                      <td className="px-5 py-4">
+                        {isSaleDebt ? (
+                          <span className="text-xs px-2 py-0.5 rounded-full font-bold bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-400">
+                            Dayn (Unpaid)
+                          </span>
+                        ) : (
+                          <span className="badge-green">{s.payment_status}</span>
+                        )}
+                      </td>
+                      <td className="px-5 py-4 text-xs text-slate-500">{formatDate(s.created_at)}</td>
+                      <td className="px-5 py-4">
+                        <button
+                          onClick={() => printReceipt(s)}
+                          className="px-2.5 py-1 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 text-slate-700 dark:text-slate-300 rounded-lg text-xs font-bold flex items-center gap-1"
+                        >
+                          <Printer className="w-3.5 h-3.5" /> {t('printReceipt', 'Receipt')}
+                        </button>
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>
@@ -752,7 +890,7 @@ export default function PharmacyPage() {
           {lowStock.length === 0 ? (
             <div className="glass-card py-12 text-center text-slate-400">
               <Package className="w-10 h-10 mx-auto mb-2 opacity-30" />
-              <p>Dhammaan daawooyinku kayd fiican ayay leeyihiin</p>
+              <p>{language === 'so' ? 'Dhammaan daawooyinku kayd fiican ayay leeyihiin' : 'All medications are well stocked'}</p>
             </div>
           ) : lowStock.map((m, i) => (
             <motion.div key={m.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }}
@@ -771,6 +909,95 @@ export default function PharmacyPage() {
         </div>
       )}
 
+      {/* Quick Register Customer Modal */}
+      <AnimatePresence>
+        {showNewCustomerModal && (
+          <>
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50" onClick={() => setShowNewCustomerModal(false)} />
+            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
+              className="modal-panel max-w-md z-50">
+              <div className="flex items-center justify-between mb-4 border-b pb-3">
+                <div className="flex items-center gap-2">
+                  <UserPlus className="w-5 h-5 text-primary" />
+                  <h3 className="text-base font-extrabold text-slate-900 dark:text-white">
+                    {language === 'so' ? 'Diiwaangeli Macmiil / Bukaan Cusub' : 'Register New Customer / Patient'}
+                  </h3>
+                </div>
+                <button onClick={() => setShowNewCustomerModal(false)} className="text-slate-400 hover:text-slate-600">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <form onSubmit={handleQuickAddCustomer} className="space-y-4">
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                    {language === 'so' ? 'Magaca oo buuxa (Full Name) *' : 'Full Name *'}
+                  </label>
+                  <input
+                    required
+                    value={newCustForm.fullName}
+                    onChange={e => setNewCustForm({ ...newCustForm, fullName: e.target.value })}
+                    className="dcs-input text-sm"
+                    placeholder="e.g. Liibaan Maxamed Cali"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                      {language === 'so' ? 'Telefoonka (Phone) *' : 'Phone *'}
+                    </label>
+                    <input
+                      required
+                      value={newCustForm.phone}
+                      onChange={e => setNewCustForm({ ...newCustForm, phone: e.target.value })}
+                      className="dcs-input text-sm"
+                      placeholder="+252 61..."
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                      {language === 'so' ? 'Jinsiga (Gender)' : 'Gender'}
+                    </label>
+                    <select
+                      value={newCustForm.gender}
+                      onChange={e => setNewCustForm({ ...newCustForm, gender: e.target.value })}
+                      className="dcs-input text-sm"
+                    >
+                      <option value="Male">Lab (Male)</option>
+                      <option value="Female">Dheddig (Female)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                    {language === 'so' ? 'Cinwaanka / Xaafadda (Address)' : 'Address'}
+                  </label>
+                  <input
+                    value={newCustForm.address}
+                    onChange={e => setNewCustForm({ ...newCustForm, address: e.target.value })}
+                    className="dcs-input text-sm"
+                    placeholder="e.g. Hodan, Muqdisho"
+                  />
+                </div>
+
+                <div className="flex justify-end gap-2 pt-2">
+                  <button type="button" onClick={() => setShowNewCustomerModal(false)} className="btn-secondary text-xs">
+                    {t('cancel', 'Cancel')}
+                  </button>
+                  <button type="submit" disabled={savingCustomer} className="btn-primary text-xs flex items-center gap-1.5">
+                    <CheckCircle className="w-3.5 h-3.5" />
+                    {savingCustomer ? 'Saving...' : (language === 'so' ? 'Diiwaangeli & Xulo' : 'Register & Select')}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
       {/* Add / Edit Medication Modal */}
       <AnimatePresence>
         {showForm && (
@@ -780,7 +1007,7 @@ export default function PharmacyPage() {
             <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
               className="modal-panel max-w-lg">
               <h2 className="text-lg font-bold text-slate-900 dark:text-white mb-5">
-                {editItem ? 'Edit Medication' : 'Add Medication to Inventory'}
+                {editItem ? 'Edit Medication' : t('addMedication', 'Add Medication')}
               </h2>
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
@@ -824,8 +1051,8 @@ export default function PharmacyPage() {
                   </div>
                 </div>
                 <div className="flex justify-end gap-3 pt-2">
-                  <button type="button" onClick={() => setShowForm(false)} className="btn-secondary">Cancel</button>
-                  <button type="submit" className="btn-primary">{editItem ? 'Save Changes' : 'Add Medication'}</button>
+                  <button type="button" onClick={() => setShowForm(false)} className="btn-secondary">{t('cancel', 'Cancel')}</button>
+                  <button type="submit" className="btn-primary">{editItem ? t('save', 'Save') : t('addMedication', 'Add Medication')}</button>
                 </div>
               </form>
             </motion.div>
@@ -844,26 +1071,40 @@ export default function PharmacyPage() {
               <div className="w-14 h-14 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto mb-3">
                 <CheckCircle className="w-8 h-8" />
               </div>
-              <h3 className="text-lg font-extrabold text-slate-900 dark:text-white">Iibku wuu Guulaystay!</h3>
-              <p className="text-xs text-slate-500 mt-1">Sale #{completedSale.sale_number} has been recorded</p>
+              <h3 className="text-lg font-extrabold text-slate-900 dark:text-white">
+                {completedSale.isDebt
+                  ? (language === 'so' ? 'Iibka Daynta ah wuu Diyaarsan yahay!' : 'Debt Sale Recorded!')
+                  : (language === 'so' ? 'Iibku wuu Guulaystay!' : 'Sale Completed!')}
+              </h3>
+              <p className="text-xs text-slate-500 mt-1">Sale #{completedSale.sale_number}</p>
               
               <div className="my-4 p-3 bg-slate-50 dark:bg-slate-800 rounded-xl text-sm font-bold flex justify-between">
-                <span>Wadarta La Bixiyey:</span>
-                <span className="text-emerald-600 font-extrabold">{formatCurrency(completedSale.totalAmount)}</span>
+                <span>{completedSale.isDebt ? (language === 'so' ? 'Daynta Guud:' : 'Total Debt:') : `${t('total', 'Total')}:`}</span>
+                <span className={`font-extrabold ${completedSale.isDebt ? 'text-rose-600' : 'text-emerald-600'}`}>
+                  {formatCurrency(completedSale.totalAmount)}
+                </span>
               </div>
+
+              {completedSale.isDebt && (
+                <p className="text-xs text-rose-600 font-medium mb-3">
+                  {language === 'so'
+                    ? 'Dayntan waxaa toos loogu daray xisaabaadka iyo qaansheegyada bukaanka.'
+                    : 'This debt has been added to the customer billing account.'}
+                </p>
+              )}
 
               <div className="flex gap-2">
                 <button
                   onClick={() => printReceipt(completedSale)}
                   className="flex-1 py-2.5 bg-primary text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5"
                 >
-                  <Printer className="w-4 h-4" /> Daabac Rasiidhka
+                  <Printer className="w-4 h-4" /> {t('printReceipt', 'Print Receipt')}
                 </button>
                 <button
                   onClick={() => setCompletedSale(null)}
                   className="px-4 py-2.5 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-bold"
                 >
-                  Xir
+                  {language === 'so' ? 'Xir' : 'Close'}
                 </button>
               </div>
             </motion.div>
