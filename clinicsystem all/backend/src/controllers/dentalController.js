@@ -1,6 +1,6 @@
 // backend/src/controllers/dentalController.js
 const { query } = require('../db/pool');
-const { seedClinicDentalTreatments } = require('../utils/seedDentalTreatments');
+const { STANDARD_DENTAL_TREATMENTS } = require('../utils/seedDentalTreatments');
 
 // ══════════════════════════════════════════════════════════════
 // 1. DENTAL TREATMENT CATALOG
@@ -10,12 +10,11 @@ const { seedClinicDentalTreatments } = require('../utils/seedDentalTreatments');
 const getTreatments = async (req, res) => {
   try {
     const clinicId = req.user.clinic_id;
-    // Auto-seed standard treatments if clinic has none yet
-    await seedClinicDentalTreatments(clinicId);
+    const includeInactive = req.query.includeInactive === '1' || req.query.includeInactive === 'true';
 
     const { rows } = await query(
       `SELECT * FROM dental_treatments
-       WHERE clinic_id = $1 AND is_active = true
+       WHERE clinic_id = $1 ${includeInactive ? '' : 'AND is_active = true'}
        ORDER BY category ASC, treatment_name ASC`,
       [clinicId]
     );
@@ -79,6 +78,56 @@ const updateTreatment = async (req, res) => {
     );
     if (!rows.length) return res.status(404).json({ message: 'Treatment not found' });
     res.json(rows[0]);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+/** DELETE /api/dental/treatments/:id (Permanent delete single procedure) */
+const deleteTreatment = async (req, res) => {
+  try {
+    const { rows } = await query(
+      `DELETE FROM dental_treatments WHERE id = $1 AND clinic_id = $2 RETURNING id`,
+      [req.params.id, req.user.clinic_id]
+    );
+    if (!rows.length) return res.status(404).json({ message: 'Treatment not found' });
+    res.json({ message: 'Treatment deleted successfully' });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+/** DELETE /api/dental/treatments/clear-all (Clear all procedures for this clinic) */
+const clearAllTreatments = async (req, res) => {
+  try {
+    const { rowCount } = await query(
+      `DELETE FROM dental_treatments WHERE clinic_id = $1`,
+      [req.user.clinic_id]
+    );
+    res.json({ message: `Successfully cleared ${rowCount || 0} procedures`, count: rowCount || 0 });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+/** POST /api/dental/treatments/seed-template (Load optional standard 34-procedure template) */
+const seedTemplateTreatments = async (req, res) => {
+  try {
+    const clinicId = req.user.clinic_id;
+    for (const t of STANDARD_DENTAL_TREATMENTS) {
+      await query(
+        `INSERT INTO dental_treatments (
+          clinic_id, category, treatment_name, code, description, default_price, duration_minutes
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+        ON CONFLICT DO NOTHING`,
+        [clinicId, t.category, t.name, t.code, t.description, t.price, t.duration]
+      );
+    }
+    const { rows } = await query(
+      `SELECT * FROM dental_treatments WHERE clinic_id = $1 AND is_active = true ORDER BY category ASC, treatment_name ASC`,
+      [clinicId]
+    );
+    res.json({ message: 'Standard dental procedures template loaded successfully', count: rows.length, treatments: rows });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

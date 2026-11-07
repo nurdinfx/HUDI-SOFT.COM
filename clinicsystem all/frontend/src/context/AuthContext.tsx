@@ -38,6 +38,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const { data } = await api.post('/auth/login', { email, password })
       localStorage.setItem('dcs_session', JSON.stringify(data))
+      if (data.licenseKey) {
+        localStorage.setItem('hudi_license_key', data.licenseKey)
+      }
       setUser(data)
     } finally {
       setLoading(false)

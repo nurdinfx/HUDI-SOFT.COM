@@ -46,7 +46,7 @@ export default function TreatmentPlansPage() {
   const [formTitle, setFormTitle] = useState('')
   const [formNotes, setFormNotes] = useState('')
   const [formItems, setFormItems] = useState<any[]>([
-    { treatmentName: 'Dental Cleaning', toothNumber: 'All', stage: 1, sessionNumber: 1, estimatedCost: 40, notes: '' }
+    { treatmentName: '', toothNumber: '', stage: 1, sessionNumber: 1, estimatedCost: 0, notes: '' }
   ])
 
   const loadData = async () => {
@@ -81,7 +81,7 @@ export default function TreatmentPlansPage() {
   const handleAddItemRow = () => {
     setFormItems(prev => [
       ...prev,
-      { treatmentName: 'Composite Filling', toothNumber: '11', stage: 1, sessionNumber: 1, estimatedCost: 50, notes: '' }
+      { treatmentName: '', toothNumber: '', stage: 1, sessionNumber: prev.length + 1, estimatedCost: 0, notes: '' }
     ])
   }
 
@@ -457,6 +457,7 @@ export default function TreatmentPlansPage() {
                           }}
                           className="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-bold flex-1"
                         >
+                          <option value="">-- Dooro Adeegga (Select Procedure) --</option>
                           {treatmentsCatalog.map(t => {
                             const name = t.treatmentName || t.treatment_name || 'Procedure'
                             const price = Number(t.defaultPrice ?? t.default_price ?? 0)

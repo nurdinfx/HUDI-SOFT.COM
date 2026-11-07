@@ -5,6 +5,9 @@ const {
   getTreatments,
   createTreatment,
   updateTreatment,
+  deleteTreatment,
+  clearAllTreatments,
+  seedTemplateTreatments,
   // Charts / Odontogram
   getPatientCharts,
   getLatestPatientChart,
@@ -32,7 +35,10 @@ const {
 // ── Treatment Catalog ────────────────────────────────────────────────────────
 router.get('/treatments', getTreatments);
 router.post('/treatments', createTreatment);
+router.delete('/treatments/clear-all', clearAllTreatments);
+router.post('/treatments/seed-template', seedTemplateTreatments);
 router.put('/treatments/:id', updateTreatment);
+router.delete('/treatments/:id', deleteTreatment);
 
 // ── Odontogram / Charts ───────────────────────────────────────────────────────
 router.get('/charts', getPatientCharts);

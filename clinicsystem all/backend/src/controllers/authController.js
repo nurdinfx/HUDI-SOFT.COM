@@ -96,47 +96,46 @@ const activate = async (req, res) => {
       `INSERT INTO clinics (name, email, license_key, subscription_status, subscription_start, subscription_expiry, days_remaining, is_active)
        VALUES ($1, $2, $3, 'Active', NOW(), $4, $5, true)
        ON CONFLICT (license_key) DO UPDATE SET 
+         name = EXCLUDED.name,
          subscription_status = 'Active', 
          subscription_expiry = COALESCE(EXCLUDED.subscription_expiry, clinics.subscription_expiry), 
          days_remaining = COALESCE(EXCLUDED.days_remaining, clinics.days_remaining),
          is_active = true
-       RETURNING id`,
+       RETURNING id, name, license_key`,
       [companyName, clinicEmail, licenseKey, expiryDate, daysRemaining]
     );
     const newClinicId = newClinicRows[0].id;
 
-    // Step 4: Create default super_admin & demo credentials
+    // Step 4: Create default super_admin & demo credentials specifically scoped to this clinic
     const defaultPassword = 'detailcare123';
     const hash = await bcrypt.hash(defaultPassword, 10);
-    const adminEmail = `admin@${licenseKey.toLowerCase().replace(/[^a-z0-9]/g, '').substring(0, 8) || 'dental'}.clinic.com`;
+    const adminEmail = licenseData.email || `admin@${cleanKeySuffix}.clinic.com`;
     
+    // Dedicated admin for this clinic
     await query(
-      `INSERT INTO clinic_users (clinic_id, full_name, email, password_hash, role)
-       VALUES ($1, $2, $3, $4, 'super_admin')
-       ON CONFLICT (email) DO UPDATE SET password_hash = $4, is_active = true`,
-      [newClinicId, `${companyName} Admin`, adminEmail, hash]
+      `INSERT INTO clinic_users (clinic_id, full_name, email, password_hash, role, is_active)
+       VALUES ($1, $2, $3, $4, 'super_admin', true)
+       ON CONFLICT (clinic_id, email) DO UPDATE SET password_hash = $4, is_active = true`,
+      [newClinicId, `${companyName} Admin`, adminEmail.toLowerCase().trim(), hash]
     );
 
-    // Also auto-provision the universal demo login: detailcare@demo.com / detailcare123
+    // Also provision detailcare@demo.com for THIS clinic
     await query(
-      `INSERT INTO clinic_users (clinic_id, full_name, email, password_hash, role)
-       VALUES ($1, 'Detail Care Admin', 'detailcare@demo.com', $2, 'super_admin')
-       ON CONFLICT (email) DO UPDATE SET clinic_id = $1, password_hash = $2, is_active = true`,
-      [newClinicId, hash]
+      `INSERT INTO clinic_users (clinic_id, full_name, email, password_hash, role, is_active)
+       VALUES ($1, $2, 'detailcare@demo.com', $3, 'super_admin', true)
+       ON CONFLICT (clinic_id, email) DO UPDATE SET password_hash = $3, is_active = true`,
+      [newClinicId, `${companyName} Admin`, hash]
     );
 
-    // Auto-seed dental catalog treatments
-    try {
-      const { seedDentalTreatmentsForClinic } = require('../utils/seedDentalTreatments');
-      await seedDentalTreatmentsForClinic(newClinicId);
-    } catch (e) {
-      console.warn('[Auth] Dental seed notice:', e.message);
-    }
+    // NOTICE: We do NOT auto-seed dental treatments here.
+    // New clinics start with a clean, empty procedures catalog by default.
 
     return res.status(201).json({ 
       message: 'Clinic activated successfully',
       valid: true,
       clinicId: newClinicId,
+      clinicName: companyName,
+      licenseKey,
       defaultUser: { email: adminEmail, password: defaultPassword }
     });
   } catch (err) {
@@ -152,73 +151,61 @@ const activate = async (req, res) => {
 /** POST /api/auth/login */
 const login = async (req, res) => {
   const { email, password } = req.body;
-  let licenseKey = req.headers['x-license-key'];
+  let licenseKey = req.headers['x-license-key'] || req.body.licenseKey;
 
   if (!email || !password)
     return res.status(400).json({ message: 'Email and password are required' });
 
   try {
     const cleanEmail = email.toLowerCase().trim();
+    let user = null;
 
-    // If license key header was not provided by browser, fallback to active clinic
-    if (!licenseKey) {
-      const { rows: activeClinics } = await query(
-        `SELECT license_key FROM clinics WHERE is_active = true ORDER BY created_at DESC LIMIT 1`
+    // 1. If license key is provided, scope user lookup directly to that clinic
+    if (licenseKey) {
+      const { rows } = await query(
+        `SELECT cu.*, c.name AS clinic_name, c.subscription_status, c.subscription_plan,
+                c.subscription_expiry, c.days_remaining, c.is_active AS clinic_active,
+                c.logo_url, c.license_key
+         FROM clinic_users cu
+         JOIN clinics c ON c.id = cu.clinic_id
+         WHERE LOWER(cu.email) = $1 AND c.license_key = $2 AND c.is_active = true`,
+        [cleanEmail, licenseKey.trim()]
       );
-      if (activeClinics.length > 0) {
-        licenseKey = activeClinics[0].license_key;
+      if (rows.length > 0) {
+        user = rows[0];
       }
     }
 
-    // Auto-bootstrap demo clinic if no clinic exists at all in the database
-    if (!licenseKey) {
-      const demoExpiry = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
-      const newClinicRes = await query(
-        `INSERT INTO clinics (name, email, license_key, subscription_status, subscription_plan, subscription_start, subscription_expiry, days_remaining, is_active)
-         VALUES ($1, $2, $3, 'Active', 'Lifetime', NOW(), $4, 365, true)
-         ON CONFLICT (license_key) DO UPDATE SET is_active = true
-         RETURNING license_key, id`,
-        ['HUDI Dental Care Practice', 'admin@hudidentalcare.com', 'HUDI-DENTAL-MASTER-2026', demoExpiry]
+    // 2. If not found via license key header, look up by email across active clinics
+    if (!user) {
+      const { rows: matches } = await query(
+        `SELECT cu.*, c.name AS clinic_name, c.subscription_status, c.subscription_plan,
+                c.subscription_expiry, c.days_remaining, c.is_active AS clinic_active,
+                c.logo_url, c.license_key
+         FROM clinic_users cu
+         JOIN clinics c ON c.id = cu.clinic_id
+         WHERE LOWER(cu.email) = $1 AND c.is_active = true
+         ORDER BY cu.last_login DESC NULLS LAST, cu.created_at DESC`,
+        [cleanEmail]
       );
-      licenseKey = newClinicRes.rows[0].license_key;
 
-      // Seed standard dental treatments catalog for this clinic
-      try {
-        const { seedDentalTreatmentsForClinic } = require('../utils/seedDentalTreatments');
-        await seedDentalTreatmentsForClinic(newClinicRes.rows[0].id);
-      } catch (e) {
-        console.warn('[Auth] Dental treatments seed notice:', e.message);
+      if (matches.length === 1) {
+        user = matches[0];
+      } else if (matches.length > 1) {
+        // Verify password against each candidate clinic user
+        for (const candidate of matches) {
+          const match = await bcrypt.compare(password, candidate.password_hash);
+          if (match) {
+            user = candidate;
+            break;
+          }
+        }
+        if (!user) user = matches[0];
       }
     }
 
-    // Auto-provision demo account detailcare@demo.com if requested
-    if (cleanEmail === 'detailcare@demo.com') {
-      const { rows: clinicRows } = await query('SELECT id FROM clinics WHERE license_key = $1 LIMIT 1', [licenseKey]);
-      if (clinicRows.length > 0) {
-        const demoHash = await bcrypt.hash('detailcare123', 10);
-        await query(
-          `INSERT INTO clinic_users (clinic_id, full_name, email, password_hash, role, is_active)
-           VALUES ($1, 'Detail Care Admin', 'detailcare@demo.com', $2, 'super_admin', true)
-           ON CONFLICT (email) DO UPDATE SET clinic_id = $1, password_hash = $2, is_active = true`,
-          [clinicRows[0].id, demoHash]
-        );
-      }
-    }
-
-    const { rows } = await query(
-      `SELECT cu.*, c.name AS clinic_name, c.subscription_status, c.subscription_plan,
-              c.subscription_expiry, c.days_remaining, c.is_active AS clinic_active,
-              c.logo_url
-       FROM clinic_users cu
-       JOIN clinics c ON c.id = cu.clinic_id
-       WHERE cu.email = $1 AND c.license_key = $2`,
-      [cleanEmail, licenseKey]
-    );
-
-    if (!rows.length)
+    if (!user)
       return res.status(401).json({ message: 'Invalid email or password' });
-
-    const user = rows[0];
 
     if (!user.is_active)
       return res.status(403).json({ message: 'Account deactivated. Contact your clinic admin.' });
@@ -247,6 +234,7 @@ const login = async (req, res) => {
       clinicId: user.clinic_id,
       clinicName: user.clinic_name,
       clinicLogo: user.logo_url,
+      licenseKey: user.license_key,
       specialization: user.specialization,
       subscriptionStatus: user.subscription_status,
       subscriptionPlan: user.subscription_plan,

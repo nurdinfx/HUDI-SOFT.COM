@@ -67,7 +67,7 @@ CREATE TABLE IF NOT EXISTS clinic_users (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   clinic_id       UUID NOT NULL REFERENCES clinics(id) ON DELETE CASCADE,
   full_name       VARCHAR(255) NOT NULL,
-  email           VARCHAR(255) UNIQUE NOT NULL,
+  email           VARCHAR(255) NOT NULL,
   password_hash   VARCHAR(255) NOT NULL,
   role            VARCHAR(50)  DEFAULT 'receptionist'
                     CHECK (role IN ('super_admin','clinic_manager','doctor','receptionist','pharmacist','lab_staff','accountant')),
@@ -77,7 +77,8 @@ CREATE TABLE IF NOT EXISTS clinic_users (
   is_active       BOOLEAN      DEFAULT TRUE,
   last_login      TIMESTAMPTZ,
   created_at      TIMESTAMPTZ  DEFAULT NOW(),
-  updated_at      TIMESTAMPTZ  DEFAULT NOW()
+  updated_at      TIMESTAMPTZ  DEFAULT NOW(),
+  UNIQUE(clinic_id, email)
 );
 CREATE INDEX IF NOT EXISTS idx_clinic_users_clinic_id ON clinic_users(clinic_id);
 
@@ -541,8 +542,35 @@ async function runMigrations() {
       await pool.query('ALTER TABLE clinics DROP CONSTRAINT IF EXISTS clinics_email_key');
       await pool.query('ALTER TABLE invoices DROP CONSTRAINT IF EXISTS invoices_payment_method_check');
       await pool.query('ALTER TABLE pharmacy_sales DROP CONSTRAINT IF EXISTS pharmacy_sales_payment_method_check');
+
+      // Multi-tenant: allow multiple clinics to have staff with the same email without colliding
+      await pool.query('ALTER TABLE clinic_users DROP CONSTRAINT IF EXISTS clinic_users_email_key');
+      await pool.query('CREATE UNIQUE INDEX IF NOT EXISTS idx_clinic_users_clinic_email ON clinic_users(clinic_id, email)');
+
+      // Ensure every active clinic has its own independent super_admin user
+      const bcrypt = require('bcrypt');
+      const defaultHash = await bcrypt.hash('detailcare123', 10);
+      const { rows: allClinics } = await pool.query('SELECT id, name, license_key FROM clinics WHERE is_active = true');
+      for (const c of allClinics) {
+        const cleanKey = c.license_key ? c.license_key.replace(/[^a-zA-Z0-9]/g, '').toLowerCase().slice(0, 8) : 'active';
+        const clinicAdminEmail = `admin@${cleanKey}.clinic.com`;
+        
+        await pool.query(
+          `INSERT INTO clinic_users (clinic_id, full_name, email, password_hash, role, is_active)
+           VALUES ($1, $2, $3, $4, 'super_admin', true)
+           ON CONFLICT (clinic_id, email) DO NOTHING`,
+          [c.id, `${c.name} Admin`, clinicAdminEmail, defaultHash]
+        );
+
+        await pool.query(
+          `INSERT INTO clinic_users (clinic_id, full_name, email, password_hash, role, is_active)
+           VALUES ($1, $2, 'detailcare@demo.com', $3, 'super_admin', true)
+           ON CONFLICT (clinic_id, email) DO NOTHING`,
+          [c.id, `${c.name} Admin`, defaultHash]
+        );
+      }
     } catch (e) {
-      // ignore
+      console.warn('⚠️ Constraint migration note:', e.message);
     }
 
     console.log('✅ PostgreSQL tables verified / created successfully.');

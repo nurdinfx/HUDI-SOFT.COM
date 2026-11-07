@@ -72,6 +72,9 @@ export default function ProceduresPage() {
   // Delete confirm
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const [showClearConfirm, setShowClearConfirm] = useState(false)
+  const [clearing, setClearing] = useState(false)
+  const [seedingTemplate, setSeedingTemplate] = useState(false)
 
   // ── Load ────────────────────────────────────────────────────────────────
   const loadProcedures = async () => {
@@ -190,6 +193,50 @@ export default function ProceduresPage() {
     }
   }
 
+  // ── Clear All Demo Data ──────────────────────────────────────────────────
+  const handleClearAll = async () => {
+    setClearing(true)
+    try {
+      await api.delete('/dental/treatments/clear-all')
+      showMsg('success', 'Dhammaan xogta procedures-ka waa la tirtiray (Clear)! Boggu hadda waa maran yahay.')
+      setShowClearConfirm(false)
+      loadProcedures()
+    } catch (err: any) {
+      showMsg('error', err.response?.data?.message || 'Tirtirista kuma guulaysan')
+    } finally {
+      setClearing(false)
+    }
+  }
+
+  // ── Load Optional 34-item Dental Template ────────────────────────────────
+  const handleLoadTemplate = async () => {
+    setSeedingTemplate(true)
+    try {
+      await api.post('/dental/treatments/seed-template')
+      showMsg('success', 'Liiska 34-ka procedure ee tusaalaha ah waa la soo rariiyay!')
+      loadProcedures()
+    } catch (err: any) {
+      showMsg('error', err.response?.data?.message || 'Soo raridda kuma guulaysan')
+    } finally {
+      setSeedingTemplate(false)
+    }
+  }
+
+  // ── Permanent Delete Single Item ─────────────────────────────────────────
+  const handleDeletePermanent = async (id: string) => {
+    setDeleting(true)
+    try {
+      await api.delete(`/dental/treatments/${id}`)
+      showMsg('success', 'Procedure-ka si rasmi ah ayaa loo tirtiray')
+      setDeleteId(null)
+      loadProcedures()
+    } catch (err: any) {
+      showMsg('error', err.response?.data?.message || 'Tirtirista kuma guulaysan')
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   // ── Filter ───────────────────────────────────────────────────────────────
   const filtered = procedures.filter(p => {
     const matchSearch =
@@ -235,13 +282,38 @@ export default function ProceduresPage() {
           </div>
         </div>
 
-        <button
-          type="button"
-          onClick={openCreate}
-          className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-black text-xs uppercase tracking-wider rounded-xl shadow-lg shadow-indigo-600/20 transition-all"
-        >
-          <Plus size={16} /> + Procedure Cusub
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          {procedures.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setShowClearConfirm(true)}
+              className="flex items-center gap-1.5 px-4 py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-600 dark:bg-rose-900/20 dark:hover:bg-rose-900/30 dark:text-rose-400 font-bold text-xs rounded-xl border border-rose-200 dark:border-rose-800 transition-all cursor-pointer"
+              title="Tirtir Dhammaan Xogta Demo-ga ah"
+            >
+              <Trash2 size={15} /> Tirtir Demo-ga (Clear All)
+            </button>
+          )}
+
+          {procedures.length === 0 && (
+            <button
+              type="button"
+              onClick={handleLoadTemplate}
+              disabled={seedingTemplate}
+              className="flex items-center gap-1.5 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold text-xs rounded-xl transition-all disabled:opacity-50 cursor-pointer"
+            >
+              <RefreshCw className={seedingTemplate ? "animate-spin" : ""} size={15} />
+              <span>Soo Rari Template (34 Adeeg)</span>
+            </button>
+          )}
+
+          <button
+            type="button"
+            onClick={openCreate}
+            className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-black text-xs uppercase tracking-wider rounded-xl shadow-lg shadow-indigo-600/20 transition-all cursor-pointer"
+          >
+            <Plus size={16} /> + Procedure Cusub
+          </button>
+        </div>
       </div>
 
       {/* ── Message ───────────────────────────────────────────────────────── */}
@@ -312,11 +384,43 @@ export default function ProceduresPage() {
           <RefreshCw className="animate-spin text-indigo-600 mr-3" size={28} />
           <span className="text-sm font-bold text-slate-500">Procedures la soo load gareyaa...</span>
         </div>
+      ) : procedures.length === 0 ? (
+        <div className="py-16 px-6 text-center bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl space-y-4 max-w-lg mx-auto shadow-xs">
+          <div className="w-16 h-16 rounded-3xl bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 flex items-center justify-center mx-auto">
+            <Stethoscope size={32} />
+          </div>
+          <div>
+            <h3 className="font-black text-base text-slate-900 dark:text-white">
+              Procedures Catalog-gu Waa Maran Yahay (Clear & Empty)
+            </h3>
+            <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
+              Xaruntan ma laha wax xog demo ah. Waxaad hadda ku dari kartaa adeegyada xaruntaada u gaarka ah, ama waxaad soo rari kartaa liiska tusaalaha ah haddii aad rabto.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+            <button
+              type="button"
+              onClick={openCreate}
+              className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl shadow-md shadow-indigo-600/20 flex items-center gap-2 cursor-pointer"
+            >
+              <Plus size={16} /> + Ku Dar Procedure Cusub
+            </button>
+            <button
+              type="button"
+              onClick={handleLoadTemplate}
+              disabled={seedingTemplate}
+              className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-bold text-xs rounded-xl flex items-center gap-2 disabled:opacity-50 cursor-pointer"
+            >
+              <RefreshCw className={seedingTemplate ? "animate-spin" : ""} size={15} />
+              Soo Rari Template Tusaale ah (34 Adeeg)
+            </button>
+          </div>
+        </div>
       ) : filtered.length === 0 ? (
         <div className="py-20 text-center bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl">
           <Stethoscope className="mx-auto text-slate-300 dark:text-slate-700 mb-3" size={40} />
-          <p className="font-bold text-slate-600 dark:text-slate-400">Procedure ma jirto</p>
-          <p className="text-xs text-slate-400 mt-1">Baadhi wax dhimis ah ama ku dar procedure cusub</p>
+          <p className="font-bold text-slate-600 dark:text-slate-400">Wax procedure ah lama helin</p>
+          <p className="text-xs text-slate-400 mt-1">Baadhitaankaaga waxba kuma soo bixin ama filter-ka beddel</p>
         </div>
       ) : (
         // ── Grouped by Category ───────────────────────────────────────────
@@ -616,20 +720,69 @@ export default function ProceduresPage() {
                 <Trash2 size={28} />
               </div>
               <div>
-                <h3 className="font-black text-slate-900 dark:text-white">Procedure Jooji?</h3>
+                <h3 className="font-black text-slate-900 dark:text-white">Sideed u tirtiraysaa?</h3>
                 <p className="text-xs text-slate-500 mt-1">
-                  Procedure-ku ma tirtirmi doono — wuxuu noqon doonaa inactive oo marka hore laga saari doonaa liiska. Mar dambe dib loo shaqaynsiiyaa.
+                  Waxaad dooran kartaa inaad gabi ahaanba tirtirto (Permanent Delete) ama aad joojiso (Deactivate).
                 </p>
               </div>
-              <div className="flex gap-3">
-                <button onClick={() => setDeleteId(null)}
-                  className="flex-1 px-4 py-2.5 rounded-xl text-xs font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200">
-                  Maya
+              <div className="flex flex-col gap-2">
+                <button
+                  onClick={() => handleDeletePermanent(deleteId!)}
+                  disabled={deleting}
+                  className="w-full px-4 py-2.5 rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-500 text-white disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <Trash2 size={14} /> Tirtir Gabi Ahaanba (Delete Permanent)
                 </button>
-                <button onClick={() => handleDeactivate(deleteId!)} disabled={deleting}
+                <button
+                  onClick={() => handleDeactivate(deleteId!)}
+                  disabled={deleting}
+                  className="w-full px-4 py-2.5 rounded-xl text-xs font-bold bg-amber-500 hover:bg-amber-400 text-white disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  Kaliya Jooji (Deactivate)
+                </button>
+                <button
+                  onClick={() => setDeleteId(null)}
+                  className="w-full px-4 py-2 rounded-xl text-xs font-bold text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
+                >
+                  Ka Laabo (Cancel)
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* ═══════════════════════════════════════════════════════════════════
+          CLEAR ALL CONFIRM MODAL
+      ═══════════════════════════════════════════════════════════════════ */}
+      <AnimatePresence>
+        {showClearConfirm && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+              onClick={() => setShowClearConfirm(false)}
+            />
+            <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }}
+              className="relative z-10 bg-white dark:bg-slate-900 rounded-3xl shadow-2xl p-6 max-w-sm w-full text-center space-y-4"
+            >
+              <div className="w-14 h-14 rounded-2xl bg-rose-100 dark:bg-rose-900/20 text-rose-600 flex items-center justify-center mx-auto">
+                <Trash2 size={28} />
+              </div>
+              <div>
+                <h3 className="font-black text-slate-900 dark:text-white text-base">Tirtir Dhammaan Xogta Demo-ga?</h3>
+                <p className="text-xs text-slate-500 mt-1">
+                  Dhammaan <strong>{procedures.length}</strong>-ka procedure ee demo-ga ah waa la tirtiri doonaa. Boggu wuxuu noqonayaa mid maran oo nadiif ah (clear) oo xaruntu xogteeda gaarka ah ku darsan karto.
+                </p>
+              </div>
+              <div className="flex gap-3 pt-2">
+                <button onClick={() => setShowClearConfirm(false)}
+                  className="flex-1 px-4 py-2.5 rounded-xl text-xs font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200">
+                  Jooji
+                </button>
+                <button onClick={handleClearAll} disabled={clearing}
                   className="flex-1 px-4 py-2.5 rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-500 text-white disabled:opacity-50 flex items-center justify-center gap-2">
-                  {deleting ? <RefreshCw className="animate-spin" size={14} /> : <Trash2 size={14} />}
-                  Haa, Jooji
+                  {clearing ? <RefreshCw className="animate-spin" size={14} /> : <Trash2 size={14} />}
+                  Haa, Tirtir Dhammaan
                 </button>
               </div>
             </motion.div>

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion } from 'framer-motion'
 import { Heart, Eye, EyeOff, Loader2 } from 'lucide-react'
@@ -15,11 +15,27 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search)
+      const qEmail = urlParams.get('email')
+      if (qEmail) {
+        setEmail(qEmail)
+      } else {
+        const last = localStorage.getItem('dcs_last_email')
+        if (last) setEmail(last)
+      }
+    }
+  }, [])
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
     setLoading(true)
     try {
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('dcs_last_email', email)
+      }
       await login(email, password)
       router.push('/dashboard')
     } catch (err: any) {

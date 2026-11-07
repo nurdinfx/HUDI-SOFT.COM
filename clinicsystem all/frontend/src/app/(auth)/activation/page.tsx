@@ -12,6 +12,7 @@ export default function ActivationPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
+  const [activatedData, setActivatedData] = useState<any>(null)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -20,35 +21,22 @@ export default function ActivationPage() {
     setLoading(true)
 
     try {
-      // Directly validate with HUDI-SOFT central licensing API
-      // Falls back to own backend if NEXT_PUBLIC_API_URL is set (self-hosted)
-      const hudiSoftApi = process.env.NEXT_PUBLIC_HUDI_SOFT_API_URL || 'https://hudi-soft-com.onrender.com/api'
-      const ownBackendApi = process.env.NEXT_PUBLIC_API_URL || ''
-
-      let responseData: any = null
-
-      if (ownBackendApi) {
-        // Use own backend (which does server-side validation)
-        const response = await axios.post(`${ownBackendApi}/auth/activate`, { licenseKey })
-        responseData = response.data
-      } else {
-        // Direct call to HUDI-SOFT licensing API (CORS allowed for hudisoftdatel.vercel.app)
-        const response = await axios.post(`${hudiSoftApi}/licenses/validate`, {
-          licenseKey,
-          machineID: 'datel-clinic-web',
-        })
-        responseData = {
-          valid: response.data.valid,
-          message: response.data.message,
-        }
-      }
+      const backendApi = process.env.NEXT_PUBLIC_API_URL || 'https://hudi-soft-com-2.onrender.com/api'
+      const response = await axios.post(`${backendApi}/auth/activate`, { licenseKey: licenseKey.trim() })
+      const responseData = response.data
 
       if (responseData.valid) {
         setSuccess('License activated successfully!')
-        localStorage.setItem('hudi_license_key', licenseKey)
+        localStorage.setItem('hudi_license_key', licenseKey.trim())
+        localStorage.removeItem('dcs_session')
+        const adminEmail = responseData.defaultUser?.email || ''
+        if (adminEmail) {
+          localStorage.setItem('dcs_last_email', adminEmail)
+        }
+        setActivatedData(responseData)
         setTimeout(() => {
-          router.push('/login')
-        }, 1500)
+          router.push(`/login?email=${encodeURIComponent(adminEmail)}`)
+        }, 4000)
       } else {
         setError(responseData.message || 'Invalid license key.')
       }
@@ -149,6 +137,28 @@ export default function ActivationPage() {
                 className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-4 text-emerald-400 text-sm font-medium"
               >
                 {success}
+              </motion.div>
+            )}
+
+            {activatedData && (
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="bg-slate-800/90 border border-emerald-500/30 rounded-xl p-4 text-xs space-y-2 text-slate-300"
+              >
+                <p className="font-semibold text-emerald-400 text-sm">Xarunta Cusub Waa La Diwaangeliyay:</p>
+                <div className="space-y-1">
+                  <p><span className="text-slate-400">Magaca Xarunta:</span> <strong className="text-white ml-1">{activatedData.clinicName || 'Clinic'}</strong></p>
+                  <p><span className="text-slate-400">Admin Email:</span> <code className="bg-slate-900 px-2 py-0.5 rounded text-cyan-300 font-mono select-all ml-1">{activatedData.defaultUser?.email || 'detailcare@demo.com'}</code></p>
+                  <p><span className="text-slate-400">Password:</span> <code className="bg-slate-900 px-2 py-0.5 rounded text-amber-300 font-mono select-all ml-1">{activatedData.defaultUser?.password || 'detailcare123'}</code></p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => router.push(`/login?email=${encodeURIComponent(activatedData.defaultUser?.email || '')}`)}
+                  className="w-full mt-3 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-bold text-center transition-all text-xs"
+                >
+                  U Gudub Login-ka Hadda →
+                </button>
               </motion.div>
             )}
 
