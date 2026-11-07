@@ -213,6 +213,9 @@ export default function DentalPage() {
               key={selectedPatientId}
               initialData={currentChart}
               patientName={selectedPatient?.fullName}
+              patientNumber={selectedPatient?.patientNumber}
+              patientPhone={selectedPatient?.phone}
+              patientGender={selectedPatient?.gender}
               onSave={handleSaveChart}
             />
           )}

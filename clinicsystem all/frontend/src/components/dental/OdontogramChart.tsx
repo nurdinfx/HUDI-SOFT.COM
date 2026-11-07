@@ -3,9 +3,9 @@
 import React, { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  Activity, Check, ChevronDown, ChevronUp, Copy, Eye, FileText,
+  Activity, Check, ChevronDown, ChevronUp, Copy, Eye, FileSpreadsheet, FileText,
   HeartPulse, Info, Layers, Palette, Plus, Printer, RefreshCw, Save,
-  ShieldCheck, Trash2, X, ZoomIn
+  ShieldCheck, Trash2, X, ZoomIn, Download
 } from 'lucide-react'
 
 export interface ToothSurfaceState {
@@ -119,6 +119,9 @@ export const PEDIATRIC_TEETH_LOWER = [
 interface OdontogramChartProps {
   initialData?: ToothData[]
   patientName?: string
+  patientNumber?: string
+  patientPhone?: string
+  patientGender?: string
   readOnly?: boolean
   onSave?: (teeth: ToothData[], notes?: string) => Promise<void> | void
 }
@@ -126,6 +129,9 @@ interface OdontogramChartProps {
 export default function OdontogramChart({
   initialData = [],
   patientName,
+  patientNumber,
+  patientPhone,
+  patientGender,
   readOnly = false,
   onSave
 }: OdontogramChartProps) {
@@ -209,6 +215,150 @@ export default function OdontogramChart({
 
   const handlePrint = () => {
     window.print()
+  }
+
+  const handleExportExcel = () => {
+    const patient = patientName || 'Patient'
+    const pId = patientNumber || 'P-0000'
+    const now = new Date()
+    const dateStr = now.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
+    const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+
+    const allTeeth = dentitionType === 'adult'
+      ? [...ADULT_TEETH_UPPER, ...ADULT_TEETH_LOWER]
+      : [...PEDIATRIC_TEETH_UPPER, ...PEDIATRIC_TEETH_LOWER]
+
+    const records = allTeeth.map(t => {
+      const rec = getRecord(t.fdi)
+      const s = rec.surfaces || {}
+      const surfArr: string[] = []
+      if (s.M) surfArr.push('Mesial (M)')
+      if (s.D) surfArr.push('Distal (D)')
+      if (s.O) surfArr.push('Occlusal/Incisal (O/I)')
+      if (s.B) surfArr.push('Buccal/Facial (B)')
+      if (s.L) surfArr.push('Lingual/Palatal (L)')
+
+      let quadrant = ''
+      let jaw = ''
+      const fdiNum = Number(t.fdi)
+      if (fdiNum >= 11 && fdiNum <= 18) {
+        quadrant = 'Quadrant 1 (Upper Right)'
+        jaw = 'Upper Jaw (Maxilla)'
+      } else if (fdiNum >= 21 && fdiNum <= 28) {
+        quadrant = 'Quadrant 2 (Upper Left)'
+        jaw = 'Upper Jaw (Maxilla)'
+      } else if (fdiNum >= 31 && fdiNum <= 38) {
+        quadrant = 'Quadrant 3 (Lower Left)'
+        jaw = 'Lower Jaw (Mandible)'
+      } else if (fdiNum >= 41 && fdiNum <= 48) {
+        quadrant = 'Quadrant 4 (Lower Right)'
+        jaw = 'Lower Jaw (Mandible)'
+      } else if (fdiNum >= 51 && fdiNum <= 55) {
+        quadrant = 'Quadrant 5 (Upper Right Primary)'
+        jaw = 'Upper Jaw (Maxilla)'
+      } else if (fdiNum >= 61 && fdiNum <= 65) {
+        quadrant = 'Quadrant 6 (Upper Left Primary)'
+        jaw = 'Upper Jaw (Maxilla)'
+      } else if (fdiNum >= 71 && fdiNum <= 75) {
+        quadrant = 'Quadrant 7 (Lower Left Primary)'
+        jaw = 'Lower Jaw (Mandible)'
+      } else if (fdiNum >= 81 && fdiNum <= 85) {
+        quadrant = 'Quadrant 8 (Lower Right Primary)'
+        jaw = 'Lower Jaw (Mandible)'
+      }
+
+      return {
+        fdi: t.fdi,
+        universal: t.universal,
+        name: t.name,
+        jaw,
+        quadrant,
+        condition: rec.condition || 'Healthy',
+        surfaces: surfArr.length > 0 ? surfArr.join('; ') : 'Whole Tooth / Sound',
+        diagnosis: rec.diagnosis || '-',
+        treatment: rec.treatment || '-',
+        notes: rec.notes || '-',
+        updatedAt: rec.updatedAt ? new Date(rec.updatedAt).toLocaleDateString() : dateStr
+      }
+    })
+
+    const totalTeeth = records.length
+    const healthyTeeth = records.filter(r => r.condition === 'Healthy').length
+    const findingsTeeth = records.filter(r => r.condition !== 'Healthy').length
+    const cariesCount = records.filter(r => r.condition === 'Caries').length
+    const filledCount = records.filter(r => r.condition === 'Filled').length
+    const rctCount = records.filter(r => r.condition === 'Root Canal').length
+    const missingCount = records.filter(r => ['Missing', 'Extracted'].includes(r.condition)).length
+    const crownCount = records.filter(r => ['Crown', 'Bridge', 'Implant'].includes(r.condition)).length
+
+    const rows: string[][] = [
+      ['HUDI DENTAL CARE - CLINICAL ODONTOGRAM & DENTAL EXAMINATION REPORT'],
+      ['Healthcare SaaS:', 'HUDI Dental Care Practice System (https://dental.hudisoft.online)'],
+      ['Report Generated:', `${dateStr} at ${timeStr}`],
+      [],
+      ['PATIENT DEMOGRAPHICS & DETAILS'],
+      ['Patient Name:', patient],
+      ['Patient ID / File #:', pId],
+      ['Gender:', patientGender || 'N/A'],
+      ['Contact Phone:', patientPhone || 'N/A'],
+      ['Dentition Mode:', dentitionType === 'adult' ? 'Adult Permanent (32 Teeth)' : 'Pediatric Primary (20 Teeth)'],
+      ['Numbering Notation:', numberingSystem === 'FDI' ? 'FDI Two-Digit World Dental Federation' : 'Universal Numbering System (1-32 / A-T)'],
+      [],
+      ['CLINICAL SUMMARY & FINDINGS'],
+      ['Total Teeth Evaluated', String(totalTeeth)],
+      ['Sound / Healthy Teeth', String(healthyTeeth)],
+      ['Teeth Requiring Intervention / Care', String(findingsTeeth)],
+      ['Caries / Active Decay', String(cariesCount)],
+      ['Filled / Restorations', String(filledCount)],
+      ['Endodontic (Root Canal)', String(rctCount)],
+      ['Missing / Extracted Units', String(missingCount)],
+      ['Prosthetics (Crown / Implant / Bridge)', String(crownCount)],
+      [],
+      [
+        'Tooth # (FDI)',
+        'Tooth # (Universal)',
+        'Tooth Name',
+        'Jaw / Arch',
+        'Quadrant',
+        'Condition',
+        'Affected Surfaces',
+        'Clinical Diagnosis',
+        'Proposed Treatment Procedure',
+        'Dentist Notes',
+        'Record Date'
+      ]
+    ]
+
+    records.forEach(r => {
+      rows.push([
+        String(r.fdi),
+        String(r.universal),
+        r.name,
+        r.jaw,
+        r.quadrant,
+        r.condition,
+        r.surfaces,
+        r.diagnosis,
+        r.treatment,
+        r.notes,
+        r.updatedAt
+      ])
+    })
+
+    const csvContent = '\uFEFF' + rows.map(row => 
+      row.map(val => `"${String(val ?? '').replace(/"/g, '""')}"`).join(',')
+    ).join('\r\n')
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    const safePatient = patient.replace(/[^a-zA-Z0-9_-]/g, '_')
+    link.download = `Odontogram_${safePatient}_${pId}_${now.toISOString().slice(0, 10)}.csv`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
   }
 
   // Visual Surface Diamond Renderer
@@ -344,11 +494,22 @@ export default function OdontogramChart({
           {/* Action Buttons */}
           <button
             type="button"
-            onClick={handlePrint}
-            className="p-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl transition-all"
-            title="Print Dental Chart"
+            onClick={handleExportExcel}
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow-md shadow-emerald-600/20 transition-all cursor-pointer"
+            title="Daji Shaxda Excel (.csv) / Export to Excel"
           >
-            <Printer size={16} />
+            <FileSpreadsheet size={15} />
+            <span>Excel Export</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={handlePrint}
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold text-xs rounded-xl transition-all cursor-pointer"
+            title="Daabac ama PDF Document ka dhigo / Print & Download PDF"
+          >
+            <Printer size={15} />
+            <span>Print / PDF</span>
           </button>
 
           {!readOnly && onSave && (
@@ -356,7 +517,7 @@ export default function OdontogramChart({
               type="button"
               onClick={handleSaveWholeChart}
               disabled={saving}
-              className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-black text-xs uppercase tracking-wider rounded-xl shadow-lg shadow-blue-600/20 transition-all disabled:opacity-50"
+              className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-black text-xs uppercase tracking-wider rounded-xl shadow-lg shadow-blue-600/20 transition-all disabled:opacity-50 cursor-pointer"
             >
               {saving ? <RefreshCw className="animate-spin" size={16} /> : <Save size={16} />}
               {savedSuccess ? 'Chart Saved!' : 'Save Odontogram'}
@@ -366,7 +527,7 @@ export default function OdontogramChart({
       </div>
 
       {/* Main Arch Graphic Display */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-8 shadow-xs overflow-x-auto">
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-8 shadow-xs overflow-x-auto print:hidden">
         <div className="min-w-[780px] flex flex-col items-center gap-10">
           
           {/* Upper Maxillary Arch */}
@@ -649,7 +810,7 @@ export default function OdontogramChart({
       </AnimatePresence>
 
       {/* Legend Card */}
-      <div className="bg-slate-50 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-800 rounded-3xl p-5 print:border-none">
+      <div className="bg-slate-50 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-800 rounded-3xl p-5 print:hidden">
         <h4 className="text-xs font-black uppercase tracking-wider text-slate-400 mb-3 flex items-center gap-1.5">
           <Palette size={14} /> Clinical Odontogram Legend
         </h4>
@@ -662,6 +823,162 @@ export default function OdontogramChart({
           ))}
         </div>
       </div>
+
+      {/* ============================================================== */}
+      {/* PRINT-ONLY CLINICAL DENTAL EXAMINATION REPORT (PDF / PAPER)   */}
+      {/* ============================================================== */}
+      {(() => {
+        const allTeethList = dentitionType === 'adult'
+          ? [...ADULT_TEETH_UPPER, ...ADULT_TEETH_LOWER]
+          : [...PEDIATRIC_TEETH_UPPER, ...PEDIATRIC_TEETH_LOWER]
+
+        const activeFindings = allTeethList.map(t => {
+          const rec = getRecord(t.fdi)
+          return { ...t, ...rec }
+        }).filter(t => t.condition !== 'Healthy' || (t.surfaces && Object.values(t.surfaces).some(Boolean)) || t.diagnosis || t.treatment)
+
+        const printHealthyCount = allTeethList.length - activeFindings.length
+        const printCariesCount = activeFindings.filter(t => t.condition === 'Caries').length
+        const printFilledCount = activeFindings.filter(t => t.condition === 'Filled').length
+        const printRctMissingCount = activeFindings.filter(t => ['Root Canal', 'Missing', 'Extracted', 'Crown', 'Implant'].includes(t.condition)).length
+
+        return (
+          <div className="hidden print:block font-sans text-slate-900 bg-white p-6 max-w-4xl mx-auto space-y-6">
+            {/* Official Clinic Header */}
+            <div className="border-b-2 border-blue-600 pb-4 flex justify-between items-start">
+              <div>
+                <h1 className="text-2xl font-black text-blue-900 tracking-wide">HUDI DENTAL CARE</h1>
+                <p className="text-xs font-bold text-slate-600 tracking-wider uppercase">Advanced Oral Surgery & Comprehensive Dental Practice</p>
+                <p className="text-[11px] text-slate-500">Mogadishu, Somalia • Web: dental.hudisoft.online</p>
+              </div>
+              <div className="text-right">
+                <span className="inline-block px-3 py-1 bg-blue-100 text-blue-800 font-black text-xs uppercase tracking-widest rounded-md">
+                  Clinical Odontogram Report
+                </span>
+                <p className="text-xs text-slate-500 mt-1">Date: {new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}</p>
+              </div>
+            </div>
+
+            {/* Patient Demographics Card */}
+            <div className="grid grid-cols-2 gap-4 bg-slate-50 border border-slate-200 p-4 rounded-xl text-xs">
+              <div>
+                <p className="text-slate-500 font-bold uppercase text-[10px]">Patient Name</p>
+                <p className="text-base font-black text-slate-900">{patientName || 'N/A'}</p>
+              </div>
+              <div>
+                <p className="text-slate-500 font-bold uppercase text-[10px]">Patient ID / File #</p>
+                <p className="text-base font-black text-slate-900">{patientNumber || 'P-0000'}</p>
+              </div>
+              <div>
+                <p className="text-slate-500 font-bold uppercase text-[10px]">Gender & Contact</p>
+                <p className="font-bold text-slate-800">{patientGender || 'Not Specified'} • {patientPhone || 'N/A'}</p>
+              </div>
+              <div>
+                <p className="text-slate-500 font-bold uppercase text-[10px]">Dentition & Chart System</p>
+                <p className="font-bold text-slate-800">{dentitionType === 'adult' ? 'Adult Permanent (32 Teeth)' : 'Pediatric Primary (20 Teeth)'} • {numberingSystem} System</p>
+              </div>
+            </div>
+
+            {/* Clinical KPI Summary */}
+            <div className="grid grid-cols-4 gap-3 text-center text-xs">
+              <div className="border border-emerald-200 bg-emerald-50/60 p-3 rounded-xl">
+                <p className="text-[10px] uppercase font-bold text-emerald-700">Sound / Healthy Teeth</p>
+                <p className="text-2xl font-black text-emerald-800">{printHealthyCount}</p>
+              </div>
+              <div className="border border-rose-200 bg-rose-50/60 p-3 rounded-xl">
+                <p className="text-[10px] uppercase font-bold text-rose-700">Caries / Decayed</p>
+                <p className="text-2xl font-black text-rose-800">{printCariesCount}</p>
+              </div>
+              <div className="border border-blue-200 bg-blue-50/60 p-3 rounded-xl">
+                <p className="text-[10px] uppercase font-bold text-blue-700">Filled / Restored</p>
+                <p className="text-2xl font-black text-blue-800">{printFilledCount}</p>
+              </div>
+              <div className="border border-purple-200 bg-purple-50/60 p-3 rounded-xl">
+                <p className="text-[10px] uppercase font-bold text-purple-700">Root Canal / Missing / Crowns</p>
+                <p className="text-2xl font-black text-purple-800">{printRctMissingCount}</p>
+              </div>
+            </div>
+
+            {/* Itemized Table of Clinical Findings */}
+            <div>
+              <h3 className="text-xs font-black uppercase tracking-wider text-slate-700 mb-2">
+                Detailed Teeth Findings & Treatment Plan ({activeFindings.length} affected units)
+              </h3>
+              {activeFindings.length === 0 ? (
+                <div className="p-4 border border-slate-200 rounded-xl text-center text-xs text-slate-500">
+                  All teeth evaluated as Healthy & Sound with no active clinical pathology detected.
+                </div>
+              ) : (
+                <table className="w-full text-left text-xs border border-slate-200 border-collapse">
+                  <thead>
+                    <tr className="bg-slate-100 text-slate-700 font-black border-b border-slate-200">
+                      <th className="p-2 border-r border-slate-200 w-16">Tooth #</th>
+                      <th className="p-2 border-r border-slate-200">Tooth Name</th>
+                      <th className="p-2 border-r border-slate-200 w-28">Condition</th>
+                      <th className="p-2 border-r border-slate-200 w-32">Surfaces</th>
+                      <th className="p-2 border-r border-slate-200">Diagnosis</th>
+                      <th className="p-2">Proposed Treatment</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {activeFindings.map((t) => {
+                      const s = t.surfaces || {}
+                      const surfArr: string[] = []
+                      if (s.M) surfArr.push('M')
+                      if (s.D) surfArr.push('D')
+                      if (s.O) surfArr.push('O/I')
+                      if (s.B) surfArr.push('B')
+                      if (s.L) surfArr.push('L')
+
+                      return (
+                        <tr key={t.fdi} className="border-b border-slate-200">
+                          <td className="p-2 border-r border-slate-200 font-black">
+                            {numberingSystem === 'FDI' ? t.fdi : t.universal}
+                          </td>
+                          <td className="p-2 border-r border-slate-200 font-medium">
+                            {t.name}
+                          </td>
+                          <td className="p-2 border-r border-slate-200 font-bold">
+                            {t.condition}
+                          </td>
+                          <td className="p-2 border-r border-slate-200 font-mono text-[11px]">
+                            {surfArr.length > 0 ? surfArr.join(', ') : 'Whole Tooth'}
+                          </td>
+                          <td className="p-2 border-r border-slate-200">
+                            {t.diagnosis || '-'}
+                          </td>
+                          <td className="p-2">
+                            {t.treatment || '-'}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </div>
+
+            {/* Official Sign-off Section */}
+            <div className="pt-8 border-t border-slate-200 flex justify-between items-end text-xs">
+              <div>
+                <p className="text-slate-600 font-bold">HUDI Dental Care Practice SaaS</p>
+                <p className="text-slate-400 text-[10px]">Confidential clinical chart report • Valid with official stamp</p>
+              </div>
+              <div className="flex gap-10">
+                <div className="text-center">
+                  <div className="w-40 border-b border-slate-400 h-10 mb-1" />
+                  <p className="text-[11px] font-bold text-slate-700">Attending Dentist Signature</p>
+                </div>
+                <div className="text-center">
+                  <div className="w-28 h-14 border border-dashed border-slate-300 rounded-lg flex items-center justify-center text-[10px] text-slate-400 mb-1">
+                    Clinic Official Stamp
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
     </div>
   )
 }
