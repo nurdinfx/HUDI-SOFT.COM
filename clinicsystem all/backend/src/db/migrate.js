@@ -540,6 +540,7 @@ async function runMigrations() {
     try {
       await pool.query('ALTER TABLE clinics DROP CONSTRAINT IF EXISTS clinics_email_key');
       await pool.query('ALTER TABLE invoices DROP CONSTRAINT IF EXISTS invoices_payment_method_check');
+      await pool.query('ALTER TABLE pharmacy_sales DROP CONSTRAINT IF EXISTS pharmacy_sales_payment_method_check');
     } catch (e) {
       // ignore
     }
