@@ -11,6 +11,24 @@ const RECORD_SELECT = `
   JOIN clinic_users cu ON cu.id = cn.doctor_id
 `;
 
+const formatPrescription = (p) => ({
+  id: p.id,
+  clinicId: p.clinic_id,
+  consultationId: p.consultation_id,
+  patientId: p.patient_id,
+  doctorId: p.doctor_id,
+  medicationName: p.medication_name,
+  dosage: p.dosage,
+  frequency: p.frequency,
+  duration: p.duration,
+  instructions: p.instructions,
+  isDispensed: p.is_dispensed,
+  dispensedAt: p.dispensed_at,
+  dispensedBy: p.dispensed_by,
+  createdAt: p.created_at,
+  ...p
+});
+
 /** GET /api/consultations */
 const getConsultations = async (req, res) => {
   try {
@@ -29,6 +47,25 @@ const getConsultations = async (req, res) => {
       `${RECORD_SELECT} ${where} ORDER BY cn.visit_date DESC LIMIT $${params.length+1} OFFSET $${params.length+2}`,
       [...params, Number(limit), offset]
     );
+
+    // Fetch prescriptions for these records so pages like /prescriptions can list them
+    if (rows.length > 0) {
+      const consultIds = rows.map(r => r.id);
+      const { rows: prescRows } = await query(
+        `SELECT * FROM prescriptions WHERE consultation_id = ANY($1::uuid[]) ORDER BY created_at ASC`,
+        [consultIds]
+      );
+      
+      const prescMap = {};
+      for (const p of prescRows) {
+        if (!prescMap[p.consultation_id]) prescMap[p.consultation_id] = [];
+        prescMap[p.consultation_id].push(formatPrescription(p));
+      }
+
+      for (const r of rows) {
+        r.prescriptions = prescMap[r.id] || [];
+      }
+    }
 
     res.json({ records: rows, total, page: Number(page), pages: Math.ceil(total / Number(limit)) });
   } catch (err) {
@@ -188,4 +225,108 @@ const signConsultation = async (req, res) => {
   }
 };
 
-module.exports = { getConsultations, getConsultation, createConsultation, updateConsultation, signConsultation };
+/** POST /api/consultations/:id/prescriptions */
+const addPrescription = async (req, res) => {
+  try {
+    const { id: consultationId } = req.params;
+    const cid = req.user.clinic_id;
+    const { medicationName, dosage, frequency, duration, instructions } = req.body;
+
+    if (!medicationName || !medicationName.trim()) {
+      return res.status(400).json({ message: 'Medication name is required' });
+    }
+
+    // Verify consultation belongs to clinic
+    const consultRes = await query(
+      'SELECT id, patient_id, doctor_id FROM consultation_notes WHERE id = $1 AND clinic_id = $2',
+      [consultationId, cid]
+    );
+    if (!consultRes.rows.length) {
+      return res.status(404).json({ message: 'Consultation record not found' });
+    }
+
+    const { patient_id: patientId } = consultRes.rows[0];
+
+    const { rows } = await query(
+      `INSERT INTO prescriptions (
+        id, clinic_id, consultation_id, patient_id, doctor_id,
+        medication_name, dosage, frequency, duration, instructions
+      ) VALUES (gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9)
+      RETURNING *`,
+      [
+        cid,
+        consultationId,
+        patientId,
+        req.user.id,
+        medicationName.trim(),
+        dosage || null,
+        frequency || null,
+        duration || null,
+        instructions || null
+      ]
+    );
+
+    const created = formatPrescription(rows[0]);
+    res.status(201).json({
+      message: 'Prescription added successfully',
+      prescription: created,
+      ...created
+    });
+  } catch (err) {
+    console.error('[Consultation] addPrescription error:', err);
+    res.status(500).json({ message: err.message });
+  }
+};
+
+/** GET /api/consultations/:id/prescriptions */
+const getConsultationPrescriptions = async (req, res) => {
+  try {
+    const { id: consultationId } = req.params;
+    const cid = req.user.clinic_id;
+
+    const { rows } = await query(
+      `SELECT p.*,
+              u.full_name as doctor_name,
+              pt.full_name as patient_name,
+              pt.patient_number
+       FROM prescriptions p
+       LEFT JOIN clinic_users u ON u.id = p.doctor_id
+       LEFT JOIN patients pt ON pt.id = p.patient_id
+       WHERE p.consultation_id = $1 AND p.clinic_id = $2
+       ORDER BY p.created_at ASC`,
+      [consultationId, cid]
+    );
+
+    res.json({ prescriptions: rows.map(formatPrescription) });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+/** DELETE /api/consultations/:id/prescriptions/:prescId */
+const deletePrescription = async (req, res) => {
+  try {
+    const { id: consultationId, prescId } = req.params;
+    const cid = req.user.clinic_id;
+
+    const { rows } = await query(
+      'DELETE FROM prescriptions WHERE id = $1 AND consultation_id = $2 AND clinic_id = $3 RETURNING id',
+      [prescId, consultationId, cid]
+    );
+    if (!rows.length) return res.status(404).json({ message: 'Prescription not found' });
+    res.json({ message: 'Prescription removed' });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+module.exports = {
+  getConsultations,
+  getConsultation,
+  createConsultation,
+  updateConsultation,
+  signConsultation,
+  addPrescription,
+  getConsultationPrescriptions,
+  deletePrescription,
+};
