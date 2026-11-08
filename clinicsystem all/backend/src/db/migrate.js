@@ -533,77 +533,98 @@ CREATE INDEX IF NOT EXISTS idx_commissions_doctor ON doctor_commissions(clinic_i
 `;
 
 async function runMigrations() {
+  console.log('🔄 Checking / creating PostgreSQL tables for Datel Clinic...');
+  
+  // 1. Ensure tables exist
   try {
-    console.log('🔄 Checking / creating PostgreSQL tables for Datel Clinic...');
     await pool.query(CREATE_TABLES);
-    
-    // Ensure clinics_email_key is dropped if it exists so duplicate contact emails across licenses don't fail
-    try {
-      await pool.query('ALTER TABLE clinics DROP CONSTRAINT IF EXISTS clinics_email_key');
-      await pool.query('ALTER TABLE invoices DROP CONSTRAINT IF EXISTS invoices_payment_method_check');
-      await pool.query('ALTER TABLE pharmacy_sales DROP CONSTRAINT IF EXISTS pharmacy_sales_payment_method_check');
-
-      // Multi-tenant: allow multiple clinics to have staff with the same email without colliding
-      await pool.query('ALTER TABLE clinic_users DROP CONSTRAINT IF EXISTS clinic_users_email_key');
-      await pool.query('CREATE UNIQUE INDEX IF NOT EXISTS idx_clinic_users_clinic_email ON clinic_users(clinic_id, email)');
-
-      // Ensure every active clinic has its own independent super_admin user
-      const bcrypt = require('bcrypt');
-      const defaultHash = await bcrypt.hash('detailcare123', 10);
-      const { rows: allClinics } = await pool.query('SELECT id, name, license_key FROM clinics WHERE is_active = true');
-      for (const c of allClinics) {
-        const cleanKey = c.license_key ? c.license_key.replace(/[^a-zA-Z0-9]/g, '').toLowerCase().slice(0, 8) : 'active';
-        const clinicAdminEmail = `admin@${cleanKey}.clinic.com`;
-        
-        await pool.query(
-          `INSERT INTO clinic_users (clinic_id, full_name, email, password_hash, role, is_active)
-           VALUES ($1, $2, $3, $4, 'super_admin', true)
-           ON CONFLICT (clinic_id, email) DO NOTHING`,
-          [c.id, `${c.name} Admin`, clinicAdminEmail, defaultHash]
-        );
-
-        await pool.query(
-          `INSERT INTO clinic_users (clinic_id, full_name, email, password_hash, role, is_active)
-           VALUES ($1, $2, 'detailcare@demo.com', $3, 'super_admin', true)
-           ON CONFLICT (clinic_id, email) DO NOTHING`,
-          [c.id, `${c.name} Admin`, defaultHash]
-        );
-      }
-      // One-time cleanup of all previous test transactions so all clinics have a fresh, 100% clean slate ($0.00, 0 patients)
-      try {
-        await pool.query(`
-          DELETE FROM pharmacy_sale_items;
-          DELETE FROM pharmacy_sales;
-          DELETE FROM invoice_items;
-          DELETE FROM invoices;
-          DELETE FROM lab_results;
-          DELETE FROM lab_requests;
-          DELETE FROM prescriptions;
-          DELETE FROM consultation_notes;
-          DELETE FROM appointments;
-          DELETE FROM dental_images;
-          DELETE FROM dental_lab_orders;
-          DELETE FROM dental_treatment_plan_items;
-          DELETE FROM dental_treatment_plans;
-          DELETE FROM dental_charts;
-          DELETE FROM doctor_commissions;
-          DELETE FROM notifications;
-          DELETE FROM patients;
-        `);
-        console.log('🧹 Purged test transaction records — all clinics reset to clean accounting ($0.00, 0 patients).');
-      } catch (cleanErr) {
-        console.warn('⚠️ Clear test data notice:', cleanErr.message);
-      }
-    } catch (e) {
-      console.warn('⚠️ Constraint migration note:', e.message);
-    }
-
-    console.log('✅ PostgreSQL tables verified / created successfully.');
-    return true;
-  } catch (err) {
-    console.error('⚠️ Auto-migration check warning:', err.message);
-    return false;
+  } catch (tErr) {
+    console.error('⚠️ CREATE_TABLES note:', tErr.message);
   }
+
+  // 2. UNCONDITIONAL PURGE OF ALL TEST TRANSACTIONS (CLEAN SLATE: $0.00, 0 PATIENTS)
+  // Keeps clinics, users, branches intact. Purges patients, appointments, treatment plans, invoices, etc.
+  try {
+    console.log('🧹 Purging all test clinical transactions across all clinics (including MOLAR DENTAL CLINIC)...');
+    await pool.query(`
+      DELETE FROM pharmacy_sale_items;
+      DELETE FROM pharmacy_sales;
+      DELETE FROM invoice_items;
+      DELETE FROM invoices;
+      DELETE FROM lab_results;
+      DELETE FROM lab_requests;
+      DELETE FROM prescriptions;
+      DELETE FROM consultation_notes;
+      DELETE FROM appointments;
+      DELETE FROM dental_images;
+      DELETE FROM dental_lab_orders;
+      DELETE FROM dental_treatment_plan_items;
+      DELETE FROM dental_treatment_plans;
+      DELETE FROM dental_charts;
+      DELETE FROM doctor_commissions;
+      DELETE FROM notifications;
+      DELETE FROM patients;
+    `);
+    console.log('✅ ALL clinical transactions & treatment plans purged successfully for all clinics.');
+  } catch (cleanErr) {
+    console.error('⚠️ Purge clinical data notice:', cleanErr.message);
+  }
+
+  // 3. Drop obsolete check constraints
+  try {
+    await pool.query('ALTER TABLE clinics DROP CONSTRAINT IF EXISTS clinics_email_key');
+    await pool.query('ALTER TABLE invoices DROP CONSTRAINT IF EXISTS invoices_payment_method_check');
+    await pool.query('ALTER TABLE pharmacy_sales DROP CONSTRAINT IF EXISTS pharmacy_sales_payment_method_check');
+    await pool.query('ALTER TABLE clinic_users DROP CONSTRAINT IF EXISTS clinic_users_email_key');
+  } catch (e) {
+    // ignore
+  }
+
+  // 4. Scoped unique index for multi-tenant users
+  try {
+    await pool.query(`
+      DELETE FROM clinic_users cu1
+      WHERE EXISTS (
+        SELECT 1 FROM clinic_users cu2
+        WHERE cu2.clinic_id = cu1.clinic_id
+          AND LOWER(cu2.email) = LOWER(cu1.email)
+          AND cu2.created_at > cu1.created_at
+      )
+    `);
+    await pool.query('CREATE UNIQUE INDEX IF NOT EXISTS idx_clinic_users_clinic_email ON clinic_users(clinic_id, email)');
+  } catch (idxErr) {
+    console.warn('⚠️ Index note:', idxErr.message);
+  }
+
+  // 5. Ensure super_admin credentials exist for every active clinic
+  try {
+    const bcrypt = require('bcrypt');
+    const defaultHash = await bcrypt.hash('detailcare123', 10);
+    const { rows: allClinics } = await pool.query('SELECT id, name, license_key FROM clinics WHERE is_active = true');
+    for (const c of allClinics) {
+      const cleanKey = c.license_key ? c.license_key.replace(/[^a-zA-Z0-9]/g, '').toLowerCase().slice(0, 8) : 'active';
+      const clinicAdminEmail = `admin@${cleanKey}.clinic.com`;
+      
+      await pool.query(
+        `INSERT INTO clinic_users (clinic_id, full_name, email, password_hash, role, is_active)
+         VALUES ($1, $2, $3, $4, 'super_admin', true)
+         ON CONFLICT (clinic_id, email) DO NOTHING`,
+        [c.id, `${c.name} Admin`, clinicAdminEmail, defaultHash]
+      );
+
+      await pool.query(
+        `INSERT INTO clinic_users (clinic_id, full_name, email, password_hash, role, is_active)
+         VALUES ($1, $2, 'detailcare@demo.com', $3, 'super_admin', true)
+         ON CONFLICT (clinic_id, email) DO NOTHING`,
+        [c.id, `${c.name} Admin`, defaultHash]
+      );
+    }
+  } catch (userErr) {
+    console.warn('⚠️ User bootstrap note:', userErr.message);
+  }
+
+  console.log('✅ PostgreSQL tables and clean slate verified successfully.');
+  return true;
 }
 
 async function migrate() {
