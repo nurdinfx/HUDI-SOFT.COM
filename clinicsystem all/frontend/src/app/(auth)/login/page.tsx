@@ -2,8 +2,9 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { motion } from 'framer-motion'
-import { Heart, Eye, EyeOff, Loader2 } from 'lucide-react'
+import { Heart, Eye, EyeOff, Loader2, Key } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
 
 export default function LoginPage() {
@@ -18,6 +19,20 @@ export default function LoginPage() {
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const urlParams = new URLSearchParams(window.location.search)
+      const qKey = urlParams.get('key')
+      if (qKey) {
+        // If a new license key was passed via URL, immediately redirect to activation!
+        router.push(`/activation?key=${encodeURIComponent(qKey.trim())}`)
+        return
+      }
+
+      // If this browser has no activated license key, require activation first!
+      const existingLicense = localStorage.getItem('hudi_license_key')
+      if (!existingLicense) {
+        router.push('/activation')
+        return
+      }
+
       const qEmail = urlParams.get('email')
       if (qEmail) {
         setEmail(qEmail)
@@ -26,7 +41,7 @@ export default function LoginPage() {
         if (last) setEmail(last)
       }
     }
-  }, [])
+  }, [router])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -176,7 +191,15 @@ export default function LoginPage() {
               </motion.button>
             </form>
 
-            <div className="border-t border-slate-700/50 pt-5">
+            <div className="border-t border-slate-700/50 pt-4 text-center space-y-3">
+              <Link
+                href="/activation"
+                className="text-xs font-semibold text-emerald-400 hover:text-emerald-300 flex items-center justify-center gap-1.5 transition"
+              >
+                <Key className="w-3.5 h-3.5" />
+                Ma haysataa License Key cusub? Halkan ku diiwaangeli →
+              </Link>
+
               <p className="text-xs text-slate-500 text-center">
                 Subscription managed by{' '}
                 <a href="https://hudisoft.online" target="_blank" rel="noreferrer" className="text-blue-400 hover:underline">

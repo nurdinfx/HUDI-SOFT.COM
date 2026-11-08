@@ -1,9 +1,10 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { motion } from 'framer-motion'
-import { Heart, Key, Loader2, ShieldCheck } from 'lucide-react'
+import { Heart, Key, Loader2, ShieldCheck, ArrowRight } from 'lucide-react'
 import axios from 'axios'
 
 export default function ActivationPage() {
@@ -13,6 +14,18 @@ export default function ActivationPage() {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [activatedData, setActivatedData] = useState<any>(null)
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const urlParams = new URLSearchParams(window.location.search)
+      const qKey = urlParams.get('key')
+      if (qKey) {
+        setLicenseKey(qKey.toUpperCase().trim())
+        // Clear any previous session and previous license when bringing a new key
+        localStorage.removeItem('dcs_session')
+      }
+    }
+  }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
