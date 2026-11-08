@@ -163,4 +163,34 @@ const deleteStaff = async (req, res) => {
   }
 };
 
-module.exports = { getClinic, updateClinic, getSubscription, getStaff, createStaff, updateStaff, deleteStaff };
+/** POST /api/clinic/reset-data (Wipe all clinical transactions for clean start) */
+const resetClinicData = async (req, res) => {
+  try {
+    const cid = req.user.clinic_id;
+    await query(`
+      DELETE FROM pharmacy_sale_items WHERE sale_id IN (SELECT id FROM pharmacy_sales WHERE clinic_id = $1);
+      DELETE FROM pharmacy_sales WHERE clinic_id = $1;
+      DELETE FROM invoice_items WHERE invoice_id IN (SELECT id FROM invoices WHERE clinic_id = $1);
+      DELETE FROM invoices WHERE clinic_id = $1;
+      DELETE FROM lab_results WHERE request_id IN (SELECT id FROM lab_requests WHERE clinic_id = $1);
+      DELETE FROM lab_requests WHERE clinic_id = $1;
+      DELETE FROM prescriptions WHERE clinic_id = $1;
+      DELETE FROM consultation_notes WHERE clinic_id = $1;
+      DELETE FROM appointments WHERE clinic_id = $1;
+      DELETE FROM dental_images WHERE clinic_id = $1;
+      DELETE FROM dental_lab_orders WHERE clinic_id = $1;
+      DELETE FROM dental_treatment_plan_items WHERE plan_id IN (SELECT id FROM dental_treatment_plans WHERE clinic_id = $1);
+      DELETE FROM dental_treatment_plans WHERE clinic_id = $1;
+      DELETE FROM dental_charts WHERE clinic_id = $1;
+      DELETE FROM doctor_commissions WHERE clinic_id = $1;
+      DELETE FROM notifications WHERE clinic_id = $1;
+      DELETE FROM patients WHERE clinic_id = $1;
+    `, [cid]);
+
+    res.json({ message: 'Xogta xarunta si guul leh ayaa loo nadiifiyay (Clinic data reset to clean slate).' });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+module.exports = { getClinic, updateClinic, getSubscription, getStaff, createStaff, updateStaff, deleteStaff, resetClinicData };

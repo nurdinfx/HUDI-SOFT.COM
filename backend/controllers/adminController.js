@@ -182,6 +182,17 @@ const updateLicense = async (req, res) => {
                     console.log(`[Admin] Activated customer account ${user.email} associated with license ${license.licenseKey}`);
                 }
             }
+
+            // If suspending a license, also ensure the associated user account is suspended
+            if (status === 'Suspended' && license.userId) {
+                const User = require('../models/User');
+                const user = await User.findById(license.userId);
+                if (user && user.status !== 'Suspended') {
+                    user.status = 'Suspended';
+                    await user.save();
+                    console.log(`[Admin] Suspended customer account ${user.email} associated with license ${license.licenseKey}`);
+                }
+            }
         }
         if (subscriptionType) license.subscriptionType = subscriptionType;
         if (req.body.maxDevices) license.maxDevices = req.body.maxDevices;

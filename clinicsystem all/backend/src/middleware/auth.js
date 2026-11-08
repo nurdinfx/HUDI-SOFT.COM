@@ -57,10 +57,18 @@ const requireActiveSubscription = async (req, res, next) => {
 
     const status = rows[0].subscription_status;
     if (status === 'Suspended') {
-      return res.status(403).json({ message: 'Clinic subscription suspended. Please contact support.' });
+      return res.status(403).json({ 
+        error: 'SUBSCRIPTION_SUSPENDED',
+        status: 'Suspended',
+        message: 'Nidaamka xaruntan waa la hakiyay (Clinic Suspended). Fadlan la xiriir maamulka HUDI-SOFT.' 
+      });
     }
     if (status === 'Expired') {
-      return res.status(403).json({ message: 'Clinic subscription has expired. Please renew.' });
+      return res.status(403).json({ 
+        error: 'SUBSCRIPTION_EXPIRED',
+        status: 'Expired',
+        message: 'Muddada shatiga xaruntu way dhamaatay (Subscription Expired). Fadlan cusboonaysii.' 
+      });
     }
 
     req.clinic = rows[0];

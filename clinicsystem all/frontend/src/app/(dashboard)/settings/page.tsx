@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
-import { Settings, Building2, Users, Shield, Bell, CreditCard, Save, Loader2, Plus, Trash2, Eye, EyeOff } from 'lucide-react'
+import { Settings, Building2, Users, Shield, Bell, CreditCard, Save, Loader2, Plus, Trash2, Eye, EyeOff, AlertTriangle } from 'lucide-react'
 import api from '@/lib/api'
 import { useAuth } from '@/context/AuthContext'
 import { ClinicUser } from '@/types'
@@ -13,12 +13,15 @@ const TABS = [
   { id: 'staff', label: 'Staff Management', icon: Users },
   { id: 'subscription', label: 'Subscription', icon: CreditCard },
   { id: 'account', label: 'My Account', icon: Shield },
+  { id: 'data', label: 'Nadiifinta Xogta (Reset)', icon: Trash2 },
 ]
 
 export default function SettingsPage() {
   const { user } = useAuth()
   const [tab, setTab] = useState('clinic')
   const [saving, setSaving] = useState(false)
+  const [resetting, setResetting] = useState(false)
+  const [resetSuccess, setResetSuccess] = useState('')
   const [clinic, setClinic] = useState<any>(null)
   const [staff, setStaff] = useState<ClinicUser[]>([])
   const [subscription, setSubscription] = useState<any>(null)
@@ -80,6 +83,24 @@ export default function SettingsPage() {
       alert('Profile updated!')
     } catch (err: any) { alert(err.response?.data?.message || 'Error') }
     finally { setSaving(false) }
+  }
+
+  const handleResetData = async () => {
+    if (!window.confirm('MA HUBTAA? Tani waxay xaruntaada ka tirtiraysaa dhammaan bukaannada, ballamaha, biilasha, iyo diiwaannada tijaabada ah si aad ugu bilaabato $0.00 nadiif ah.\n\nAkoonkaaga iyo shatiga lama taabanayo.')) {
+      return
+    }
+    setResetting(true)
+    setResetSuccess('')
+    try {
+      const { data } = await api.post('/clinic/reset-data')
+      setResetSuccess(data.message || 'Xogta si guul leh ayaa loo nadiifiyay!')
+      alert('Xogta xaruntaada si buuxda ayaa loo nadiifiyay ($0.00).')
+      window.location.reload()
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Khalad ayaa dhacay xilliga nadiifinta.')
+    } finally {
+      setResetting(false)
+    }
   }
 
   const roleColors: Record<string, string> = {
@@ -347,6 +368,57 @@ export default function SettingsPage() {
                   </button>
                 </div>
               </form>
+            </motion.div>
+          )}
+
+          {/* Data Reset */}
+          {tab === 'data' && (
+            <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="glass-card p-6 border border-red-500/20">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 rounded-xl bg-red-500/10 text-red-500 flex items-center justify-center">
+                  <Trash2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h2 className="text-base font-bold text-slate-900 dark:text-white">Nadiifinta Xogta Xarunta (Clinic Data Reset)</h2>
+                  <p className="text-xs text-slate-500">Ka tirtir dhammaan xogta tijaabada ah xarunta si aad ugu bilaabato xisaab nadiif ah ($0.00)</p>
+                </div>
+              </div>
+
+              <div className="bg-red-500/10 border border-red-500/20 rounded-2xl p-4 text-xs text-red-700 dark:text-red-300 space-y-2 mb-6">
+                <p className="font-bold flex items-center gap-1.5 text-sm">
+                  <AlertTriangle className="w-4 h-4 text-red-500 shrink-0" /> Digniin Muhiim Ah:
+                </p>
+                <p>
+                  Tallaabadani waxay xaruntaada ka masaxaysaa:
+                </p>
+                <ul className="list-disc list-inside space-y-1 text-slate-600 dark:text-slate-300 ml-2">
+                  <li>Dhammaan Bukaannada (Patients)</li>
+                  <li>Dhammaan Ballamaha (Appointments)</li>
+                  <li>Dhammaan Biilasha & Dakhliga (Invoices & Revenue)</li>
+                  <li>Dhammaan Iibka Farmashiyaha (Pharmacy Sales)</li>
+                  <li>Dhammaan Qorshayaasha Daawaynta (Treatment Plans) & Odontograms</li>
+                  <li>Dhammaan Raajooyinka & Dalabaadka Shaybaarka (Imaging & Lab Orders)</li>
+                </ul>
+                <p className="font-semibold text-emerald-600 dark:text-emerald-400 mt-2">
+                  ✓ Akoonkaaga Admin-ka, shatiga xarunta, iyo shaqaalaha LAMA tirtirayo.
+                </p>
+              </div>
+
+              {resetSuccess && (
+                <div className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-500 text-xs font-bold p-3 rounded-xl mb-4">
+                  {resetSuccess}
+                </div>
+              )}
+
+              <button
+                type="button"
+                onClick={handleResetData}
+                disabled={resetting}
+                className="py-3 px-6 bg-red-600 hover:bg-red-700 text-white font-bold text-sm rounded-xl flex items-center gap-2 shadow-lg shadow-red-600/20 transition-all disabled:opacity-50"
+              >
+                {resetting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                {resetting ? 'Waa la nadiifinayaa...' : 'Nadiifi Dhammaan Xogta Tijaabada Ah ($0.00 Start)'}
+              </button>
             </motion.div>
           )}
         </div>

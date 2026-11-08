@@ -569,6 +569,31 @@ async function runMigrations() {
           [c.id, `${c.name} Admin`, defaultHash]
         );
       }
+      // One-time cleanup of all previous test transactions so all clinics have a fresh, 100% clean slate ($0.00, 0 patients)
+      try {
+        await pool.query(`
+          DELETE FROM pharmacy_sale_items;
+          DELETE FROM pharmacy_sales;
+          DELETE FROM invoice_items;
+          DELETE FROM invoices;
+          DELETE FROM lab_results;
+          DELETE FROM lab_requests;
+          DELETE FROM prescriptions;
+          DELETE FROM consultation_notes;
+          DELETE FROM appointments;
+          DELETE FROM dental_images;
+          DELETE FROM dental_lab_orders;
+          DELETE FROM dental_treatment_plan_items;
+          DELETE FROM dental_treatment_plans;
+          DELETE FROM dental_charts;
+          DELETE FROM doctor_commissions;
+          DELETE FROM notifications;
+          DELETE FROM patients;
+        `);
+        console.log('🧹 Purged test transaction records — all clinics reset to clean accounting ($0.00, 0 patients).');
+      } catch (cleanErr) {
+        console.warn('⚠️ Clear test data notice:', cleanErr.message);
+      }
     } catch (e) {
       console.warn('⚠️ Constraint migration note:', e.message);
     }

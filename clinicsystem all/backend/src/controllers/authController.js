@@ -33,29 +33,29 @@ function validateLicenseServerSide(licenseKey) {
       res.on('end', () => {
         try {
           const parsed = JSON.parse(data);
-          // If upstream says valid, resolve it; if upstream explicitly rejected, check format
-          if (parsed && parsed.valid !== false) {
-            resolve(parsed);
-          } else if (licenseKey && licenseKey.length >= 10) {
-            resolve({ valid: true, companyName: parsed.companyName || 'HUDI Dental Care', daysRemaining: 365 });
-          } else {
-            resolve(parsed);
+          // If upstream explicitly rejected, strictly respect that decision
+          if (parsed && parsed.valid === false) {
+            return resolve(parsed);
           }
+          if (parsed && parsed.valid) {
+            return resolve(parsed);
+          }
+          resolve({ valid: false, message: 'Invalid response from license authority' });
         } catch {
-          resolve({ valid: true, companyName: 'HUDI Dental Care', daysRemaining: 365 });
+          resolve({ valid: false, message: 'Could not parse license server response' });
         }
       });
     });
 
     req.on('timeout', () => {
       req.destroy();
-      console.warn('[Auth] License server timed out, falling back to local verification');
-      resolve({ valid: true, companyName: 'HUDI Dental Care Practice', daysRemaining: 365 });
+      console.warn('[Auth] License server timed out');
+      resolve({ valid: false, message: 'License server timed out. Please check connection.' });
     });
 
     req.on('error', (err) => {
       console.warn('[Auth] License server connection error:', err.message);
-      resolve({ valid: true, companyName: 'HUDI Dental Care Practice', daysRemaining: 365 });
+      resolve({ valid: false, message: 'Cannot reach license server: ' + err.message });
     });
 
     req.write(body);
@@ -213,11 +213,36 @@ const login = async (req, res) => {
     if (!user.clinic_active)
       return res.status(403).json({ message: 'Clinic not found or inactive.' });
 
+    // Real-time license status check on login
+    if (user.license_key) {
+      try {
+        const liveLic = await validateLicenseServerSide(user.license_key);
+        if (liveLic && liveLic.valid === false) {
+          const msg = (liveLic.message || '').toLowerCase();
+          const newStatus = msg.includes('expired') ? 'Expired' : 'Suspended';
+          await query('UPDATE clinics SET subscription_status=$1, days_remaining=0, updated_at=NOW() WHERE id=$2', [newStatus, user.clinic_id]);
+          user.subscription_status = newStatus;
+        } else if (liveLic && liveLic.valid) {
+          await query('UPDATE clinics SET subscription_status=$1, days_remaining=$2, updated_at=NOW() WHERE id=$3', ['Active', liveLic.daysRemaining || 30, user.clinic_id]);
+          user.subscription_status = 'Active';
+          user.days_remaining = liveLic.daysRemaining || 30;
+        }
+      } catch (e) {
+        // network issue fallback to cached DB status
+      }
+    }
+
     if (user.subscription_status === 'Suspended')
-      return res.status(403).json({ message: 'Clinic subscription suspended. Contact support.' });
+      return res.status(403).json({ 
+        error: 'SUBSCRIPTION_SUSPENDED',
+        message: 'Nidaamka xaruntan waa la hakiyay (Clinic License Suspended). Fadlan la xiriir maamulka HUDI-SOFT.' 
+      });
 
     if (user.subscription_status === 'Expired')
-      return res.status(403).json({ message: 'Clinic subscription expired. Please renew.' });
+      return res.status(403).json({ 
+        error: 'SUBSCRIPTION_EXPIRED',
+        message: 'Muddada shatiga xaruntu way dhamaatay (Subscription Expired). Fadlan cusboonaysii.' 
+      });
 
     const isMatch = await bcrypt.compare(password, user.password_hash);
     if (!isMatch)

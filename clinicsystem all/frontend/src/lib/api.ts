@@ -59,9 +59,25 @@ api.interceptors.response.use(
     return res
   },
   (err) => {
-    if (err.response?.status === 401 && typeof window !== 'undefined') {
-      localStorage.removeItem('dcs_session')
-      window.location.href = '/login'
+    if (typeof window !== 'undefined') {
+      if (err.response?.status === 401) {
+        localStorage.removeItem('dcs_session')
+        window.location.href = '/login'
+      } else if (err.response?.status === 403) {
+        const data = err.response?.data
+        const msg = String(data?.message || data?.error || '')
+        if (data?.error === 'SUBSCRIPTION_SUSPENDED' || data?.status === 'Suspended' || msg.includes('Suspended') || msg.includes('hakiyay')) {
+          const raw = localStorage.getItem('dcs_session')
+          if (raw) {
+            try {
+              const parsed = JSON.parse(raw)
+              parsed.subscriptionStatus = 'Suspended'
+              localStorage.setItem('dcs_session', JSON.stringify(parsed))
+              window.dispatchEvent(new CustomEvent('dcs_subscription_suspended'))
+            } catch {}
+          }
+        }
+      }
     }
     return Promise.reject(err)
   }
