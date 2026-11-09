@@ -15,6 +15,8 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  // Hide form while we decide where to redirect (avoids flash of login form)
+  const [checking, setChecking] = useState(true)
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -22,14 +24,14 @@ export default function LoginPage() {
       const qKey = urlParams.get('key')
       if (qKey) {
         // If a new license key was passed via URL, immediately redirect to activation!
-        router.push(`/activation?key=${encodeURIComponent(qKey.trim())}`)
+        router.replace(`/activation?key=${encodeURIComponent(qKey.trim())}`)
         return
       }
 
       // If this browser has no activated license key, require activation first!
       const existingLicense = localStorage.getItem('hudi_license_key')
       if (!existingLicense) {
-        router.push('/activation')
+        router.replace('/activation')
         return
       }
 
@@ -40,6 +42,8 @@ export default function LoginPage() {
         const last = localStorage.getItem('dcs_last_email')
         if (last) setEmail(last)
       }
+      // All checks done — show login form
+      setChecking(false)
     }
   }, [router])
 
@@ -62,6 +66,15 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen flex bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900">
+      {/* Full-screen loading while checking redirect */}
+      {checking && (
+        <div className="flex-1 flex items-center justify-center">
+          <Loader2 className="w-8 h-8 text-blue-400 animate-spin" />
+        </div>
+      )}
+
+      {!checking && (
+      <>
       {/* Left panel — branding */}
       <div className="hidden lg:flex flex-col justify-between w-1/2 p-12">
         <div className="flex items-center gap-3">
@@ -210,6 +223,8 @@ export default function LoginPage() {
           </div>
         </motion.div>
       </div>
+      </>
+      )}
     </div>
   )
 }
