@@ -85,8 +85,8 @@ app.all('/api/admin-purge-all-transactions', async (req, res) => {
       DELETE FROM appointments;
       DELETE FROM dental_images;
       DELETE FROM dental_lab_orders;
-      DELETE FROM dental_treatment_plan_items;
-      DELETE FROM dental_treatment_plans;
+      DELETE FROM treatment_plan_items;
+      DELETE FROM treatment_plans;
       DELETE FROM dental_charts;
       DELETE FROM doctor_commissions;
       DELETE FROM notifications;
