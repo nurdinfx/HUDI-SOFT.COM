@@ -200,15 +200,15 @@ export default function EquityFinance() {
 
     } catch (err) {
       console.error('Failed to load financial records:', err);
-      // Set fatalError to stop auto-retry loop on 404 / network error
-      const statusCode = err?.response?.status;
+      // Set fatalError to stop auto-retry loop on 404 / 403 / network error
+      const statusCode = err?.status || err?.response?.status || (err?.code === 'HTTP_404' ? 404 : (err?.code === 'HTTP_403' ? 403 : null));
       if (statusCode === 403) {
         // Permission denied — don't retry endlessly; show friendly message
         setFatalError(true);
         toast.error('Access denied: You do not have permission for the Finance module.');
       } else if (statusCode === 404 || statusCode === 503 || statusCode === 502) {
         setFatalError(true);
-        toast.error('Finance module unavailable. Click Refresh to retry.');
+        toast.error('Finance module unavailable on server. Click Refresh to retry.');
       } else {
         toast.error('Failed to load financial records');
       }

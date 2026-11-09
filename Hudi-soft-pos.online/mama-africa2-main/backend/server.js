@@ -227,12 +227,19 @@ app.use('/api/v1/equity-finance', equityFinanceRoutes);
 app.use('/api/v1/ai-assistant', aiAssistantRoutes);
 
 // Protect sensitive routes with license check
-app.use(['/api/v1/orders', '/api/v1/products', '/api/v1/customers', '/api/v1/tables', '/api/v1/expenses', '/api/v1/dashboard', '/api/v1/users', '/api/v1/settings', '/api/v1/purchases', '/api/v1/purchase-orders', '/api/v1/suppliers', '/api/v1/finance', '/api/v1/reports', '/api/v1/inventory', '/api/v1/employees', '/api/v1/attendance', '/api/v1/hotel'], licenseCheck);
+app.use(['/api/v1/orders', '/api/v1/products', '/api/v1/customers', '/api/v1/tables', '/api/v1/expenses', '/api/v1/dashboard', '/api/v1/users', '/api/v1/settings', '/api/v1/purchases', '/api/v1/purchase-orders', '/api/v1/suppliers', '/api/v1/finance', '/api/v1/reports', '/api/v1/inventory', '/api/v1/employees', '/api/v1/attendance', '/api/v1/hotel', '/api/v1/equity-finance', '/api/v1/ai-assistant'], licenseCheck);
 
 // Health check endpoints
 const healthHandler = (req, res) => {
   const health = {
     status: 'OK',
+    version: '1.2.0-equity-ai',
+    modules: {
+      equityFinance: true,
+      aiAssistant: true,
+      hotel: true,
+      migration: true
+    },
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
     database: 'Connected (MongoDB)',
