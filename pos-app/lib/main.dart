@@ -24,6 +24,8 @@ import 'screens/attendance_screen.dart';
 import 'screens/reports_screen.dart';
 import 'screens/sales_screen.dart';
 import 'screens/license_screen.dart';
+import 'screens/equity_finance_screen.dart';
+import 'screens/ai_assistant_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -78,6 +80,8 @@ class HudiPosApp extends StatelessWidget {
           '/reports':   (_) => const ReportsScreen(),
           '/sales':     (_) => const SalesScreen(),
           '/license':   (_) => const LicenseScreen(),
+          '/equity-finance': (_) => const EquityFinanceScreen(),
+          '/ai-assistant':   (_) => const AIAssistantScreen(),
         },
       ),
     );

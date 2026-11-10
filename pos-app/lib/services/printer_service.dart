@@ -1,7 +1,5 @@
-import 'dart:typed_data';
 import 'package:blue_thermal_printer/blue_thermal_printer.dart';
 import '../models/models.dart';
-import '../config/api_config.dart';
 
 // ─────────────────────────────────────────────────────────────
 // Bluetooth Printer Service — ESC/POS receipt printing

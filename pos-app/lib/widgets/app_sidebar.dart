@@ -35,6 +35,8 @@ const _navItems = [
   SidebarItem(name: 'Waiter Board',    icon: Icons.notifications_outlined,    route: '/waiter',         roles: ['admin', 'manager', 'waiter']),
   SidebarItem(name: 'Inventory',       icon: Icons.inventory_2_outlined,      route: '/inventory',      roles: ['admin', 'manager']),
   SidebarItem(name: 'Customer Ledger', icon: Icons.menu_book_outlined,        route: '/customers',      roles: ['admin', 'manager', 'cashier']),
+  SidebarItem(name: 'Equity & Finance',icon: Icons.account_balance,            route: '/equity-finance', roles: ['admin', 'manager', 'accountant']),
+  SidebarItem(name: 'AI Assistant',    icon: Icons.auto_awesome,               route: '/ai-assistant',   roles: ['admin', 'manager']),
   SidebarItem(name: 'Finance',         icon: Icons.account_balance_outlined,  route: '/finance',        roles: ['admin', 'manager']),
   SidebarItem(name: 'Purchase',        icon: Icons.shopping_cart_outlined,    route: '/purchase',       roles: ['admin', 'manager']),
   SidebarItem(name: 'Users',           icon: Icons.people_outline,            route: '/users',          roles: ['admin', 'manager']),

@@ -110,7 +110,7 @@ class _LicenseScreenState extends State<LicenseScreen> {
                                 ),
                                 const Divider(height: 24),
                                 Row(
-                                  mainAxisAlignment: MainAxisAlignment.between,
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                   children: [
                                     const Text('Activated Key:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
                                     Text(auth.licenseKey ?? 'None', style: const TextStyle(fontSize: 12, fontFamily: 'monospace')),

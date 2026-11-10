@@ -147,7 +147,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                   ...topProducts.map((p) => Padding(
                                         padding: const EdgeInsets.only(bottom: 8),
                                         child: Row(
-                                          mainAxisAlignment: MainAxisAlignment.between,
+                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                           children: [
                                             Text(p['name'] ?? 'Product',
                                                 style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),

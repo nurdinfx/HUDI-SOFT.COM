@@ -112,8 +112,27 @@ class _ActivationScreenState extends State<ActivationScreen> {
                                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700,
                                     color: AppColors.textDark)),
                             const SizedBox(height: 6),
-                            Text('Enter the license key provided to you to activate this POS system.',
-                                style: TextStyle(fontSize: 13, color: AppColors.textSecondary)),
+                            Text('Enter your HUDI-SOFT license key to activate this terminal. To sync with your Computer PWA or another tablet, enter the exact same license key to share real-time cloud data.',
+                                style: TextStyle(fontSize: 13, color: AppColors.textSecondary, height: 1.4)),
+                            const SizedBox(height: 14),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFEFF6FF),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: const Color(0xFFBFDBFE)),
+                              ),
+                              child: Row(
+                                children: const [
+                                  Icon(Icons.cloud_sync_outlined, color: Color(0xFF2563EB), size: 18),
+                                  SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text('Multi-Device Cloud Sync: Same key connects to your desktop POS.',
+                                        style: TextStyle(color: Color(0xFF1D4ED8), fontSize: 11.5, fontWeight: FontWeight.w500)),
+                                  ),
+                                ],
+                              ),
+                            ),
                             const SizedBox(height: 20),
 
                             // License key field

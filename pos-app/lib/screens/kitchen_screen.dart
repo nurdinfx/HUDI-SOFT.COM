@@ -142,7 +142,7 @@ class _KitchenOrderCard extends StatelessWidget {
             color: AppColors.sidebarTop.withOpacity(0.08),
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             child: Row(
-              mainAxisAlignment: MainAxisAlignment.between,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(order.orderNumber,
                     style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.primary)),
@@ -156,7 +156,7 @@ class _KitchenOrderCard extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
             child: Row(
-              mainAxisAlignment: MainAxisAlignment.between,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Row(children: [
                   const Icon(Icons.access_time, size: 12, color: AppColors.textMuted),

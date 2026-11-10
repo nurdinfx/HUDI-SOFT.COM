@@ -34,9 +34,13 @@ class ApiService {
 
   Future<Map<String, String>> _headers() async {
     final t = await token;
+    final prefs = await SharedPreferences.getInstance();
+    final licenseKey = prefs.getString('license_key');
     return {
       'Content-Type': 'application/json',
+      'Accept': 'application/json',
       if (t != null) 'Authorization': 'Bearer $t',
+      if (licenseKey != null && licenseKey.isNotEmpty) 'X-License-Key': licenseKey,
     };
   }
 
@@ -319,4 +323,48 @@ class ApiService {
 
   Future<Map<String, dynamic>> deleteUser(String id) =>
       _delete('${ApiConfig.users}/$id');
+
+  // ── Equity & Financial Management ─────────────────────
+  Future<Map<String, dynamic>> getEquityDashboard({String? startDate, String? endDate}) {
+    final query = <String, String>{};
+    if (startDate != null) query['startDate'] = startDate;
+    if (endDate != null) query['endDate'] = endDate;
+    return _get(ApiConfig.equityDashboard, query: query);
+  }
+
+  Future<Map<String, dynamic>> getEquityAccounts() =>
+      _get(ApiConfig.equityAccounts);
+
+  Future<Map<String, dynamic>> createEquityAccount(Map<String, dynamic> data) =>
+      _post(ApiConfig.equityAccounts, data);
+
+  Future<Map<String, dynamic>> transferEquityFunds(Map<String, dynamic> data) =>
+      _post(ApiConfig.equityTransfers, data);
+
+  Future<Map<String, dynamic>> getCashFlowStatement({String? startDate, String? endDate}) {
+    final query = <String, String>{};
+    if (startDate != null) query['startDate'] = startDate;
+    if (endDate != null) query['endDate'] = endDate;
+    return _get(ApiConfig.equityCashFlow, query: query);
+  }
+
+  Future<Map<String, dynamic>> getProfitAndLoss({String? startDate, String? endDate}) {
+    final query = <String, String>{};
+    if (startDate != null) query['startDate'] = startDate;
+    if (endDate != null) query['endDate'] = endDate;
+    return _get(ApiConfig.equityPnl, query: query);
+  }
+
+  Future<Map<String, dynamic>> getBalanceSheet({String? asOf}) {
+    final query = <String, String>{};
+    if (asOf != null) query['asOf'] = asOf;
+    return _get(ApiConfig.equityBalanceSheet, query: query);
+  }
+
+  // ── AI Business Assistant ─────────────────────────────
+  Future<Map<String, dynamic>> queryAIAssistant(String query, [Map<String, dynamic>? context]) =>
+      _post(ApiConfig.aiQuery, {'query': query, if (context != null) 'context': context});
+
+  Future<Map<String, dynamic>> getAIInsights() =>
+      _get(ApiConfig.aiInsights);
 }
