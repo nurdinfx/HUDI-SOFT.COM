@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+﻿import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronDown, ShieldCheck, Zap, Globe, Building, ArrowLeft, CheckCircle2, Clock } from 'lucide-react';
 import { Link } from 'react-router-dom';
@@ -140,11 +140,11 @@ const RequestDemo = () => {
                                     whileHover={{ scale: 1.01 }}
                                     whileTap={{ scale: 0.99 }}
                                     href={formData.systemType === 'POS Online' 
-                                        ? `https://pos.hudisoft.online/#/activate?key=${trialInfo.licenseKey}` 
+                                        ? `https://pos.hudisoft.online/#/activate?key=${trialInfo.licenseKey}&fresh=1` 
                                         : formData.systemType === 'Hospital Management System (HMS)'
-                                        ? `https://hms.hudisoft.online/activate?key=${trialInfo.licenseKey}`
+                                        ? `https://hms.hudisoft.online/activate?key=${trialInfo.licenseKey}&fresh=1`
                                         : formData.systemType === 'Detail Care'
-                                        ? `https://dental.hudisoft.online/activation?key=${trialInfo.licenseKey}`
+                                        ? `https://dental.hudisoft.online/activation?key=${trialInfo.licenseKey}&fresh=1`
                                         : trialInfo.downloadUrl}
                                     target={formData.systemType === 'POS Online' || formData.systemType === 'Hospital Management System (HMS)' || formData.systemType === 'Detail Care' ? "_blank" : "_self"}
                                     rel="noopener noreferrer"
@@ -358,3 +358,4 @@ const RequestDemo = () => {
 };
 
 export default RequestDemo;
+

@@ -16,6 +16,23 @@ const ActivationPage = () => {
     const [activeLicenseInfo, setActiveLicenseInfo] = useState(null);
     const hasAutoActivatedRef = useRef(false);
 
+    // Check if URL has ?fresh=1 or ?demo=1 — always show activation form, never skip to dashboard
+    const isFreshActivation = () => {
+        const checkParams = (search) => {
+            const p = new URLSearchParams(search);
+            return p.get('fresh') === '1' || p.get('demo') === '1' || p.get('force') === '1';
+        };
+        if (typeof window !== 'undefined') {
+            if (window.location.search && checkParams(window.location.search)) return true;
+            if (window.location.hash.includes('?')) {
+                const hashQuery = window.location.hash.substring(window.location.hash.indexOf('?'));
+                if (checkParams(hashQuery)) return true;
+            }
+        }
+        if (location.search && checkParams(location.search)) return true;
+        return false;
+    };
+
     // Robust key extractor from URL search, hash query, or router location
     const getUrlKey = () => {
         // 1. From window.location.search (?key=...)
@@ -100,18 +117,17 @@ const ActivationPage = () => {
             setDeviceId(id);
 
             const cleanKeyFromUrl = getUrlKey();
+            const freshMode = isFreshActivation(); // ?fresh=1 or ?demo=1 — always show form
 
-            // 1. If key is in URL, auto-activate it immediately
+            // 1. If key is in URL, always show it in the form.
+            //    If fresh=1, NEVER auto-skip to dashboard — always let user see the activation screen.
             if (cleanKeyFromUrl && cleanKeyFromUrl.length > 5) {
                 setLicenseKey(cleanKeyFromUrl);
-                
-                // Clear old stored key if it's different to force new activation
-                const storedKey = localStorage.getItem('pos_license_key');
-                if (storedKey && storedKey.trim().toUpperCase() !== cleanKeyFromUrl) {
-                    console.log('🧹 Clearing old stored key to apply new license:', cleanKeyFromUrl);
-                    localStorage.removeItem('pos_license_key');
-                    localStorage.removeItem('pos_license_data');
-                }
+
+                // Always clear stored key when a new key arrives via URL
+                console.log('🧹 Clearing old stored key to apply new license:', cleanKeyFromUrl);
+                localStorage.removeItem('pos_license_key');
+                localStorage.removeItem('pos_license_data');
 
                 if (!hasAutoActivatedRef.current) {
                     hasAutoActivatedRef.current = true;
@@ -120,7 +136,17 @@ const ActivationPage = () => {
                 return;
             }
 
-            // 2. Otherwise, check if an existing valid license is already stored locally
+            // 2. If ?fresh=1 or ?demo=1, skip localStorage and always show the activation form
+            //    This ensures demo/trial links ALWAYS prompt for activation, even on used browsers.
+            if (freshMode) {
+                console.log('🔄 Fresh/demo activation mode — ignoring any cached license');
+                localStorage.removeItem('pos_license_key');
+                localStorage.removeItem('pos_license_data');
+                setStatus('unactivated');
+                return;
+            }
+
+            // 3. Otherwise, check if an existing valid license is already stored locally
             const storedKey = localStorage.getItem('pos_license_key');
             const storedData = localStorage.getItem('pos_license_data');
             if (storedKey && storedData) {
