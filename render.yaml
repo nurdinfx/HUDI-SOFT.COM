@@ -18,7 +18,7 @@ services:
     autoDeploy: true
 
   - type: web
-    name: hudi-soft-com-online-pos
+    name: hudi-pos-online-aetz
     runtime: node
     rootDir: Hudi-soft-pos.online/mama-africa2-main/backend
     buildCommand: npm install

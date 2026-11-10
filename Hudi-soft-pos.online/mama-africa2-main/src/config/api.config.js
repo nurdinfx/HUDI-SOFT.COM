@@ -6,7 +6,7 @@
 // FORCE PRODUCTION
 // Dynamic detection of environment
 // PRIMARY CONFIGURATION
-let PRODUCTION_URL = import.meta.env.VITE_BACKEND_URL || import.meta.env.VITE_API_BASE_URL || 'https://hudi-soft-com-posonline.onrender.com';
+let PRODUCTION_URL = import.meta.env.VITE_BACKEND_URL || import.meta.env.VITE_API_BASE_URL || 'https://hudi-pos-online-aetz.onrender.com';
 const LOCAL_URL = 'http://localhost:5000';
 
 // Sanitize production URL
@@ -16,7 +16,7 @@ PRODUCTION_URL = PRODUCTION_URL.trim().replace(/\/+$/, '');
 // force it to connect to the actual active Render backend service.
 if (PRODUCTION_URL === 'https://hudi-pos-online.onrender.com' || 
     (typeof window !== 'undefined' && window.location.hostname === 'hudi-pos-online.onrender.com')) {
-  PRODUCTION_URL = 'https://hudi-soft-com-posonline.onrender.com';
+  PRODUCTION_URL = 'https://hudi-pos-online-aetz.onrender.com';
 }
 
 const BASE_URL = import.meta.env.PROD ? PRODUCTION_URL : LOCAL_URL;

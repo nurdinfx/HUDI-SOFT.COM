@@ -6,7 +6,7 @@ const config: CapacitorConfig = {
   webDir: 'dist',
   androidScheme: 'https',
   server: {
-    allowNavigation: ['hudi-soft-com-online-pos.onrender.com', '*.onrender.com']
+    allowNavigation: ['hudi-pos-online-aetz.onrender.com', 'hudi-soft-com-online-pos.onrender.com', '*.onrender.com']
   }
 };
 
