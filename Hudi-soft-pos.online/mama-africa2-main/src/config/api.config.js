@@ -12,19 +12,30 @@ const LOCAL_URL = 'http://localhost:5000';
 // Sanitize production URL
 PRODUCTION_URL = PRODUCTION_URL.trim().replace(/\/+$/, '');
 
-// If PRODUCTION_URL points to the frontend static domain, or if we are loaded on the frontend static host,
+// If PRODUCTION_URL points to the old Render backend or frontend static host,
 // force it to connect to the actual active Render backend service.
-if (PRODUCTION_URL === 'https://hudi-pos-online.onrender.com' || 
+if (PRODUCTION_URL.includes('hudi-soft-com-online-pos') ||
+    PRODUCTION_URL === 'https://hudi-pos-online.onrender.com' || 
     (typeof window !== 'undefined' && window.location.hostname === 'hudi-pos-online.onrender.com')) {
   PRODUCTION_URL = 'https://hudi-pos-online-aetz.onrender.com';
 }
 
 const BASE_URL = import.meta.env.PROD ? PRODUCTION_URL : LOCAL_URL;
 
+let configuredApiUrl = import.meta.env.VITE_API_URL || `${BASE_URL}/api/v1`;
+if (configuredApiUrl.includes('hudi-soft-com-online-pos')) {
+  configuredApiUrl = 'https://hudi-pos-online-aetz.onrender.com/api/v1';
+}
+
+let configuredSocketUrl = import.meta.env.VITE_SOCKET_URL || BASE_URL;
+if (configuredSocketUrl.includes('hudi-soft-com-online-pos')) {
+  configuredSocketUrl = 'https://hudi-pos-online-aetz.onrender.com';
+}
+
 export const API_CONFIG = {
-  API_URL: import.meta.env.VITE_API_URL || `${BASE_URL}/api/v1`,
-  BACKEND_URL: import.meta.env.VITE_BACKEND_URL || BASE_URL,
-  SOCKET_URL: import.meta.env.VITE_SOCKET_URL || BASE_URL,
+  API_URL: configuredApiUrl,
+  BACKEND_URL: BASE_URL,
+  SOCKET_URL: configuredSocketUrl,
   IS_PRODUCTION: BASE_URL === PRODUCTION_URL,
   IS_DEVELOPMENT: BASE_URL === LOCAL_URL,
 };
