@@ -28,15 +28,19 @@ api.interceptors.request.use(
       }
     }
 
-    // MULTI-TENANCY: Send license key if available
-    const licenseData = localStorage.getItem('pos_license_data');
-    if (licenseData) {
-      try {
-        const parsed = JSON.parse(licenseData);
-        if (parsed.key) {
-          config.headers['X-License-Key'] = parsed.key;
-        }
-      } catch (e) {}
+    // MULTI-TENANCY: Send license key if available from any storage source
+    let keyToSend = localStorage.getItem('pos_license_key') || sessionStorage.getItem('pos_license_key');
+    if (!keyToSend) {
+      const licenseData = localStorage.getItem('pos_license_data') || sessionStorage.getItem('pos_license_data');
+      if (licenseData) {
+        try {
+          const parsed = typeof licenseData === 'string' ? JSON.parse(licenseData) : licenseData;
+          keyToSend = parsed.key || parsed.licenseKey || parsed.license;
+        } catch (e) {}
+      }
+    }
+    if (keyToSend && typeof keyToSend === 'string') {
+      config.headers['X-License-Key'] = keyToSend.trim().toUpperCase();
     }
 
     console.log(`📤 ${config.method.toUpperCase()} ${config.url}`, config.params || '');
