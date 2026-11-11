@@ -22,9 +22,9 @@ if (PRODUCTION_URL === 'https://hudi-pos-online.onrender.com' ||
 const BASE_URL = import.meta.env.PROD ? PRODUCTION_URL : LOCAL_URL;
 
 export const API_CONFIG = {
-  API_URL: `${BASE_URL}/api/v1`,
-  BACKEND_URL: BASE_URL,
-  SOCKET_URL: BASE_URL,
+  API_URL: import.meta.env.VITE_API_URL || `${BASE_URL}/api/v1`,
+  BACKEND_URL: import.meta.env.VITE_BACKEND_URL || BASE_URL,
+  SOCKET_URL: import.meta.env.VITE_SOCKET_URL || BASE_URL,
   IS_PRODUCTION: BASE_URL === PRODUCTION_URL,
   IS_DEVELOPMENT: BASE_URL === LOCAL_URL,
 };
