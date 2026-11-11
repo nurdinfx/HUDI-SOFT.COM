@@ -294,6 +294,9 @@ export const addLedgerTransaction = async (req, res) => {
       customer.balance = -currentBalance;
     }
     
+    // Always keep customer.creditUsed in sync with any debt owed (positive balance)
+    customer.creditUsed = Math.max(0, currentBalance);
+    
     await customer.save({ session });
 
     const tx = await CustomerLedger.create([{

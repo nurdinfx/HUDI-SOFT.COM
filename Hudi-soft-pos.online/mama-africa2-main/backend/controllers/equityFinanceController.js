@@ -9,6 +9,7 @@ import Purchase from '../models/Purchase.js';
 import Expense from '../models/Expense.js';
 import Finance from '../models/Finance.js';
 import Customer from '../models/Customer.js';
+import CustomerLedger from '../models/CustomerLedger.js';
 import Supplier from '../models/Supplier.js';
 
 /**
@@ -46,6 +47,68 @@ export const ensureDefaultAccounts = async (branchId) => {
   ];
 
   await FinancialAccount.insertMany(defaultAccounts.map(a => ({ ...a, branch: bId })));
+};
+
+/**
+ * Helper to fetch all customers with active debt (Accounts Receivable)
+ * Syncs seamlessly across CustomerLedger, Customer.creditUsed, and Customer.balance
+ */
+export const getReceivableCustomersForBranch = async (bId) => {
+  try {
+    const customers = await Customer.find({ branch: bId });
+    if (!customers || customers.length === 0) {
+      return { totalReceivables: 0, customersWithDebt: [] };
+    }
+
+    const debtList = [];
+
+    for (const c of customers) {
+      // Check latest transaction from CustomerLedger
+      const lastLedger = await CustomerLedger.findOne({ customer: c._id })
+        .sort({ date: -1, _id: -1 });
+
+      let debt = 0;
+      let lastDate = c.updatedAt || c.createdAt;
+
+      if (lastLedger && typeof lastLedger.balance === 'number') {
+        if (lastLedger.balance > 0) {
+          debt = lastLedger.balance;
+          lastDate = lastLedger.date || lastDate;
+        }
+      } else if (c.creditUsed > 0) {
+        debt = c.creditUsed;
+      } else if (c.balance < 0) {
+        debt = Math.abs(c.balance);
+      }
+
+      if (debt > 0) {
+        // Keep Customer model creditUsed synced in DB for performance
+        if (c.creditUsed !== debt) {
+          Customer.updateOne({ _id: c._id }, { $set: { creditUsed: debt } }).catch(() => {});
+        }
+
+        debtList.push({
+          _id: c._id,
+          name: c.name,
+          phone: c.phone || '',
+          email: c.email || '',
+          creditLimit: c.creditLimit || 0,
+          creditUsed: debt,
+          lastActivity: lastDate,
+          createdAt: c.createdAt,
+          updatedAt: lastDate
+        });
+      }
+    }
+
+    debtList.sort((a, b) => b.creditUsed - a.creditUsed);
+    const totalReceivables = debtList.reduce((sum, c) => sum + c.creditUsed, 0);
+
+    return { totalReceivables, customersWithDebt: debtList };
+  } catch (err) {
+    console.error('getReceivableCustomersForBranch error:', err);
+    return { totalReceivables: 0, customersWithDebt: [] };
+  }
 };
 
 /**
@@ -174,13 +237,9 @@ export const getFinancialDashboard = async (req, res) => {
     const totalOwnerWithdrawals = withdrawalsAgg[0]?.total || 0;
     const netOwnerCapital = totalCapitalContributed - totalOwnerWithdrawals;
 
-    // 7. Accounts Receivable (Customer Debts)
-    const arAgg = await Customer.aggregate([
-      { $match: { branch: bId, creditUsed: { $gt: 0 } } },
-      { $group: { _id: null, totalCredit: { $sum: '$creditUsed' }, count: { $sum: 1 } } }
-    ]);
-    const accountsReceivable = arAgg[0]?.totalCredit || 0;
-    const creditCustomerCount = arAgg[0]?.count || 0;
+    // 7. Accounts Receivable (Customer Debts) - Synced with CustomerLedger & Customer.creditUsed
+    const { totalReceivables: accountsReceivable, customersWithDebt: arCustList } = await getReceivableCustomersForBranch(bId);
+    const creditCustomerCount = arCustList.length;
 
     // 8. Accounts Payable (Unpaid purchases / debts)
     const apAgg = await Purchase.aggregate([
@@ -607,12 +666,8 @@ export const getBalanceSheet = async (req, res) => {
     const totalOut = (cashPurchases[0]?.total || 0) + (cashExpenses[0]?.total || 0) + totalWithdrawals;
     const netCash = Math.max(0, (cashFromSales + totalCapital) - totalOut);
 
-    // Accounts Receivable
-    const arAgg = await Customer.aggregate([
-      { $match: { branch: bId, creditUsed: { $gt: 0 } } },
-      { $group: { _id: null, total: { $sum: '$creditUsed' } } }
-    ]);
-    const accountsReceivable = arAgg[0]?.total || 0;
+    // Accounts Receivable - Synced with CustomerLedger
+    const { totalReceivables: accountsReceivable } = await getReceivableCustomersForBranch(bId);
 
     // Inventory Valuation
     const inventoryAgg = await Product.aggregate([
@@ -1123,12 +1178,7 @@ export const getReceivables = async (req, res) => {
     const branchId = req.user?.branch?._id || req.user?.branch?.id || req.user?.branch;
     const bId = new mongoose.Types.ObjectId(branchId);
 
-    const customersWithDebt = await Customer.find({
-      branch: bId,
-      creditUsed: { $gt: 0 }
-    }).sort({ creditUsed: -1 });
-
-    const totalReceivables = customersWithDebt.reduce((sum, c) => sum + (c.creditUsed || 0), 0);
+    const { totalReceivables, customersWithDebt } = await getReceivableCustomersForBranch(bId);
 
     // Aging breakdown
     const now = new Date();
@@ -1140,7 +1190,7 @@ export const getReceivables = async (req, res) => {
     let overdue60Plus = 0;
 
     customersWithDebt.forEach(c => {
-      const age = now - new Date(c.updatedAt || c.createdAt);
+      const age = now - new Date(c.lastActivity || c.updatedAt || c.createdAt);
       const amount = c.creditUsed || 0;
       if (age <= days30) current0To30 += amount;
       else if (age <= days60) overdue31To60 += amount;
@@ -1164,11 +1214,12 @@ export const getReceivables = async (req, res) => {
           email: c.email,
           creditLimit: c.creditLimit || 0,
           creditUsed: c.creditUsed || 0,
-          lastActivity: c.updatedAt
+          lastActivity: c.lastActivity || c.updatedAt
         }))
       }
     });
   } catch (error) {
+    console.error('getReceivables error:', error);
     res.status(500).json({ success: false, message: 'Failed to fetch receivables data' });
   }
 };
