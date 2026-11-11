@@ -224,6 +224,7 @@ const Login = () => {
                         name="identifier"
                         type="text"
                         required
+                        autoComplete="off"
                         placeholder="Username"
                         value={formData.identifier}
                         onChange={handleChange}
@@ -242,6 +243,7 @@ const Login = () => {
                         name="password"
                         type={showPassword ? "text" : "password"}
                         required
+                        autoComplete="new-password"
                         placeholder="Password"
                         value={formData.password}
                         onChange={handleChange}
@@ -257,24 +259,6 @@ const Login = () => {
                       </button>
                     </div>
                   </div>
-                </div>
-
-                {/* Demo Quick Fill Card */}
-                <div className="bg-white/5 border border-white/10 rounded-2xl p-3 text-left flex items-center justify-between">
-                  <div>
-                    <p className="text-[10px] font-black uppercase tracking-widest text-blue-400">Demo Credentials</p>
-                    <p className="text-xs text-white/70 font-mono mt-0.5">admin@demo.com • admin123</p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setFormData({ identifier: 'admin@demo.com', password: 'admin123' });
-                      if (error) setError('');
-                    }}
-                    className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-blue-500/20 cursor-pointer"
-                  >
-                    Auto-Fill
-                  </button>
                 </div>
 
                 <div className="pt-4">
