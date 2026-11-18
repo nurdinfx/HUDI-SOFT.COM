@@ -542,33 +542,7 @@ async function runMigrations() {
     console.error('⚠️ CREATE_TABLES note:', tErr.message);
   }
 
-  // 2. UNCONDITIONAL PURGE OF ALL TEST TRANSACTIONS (CLEAN SLATE: $0.00, 0 PATIENTS)
-  // Keeps clinics, users, branches intact. Purges patients, appointments, treatment plans, invoices, etc.
-  try {
-    console.log('🧹 Purging all test clinical transactions across all clinics (including MOLAR DENTAL CLINIC)...');
-    await pool.query(`
-      DELETE FROM pharmacy_sale_items;
-      DELETE FROM pharmacy_sales;
-      DELETE FROM invoice_items;
-      DELETE FROM invoices;
-      DELETE FROM lab_results;
-      DELETE FROM lab_requests;
-      DELETE FROM prescriptions;
-      DELETE FROM consultation_notes;
-      DELETE FROM appointments;
-      DELETE FROM dental_images;
-      DELETE FROM dental_lab_orders;
-      DELETE FROM treatment_plan_items;
-      DELETE FROM treatment_plans;
-      DELETE FROM dental_charts;
-      DELETE FROM doctor_commissions;
-      DELETE FROM notifications;
-      DELETE FROM patients;
-    `);
-    console.log('✅ ALL clinical transactions & treatment plans purged successfully for all clinics.');
-  } catch (cleanErr) {
-    console.error('⚠️ Purge clinical data notice:', cleanErr.message);
-  }
+  // 2. Clinical data is preserved safely (Purge removed permanently to protect clinic records)
 
   // 3. Drop obsolete check constraints
   try {
