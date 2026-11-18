@@ -1,0 +1,13 @@
+{
+    "framework": "nextjs",
+    "rewrites": [
+        {
+            "source": "/api/license/:path*",
+            "destination": "/api/license/:path*"
+        },
+        {
+            "source": "/api/:path*",
+            "destination": "https://hudi-soft-com-hms-rent.onrender.com/api/:path*"
+        }
+    ]
+}

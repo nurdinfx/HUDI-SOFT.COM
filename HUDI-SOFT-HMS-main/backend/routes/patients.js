@@ -1,0 +1,193 @@
+const express = require('express');
+const { v4: uuidv4 } = require('uuid');
+const db = require('../database');
+const { authenticate, logAction, authorize } = require('../middleware/auth');
+const { sendPushNotification } = require('../utils/push-notify');
+
+const router = express.Router();
+router.use(authenticate);
+router.use(authorize(['admin', 'doctor', 'nurse', 'receptionist', 'lab_tech', 'pharmacist', 'accountant']));
+
+const safeArrayParse = (val) => {
+    if (!val) return [];
+    if (Array.isArray(val)) return val;
+    try {
+        const parsed = JSON.parse(val);
+        return Array.isArray(parsed) ? parsed : [String(parsed)];
+    } catch {
+        return [String(val)];
+    }
+};
+
+const fmt = (p = {}) => ({
+    id: p?.id, patientId: p?.patient_id, firstName: p?.first_name, lastName: p?.last_name,
+    dateOfBirth: p?.date_of_birth, gender: p?.gender, bloodGroup: p?.blood_group,
+    phone: p?.phone, email: p?.email, address: p?.address, city: p?.city,
+    emergencyContact: p?.emergency_contact, emergencyPhone: p?.emergency_phone,
+    insuranceProvider: p?.insurance_provider, insurancePolicyNumber: p?.insurance_policy_number,
+    allergies: safeArrayParse(p?.allergies), chronicConditions: safeArrayParse(p?.chronic_conditions),
+    status: p?.status, registeredAt: p?.registered_at, lastVisit: p?.last_visit, notes: p?.notes
+});
+
+// GET all patients
+router.get('/', async (req, res) => {
+    const { search, status } = req.query;
+    const tenantId = req.tenantId;
+    let q = 'SELECT * FROM patients WHERE tenant_id = $1';
+    const params = [tenantId];
+    let idx = 2;
+    if (search) {
+        const s = `%${search}%`;
+        q += ` AND (first_name ILIKE $${idx} OR last_name ILIKE $${idx+1} OR patient_id ILIKE $${idx+2} OR phone ILIKE $${idx+3})`;
+        idx += 4; params.push(s, s, s, s);
+    }
+    if (status) { q += ` AND status = $${idx++}`; params.push(status); }
+    q += ' ORDER BY registered_at DESC NULLS LAST';
+    try {
+        const result = await db.query(q, params);
+        res.json(result.rows.map(fmt));
+    } catch (err) {
+        console.error('Patients GET error:', err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// GET single patient
+router.get('/:id', async (req, res) => {
+    try {
+        const result = await db.query('SELECT * FROM patients WHERE id = $1 AND tenant_id = $2', [req.params.id, req.tenantId]);
+        const row = result.rows[0];
+        if (!row) return res.status(404).json({ error: 'Patient not found' });
+        res.json(fmt(row));
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// POST create patient
+router.post('/', async (req, res) => {
+    const { firstName, lastName, gender, bloodGroup, phone, address, city, emergencyContact, emergencyPhone, insuranceProvider, insurancePolicyNumber, status, notes, allergies, chronicConditions } = req.body;
+    const tenantId = req.tenantId;
+    if (!firstName || !lastName || !gender || !phone) {
+        return res.status(400).json({ error: 'Required fields: firstName, lastName, gender, phone' });
+    }
+    try {
+        const maxIdRes = await db.query(
+            'SELECT patient_id FROM patients WHERE tenant_id = $1 ORDER BY LENGTH(patient_id) DESC, patient_id DESC LIMIT 1',
+            [tenantId]
+        );
+        let nextNumber = 1;
+        if (maxIdRes.rows[0]?.patient_id) {
+            const digits = maxIdRes.rows[0].patient_id.replace(/\D/g, '');
+            const lastNumber = parseInt(digits, 10);
+            if (!isNaN(lastNumber)) nextNumber = lastNumber + 1;
+        }
+        let patientId = `PAT-${String(nextNumber).padStart(4, '0')}`;
+        let colCheck = 0;
+        while (colCheck < 500) {
+            const exists = await db.query('SELECT 1 FROM patients WHERE patient_id = $1 LIMIT 1', [patientId]);
+            if (exists.rows.length === 0) break;
+            nextNumber++;
+            patientId = `PAT-${String(nextNumber).padStart(4, '0')}`;
+            colCheck++;
+        }
+        const id = uuidv4();
+
+        await db.query(
+            `INSERT INTO patients (id, patient_id, first_name, last_name, date_of_birth, gender, blood_group, phone, email, address, city, emergency_contact, emergency_phone, insurance_provider, insurance_policy_number, allergies, chronic_conditions, status, registered_at, notes, tenant_id)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)`,
+            [id, patientId, firstName, lastName, null, gender, bloodGroup || 'N/A', phone, null, address || null, city || null, emergencyContact || null, emergencyPhone || null, insuranceProvider || null, insurancePolicyNumber || null, JSON.stringify(allergies || []), JSON.stringify(chronicConditions || []), status || 'active', new Date().toISOString(), notes || null, tenantId]
+        );
+        const row = await db.query('SELECT * FROM patients WHERE id = $1', [id]);
+        logAction(req.user.id, req.user.name, req.user.role, 'CREATE', 'Patients', `New patient registered: ${firstName} ${lastName}`, req.ip);
+
+        sendPushNotification({
+            title: '🏥 New Patient Registered',
+            message: `${firstName} ${lastName} has been successfully added to the system.`,
+            url: `/patients/${id}`
+        });
+
+        res.status(201).json(fmt(row.rows[0]));
+    } catch (err) {
+        console.error('Patient create error:', err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// PUT update patient
+router.put('/:id', async (req, res) => {
+    const tenantId = req.tenantId;
+    try {
+        const rowRes = await db.query('SELECT * FROM patients WHERE id = $1 AND tenant_id = $2', [req.params.id, tenantId]);
+        const row = rowRes.rows[0];
+        if (!row) return res.status(404).json({ error: 'Patient not found' });
+        const { firstName, lastName, gender, bloodGroup, phone, address, city, emergencyContact, emergencyPhone, insuranceProvider, insurancePolicyNumber, status, notes, lastVisit, allergies, chronicConditions } = req.body;
+        await db.query(
+            `UPDATE patients SET first_name=$1, last_name=$2, date_of_birth=$3, gender=$4, blood_group=$5, phone=$6, email=$7, address=$8, city=$9, emergency_contact=$10, emergency_phone=$11, insurance_provider=$12, insurance_policy_number=$13, allergies=$14, chronic_conditions=$15, status=$16, notes=$17, last_visit=$18 WHERE id=$19 AND tenant_id=$20`,
+            [
+                firstName || row.first_name,
+                lastName || row.last_name,
+                row.date_of_birth,
+                gender || row.gender,
+                bloodGroup ?? row.blood_group ?? 'N/A',
+                phone || row.phone,
+                row.email,
+                address ?? row.address,
+                city ?? row.city,
+                emergencyContact ?? row.emergency_contact,
+                emergencyPhone ?? row.emergency_phone,
+                insuranceProvider ?? row.insurance_provider,
+                insurancePolicyNumber ?? row.insurance_policy_number,
+                allergies ? JSON.stringify(allergies) : row.allergies,
+                chronicConditions ? JSON.stringify(chronicConditions) : row.chronic_conditions,
+                status || row.status,
+                notes ?? row.notes,
+                lastVisit ?? row.last_visit,
+                req.params.id,
+                tenantId
+            ]
+        );
+        logAction(req.user.id, req.user.name, req.user.role, 'UPDATE', 'Patients', `Patient updated: ${req.params.id}`, req.ip);
+        const updatedRow = await db.query('SELECT * FROM patients WHERE id = $1', [req.params.id]);
+        res.json(fmt(updatedRow.rows[0]));
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// DELETE patient
+router.delete('/:id', async (req, res) => {
+    const tenantId = req.tenantId;
+    try {
+        const rowRes = await db.query('SELECT * FROM patients WHERE id = $1 AND tenant_id = $2', [req.params.id, tenantId]);
+        const row = rowRes.rows[0];
+        if (!row) return res.status(404).json({ error: 'Patient not found' });
+
+        const pid = req.params.id;
+        // Cascade delete dependent records for this tenant only
+        await db.query('DELETE FROM lab_audit_logs WHERE lab_test_id IN (SELECT id FROM lab_tests WHERE patient_id = $1 AND tenant_id = $2)', [pid, tenantId]);
+        await db.query('DELETE FROM pharmacy_returns WHERE transaction_id IN (SELECT id FROM pharmacy_transactions WHERE patient_id = $1 AND tenant_id = $2)', [pid, tenantId]);
+        await db.query('DELETE FROM pharmacy_transaction_items WHERE transaction_id IN (SELECT id FROM pharmacy_transactions WHERE patient_id = $1 AND tenant_id = $2)', [pid, tenantId]);
+        await db.query('DELETE FROM pharmacy_transactions WHERE patient_id = $1 AND tenant_id = $2', [pid, tenantId]);
+        await db.query('DELETE FROM appointments WHERE patient_id = $1 AND tenant_id = $2', [pid, tenantId]);
+        await db.query('DELETE FROM prescriptions WHERE patient_id = $1 AND tenant_id = $2', [pid, tenantId]);
+        await db.query('DELETE FROM lab_tests WHERE patient_id = $1 AND tenant_id = $2', [pid, tenantId]);
+        await db.query('DELETE FROM invoices WHERE patient_id = $1 AND tenant_id = $2', [pid, tenantId]);
+        await db.query('DELETE FROM opd_visits WHERE patient_id = $1 AND tenant_id = $2', [pid, tenantId]);
+        await db.query('DELETE FROM ipd_admissions WHERE patient_id = $1 AND tenant_id = $2', [pid, tenantId]);
+        await db.query("UPDATE beds SET status = 'available', patient_id = NULL WHERE patient_id = $1 AND tenant_id = $2", [pid, tenantId]);
+        await db.query('DELETE FROM nurse_notes WHERE patient_id = $1 AND tenant_id = $2', [pid, tenantId]);
+        await db.query('DELETE FROM doctor_rounds WHERE patient_id = $1 AND tenant_id = $2', [pid, tenantId]);
+        await db.query('DELETE FROM patient_insurance_policies WHERE patient_id = $1 AND tenant_id = $2', [pid, tenantId]);
+        await db.query('DELETE FROM insurance_claims WHERE patient_id = $1 AND tenant_id = $2', [pid, tenantId]);
+        await db.query('DELETE FROM patient_credits WHERE patient_id = $1 AND tenant_id = $2', [pid, tenantId]);
+        await db.query('DELETE FROM patients WHERE id = $1 AND tenant_id = $2', [pid, tenantId]);
+
+        logAction(req.user.id, req.user.name, req.user.role, 'DELETE', 'Patients', `Patient deleted: ${row.first_name} ${row.last_name}`, req.ip);
+        res.json({ message: 'Patient deleted successfully' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+module.exports = router;

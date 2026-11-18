@@ -1,0 +1,26 @@
+services:
+  - type: web
+    name: datel-clinic-api
+    env: node
+    region: oregon
+    plan: free
+    buildCommand: npm install
+    startCommand: node src/server.js
+    rootDir: backend
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 6000
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: HUDI_SOFT_API_URL
+        value: https://hudi-soft-com.onrender.com/api
+      - key: RENDER_EXTERNAL_URL
+        fromService:
+          type: web
+          name: datel-clinic-api
+          property: host

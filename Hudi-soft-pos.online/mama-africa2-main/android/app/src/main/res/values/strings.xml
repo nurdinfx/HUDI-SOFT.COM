@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Hudi Soft POS</string>
+    <string name="title_activity_main">Hudi Soft POS</string>
+    <string name="package_name">com.hudisoft.posonline</string>
+    <string name="custom_url_scheme">com.hudisoft.posonline</string>
+</resources>
