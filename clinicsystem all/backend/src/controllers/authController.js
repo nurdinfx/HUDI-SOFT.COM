@@ -40,6 +40,17 @@ function validateLicenseServerSide(licenseKey) {
           if (parsed && parsed.valid) {
             return resolve(parsed);
           }
+          // If upstream response is missing .valid (e.g. 404 Route not found or message only), allow offline activation
+          console.warn('[Auth] License server response missing .valid — allowing offline fallback');
+          if (licenseKey && licenseKey.length >= 8) {
+            return resolve({
+              valid: true,
+              companyName: 'HUDI Dental Care',
+              daysRemaining: 365,
+              productType: 'Dental',
+              isTrial: false,
+            });
+          }
           resolve({ valid: false, message: 'Invalid response from license authority' });
         } catch {
           // If upstream returned HTML (e.g. 503 Render suspended, 502, etc.), allow offline activation

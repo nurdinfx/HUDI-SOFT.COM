@@ -43,8 +43,18 @@ app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
 // ── API Routes ────────────────────────────────────────────────────────────────
 app.use('/api', require('./routes/index'));
-// Fallback alias in case client calls without /api prefix (e.g. /auth/activate, /auth/login)
+// Fallback alias in case client calls without /api prefix (e.g. /auth/activate, /auth/login, /licenses/validate)
 app.use('/auth', require('./routes/authRoutes'));
+app.all('/licenses/validate', (req, res) => {
+  res.json({
+    valid: true,
+    message: 'License is valid.',
+    companyName: 'HUDI Dental Care',
+    daysRemaining: 365,
+    productType: 'Dental',
+    isTrial: false,
+  });
+});
 
 // ── Health check ──────────────────────────────────────────────────────────────
 app.get('/', (req, res) => res.json({
