@@ -82,36 +82,9 @@ app.get('/api/health', async (req, res) => {
   });
 });
 
-// ── Admin Purge All Transactions (Clean slate $0.00, keeps clinics & users) ──
-app.all('/api/admin-purge-all-transactions', async (req, res) => {
-  try {
-    await pool.query(`
-      DELETE FROM pharmacy_sale_items;
-      DELETE FROM pharmacy_sales;
-      DELETE FROM invoice_items;
-      DELETE FROM invoices;
-      DELETE FROM lab_results;
-      DELETE FROM lab_requests;
-      DELETE FROM prescriptions;
-      DELETE FROM consultation_notes;
-      DELETE FROM appointments;
-      DELETE FROM dental_images;
-      DELETE FROM dental_lab_orders;
-      DELETE FROM treatment_plan_items;
-      DELETE FROM treatment_plans;
-      DELETE FROM dental_charts;
-      DELETE FROM doctor_commissions;
-      DELETE FROM notifications;
-      DELETE FROM patients;
-    `);
-    res.json({
-      success: true,
-      message: 'Dhammaan xogta bukaannada, treatment plans-ka, iyo biilasha waa la wada nadiifiyay ($0.00). Akoonnada iyo shatiyadu waa sidiisii.'
-    });
-  } catch (err) {
-    console.error('[Admin Purge] Error:', err.message);
-    res.status(500).json({ success: false, error: err.message });
-  }
+// ── Admin Purge Endpoint (DISABLED FOR SAFETY) ──────────────────────────────
+app.all('/api/admin-purge-all-transactions', (req, res) => {
+  res.status(403).json({ error: 'Endpoint permanently disabled to protect production data.' });
 });
 
 // ── 404 handler ───────────────────────────────────────────────────────────────
