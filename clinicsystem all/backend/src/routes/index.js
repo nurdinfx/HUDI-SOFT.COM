@@ -34,5 +34,6 @@ router.use('/branches', protect, requireActiveSubscription, require('./branchRou
 router.use('/dental-ai', protect, requireActiveSubscription, require('./aiDentalRoutes'));
 router.use('/notifications', protect, requireActiveSubscription, require('./notificationRoutes'));
 router.use('/attendance', protect, requireActiveSubscription, require('./attendanceRoutes'));
+router.use('/backup', protect, require('./backupRoutes'));
 
 module.exports = router;

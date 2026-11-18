@@ -100,6 +100,7 @@ app.use((err, req, res, next) => {
 
 // ── Cron jobs ─────────────────────────────────────────────────────────────────
 require('./jobs/subscriptionSync');
+require('./jobs/autoBackup');
 
 // ── Start ─────────────────────────────────────────────────────────────────────
 app.listen(PORT, async () => {

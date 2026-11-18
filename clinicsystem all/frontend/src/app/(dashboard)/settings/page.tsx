@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
-import { Settings, Building2, Users, Shield, Bell, CreditCard, Save, Loader2, Plus, Trash2, Eye, EyeOff, AlertTriangle } from 'lucide-react'
+import { Settings, Building2, Users, Shield, Bell, CreditCard, Save, Loader2, Plus, Trash2, Eye, EyeOff, AlertTriangle, Download, Upload, Database, CheckCircle, Clock } from 'lucide-react'
 import api from '@/lib/api'
 import { useAuth } from '@/context/AuthContext'
 import { ClinicUser } from '@/types'
@@ -13,6 +13,7 @@ const TABS = [
   { id: 'staff', label: 'Staff Management', icon: Users },
   { id: 'subscription', label: 'Subscription', icon: CreditCard },
   { id: 'account', label: 'My Account', icon: Shield },
+  { id: 'backup', label: 'Backup & Restore', icon: Database },
   { id: 'data', label: 'Nadiifinta Xogta (Reset)', icon: Trash2 },
 ]
 
@@ -30,6 +31,13 @@ export default function SettingsPage() {
   const [staffForm, setStaffForm] = useState({ fullName:'', email:'', password:'', role:'receptionist', phone:'', specialization:'' })
   const [profileForm, setProfileForm] = useState({ fullName:'', phone:'', specialization:'', currentPassword:'', newPassword:'' })
 
+  // Backup & Restore state
+  const [backupLoading, setBackupLoading] = useState(false)
+  const [restoreLoading, setRestoreLoading] = useState(false)
+  const [backupMsg, setBackupMsg] = useState<{type:'success'|'error', text:string}|null>(null)
+  const [serverBackups, setServerBackups] = useState<any[]>([])
+  const [backupsLoading, setBackupsLoading] = useState(false)
+
   useEffect(() => {
     api.get('/clinic').then(r => setClinic(r.data)).catch(() => {})
     api.get('/clinic/subscription').then(r => setSubscription(r.data)).catch(() => {})
@@ -38,6 +46,78 @@ export default function SettingsPage() {
     }
     setProfileForm(p => ({ ...p, fullName: user?.fullName || '', phone: '', specialization: user?.specialization || '' }))
   }, [user])
+
+  // Load server backups when backup tab is opened
+  useEffect(() => {
+    if (tab === 'backup') {
+      setBackupsLoading(true)
+      api.get('/backup/list').then(r => setServerBackups(r.data)).catch(() => {}).finally(() => setBackupsLoading(false))
+    }
+  }, [tab])
+
+  // Download backup (export all data)
+  const handleDownloadBackup = async () => {
+    setBackupLoading(true)
+    setBackupMsg(null)
+    try {
+      const { data } = await api.get('/backup/export')
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      const dateStr = new Date().toISOString().split('T')[0]
+      a.download = `HUDI-backup-${dateStr}.json`
+      a.click()
+      URL.revokeObjectURL(url)
+      setBackupMsg({ type: 'success', text: `✅ Backup la dejiyay: ${data.summary?.patients || 0} bukaanno, ${data.summary?.appointments || 0} ballam, ${data.summary?.invoices || 0} biil` })
+      // Refresh server backup list
+      api.get('/backup/list').then(r => setServerBackups(r.data)).catch(() => {})
+    } catch (err: any) {
+      setBackupMsg({ type: 'error', text: '❌ Backup wuu fashilmay: ' + (err.response?.data?.message || err.message) })
+    } finally {
+      setBackupLoading(false)
+    }
+  }
+
+  // Restore from uploaded file
+  const handleRestoreFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (!file.name.endsWith('.json')) {
+      setBackupMsg({ type: 'error', text: '❌ Fadlan file JSON ah soo gali' })
+      return
+    }
+    if (!confirm('Miyaad hubsatay? Xogta backup-ka ayaa database-ka lagu dari doonaa (xog hore luma mayso).')) return
+    setRestoreLoading(true)
+    setBackupMsg(null)
+    try {
+      const text = await file.text()
+      const backup = JSON.parse(text)
+      const { data } = await api.post('/backup/restore', backup)
+      setBackupMsg({ type: 'success', text: `✅ Restore dhammaatay! Patients: ${data.restored?.patients}, Appointments: ${data.restored?.appointments}, Invoices: ${data.restored?.invoices}` })
+    } catch (err: any) {
+      setBackupMsg({ type: 'error', text: '❌ Restore wuu fashilmay: ' + (err.response?.data?.message || err.message) })
+    } finally {
+      setRestoreLoading(false)
+      e.target.value = ''
+    }
+  }
+
+  // Download a server-side backup
+  const handleDownloadServerBackup = async (filename: string) => {
+    try {
+      const { data } = await api.get(`/backup/download/${filename}`)
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = filename
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch {
+      setBackupMsg({ type: 'error', text: '❌ Downloading server backup failed' })
+    }
+  }
 
   const saveClinic = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -368,6 +448,116 @@ export default function SettingsPage() {
                   </button>
                 </div>
               </form>
+            </motion.div>
+          )}
+
+          {/* Backup & Restore */}
+          {tab === 'backup' && (
+            <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
+
+              {/* Header */}
+              <div className="glass-card p-6">
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-500 flex items-center justify-center">
+                    <Database className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h2 className="text-base font-bold text-slate-900 dark:text-white">Backup & Restore Xogta</h2>
+                    <p className="text-xs text-slate-500">Kaydi xogta maalmaha kala duwan — hadduu wax dhaco soo celi si fudud</p>
+                  </div>
+                </div>
+                <div className="mt-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-3 text-xs text-emerald-700 dark:text-emerald-300">
+                  <p className="font-semibold mb-1">🤖 Auto-Backup waa shaqeynaya:</p>
+                  <ul className="space-y-0.5 ml-2">
+                    <li>• <strong>Maalin kasta</strong> — 02:00 AM server wuxuu si toos ah u kaydiyaa xogta</li>
+                    <li>• <strong>Isbuuc kasta</strong> — Axad 03:00 AM backup dheeraad ah</li>
+                    <li>• Server-ka 14 backup ayuu hayaa — xiga wuu tirtiraa kuwa da'da ah</li>
+                  </ul>
+                </div>
+              </div>
+
+              {/* Alert Message */}
+              {backupMsg && (
+                <div className={`p-4 rounded-xl text-sm font-medium ${backupMsg.type === 'success' ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-700 dark:text-emerald-300' : 'bg-red-500/10 border border-red-500/30 text-red-700 dark:text-red-300'}`}>
+                  {backupMsg.text}
+                </div>
+              )}
+
+              {/* Export / Download */}
+              <div className="glass-card p-6">
+                <div className="flex items-center gap-3 mb-4">
+                  <Download className="w-5 h-5 text-blue-500" />
+                  <div>
+                    <h3 className="font-bold text-slate-900 dark:text-white text-sm">Dejiso Backup (Download)</h3>
+                    <p className="text-xs text-slate-500">Xogta oo dhan JSON file ahaan computer-kaaga ku kaydi</p>
+                  </div>
+                </div>
+                <button
+                  onClick={handleDownloadBackup}
+                  disabled={backupLoading}
+                  className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-xl transition-all disabled:opacity-50 shadow-lg shadow-blue-600/20"
+                >
+                  {backupLoading ? <><Loader2 className="w-4 h-4 animate-spin" /> Waa la kaydiyaa...</> : <><Download className="w-4 h-4" /> Dejiso Backup Hadda</>}
+                </button>
+                <p className="text-xs text-slate-400 mt-2">📁 Fayl-ku wuxuu ku kaydsanayaa: HUDI-backup-{new Date().toISOString().split('T')[0]}.json</p>
+              </div>
+
+              {/* Restore from file */}
+              <div className="glass-card p-6">
+                <div className="flex items-center gap-3 mb-4">
+                  <Upload className="w-5 h-5 text-purple-500" />
+                  <div>
+                    <h3 className="font-bold text-slate-900 dark:text-white text-sm">Soo Celi Backup (Restore)</h3>
+                    <p className="text-xs text-slate-500">Backup file hore soo gali — xogta oo dhan dib u soo celisa</p>
+                  </div>
+                </div>
+                <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-3 text-xs text-amber-700 dark:text-amber-300 mb-4">
+                  ⚠️ Restore-ku xogta cusub ayuu <strong>ku dari</strong> doonaa xogta jirta — xog hore luma mayso
+                </div>
+                <label className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold text-white transition-all cursor-pointer ${restoreLoading ? 'bg-purple-400 cursor-not-allowed' : 'bg-purple-600 hover:bg-purple-700 shadow-lg shadow-purple-600/20'}`}>
+                  {restoreLoading ? <><Loader2 className="w-4 h-4 animate-spin" /> Waa la soo celiyaa...</> : <><Upload className="w-4 h-4" /> Soo Gali Backup File</>}
+                  <input type="file" accept=".json" className="hidden" onChange={handleRestoreFile} disabled={restoreLoading} />
+                </label>
+              </div>
+
+              {/* Server-side backup list */}
+              <div className="glass-card p-6">
+                <div className="flex items-center gap-3 mb-4">
+                  <Clock className="w-5 h-5 text-slate-500" />
+                  <div>
+                    <h3 className="font-bold text-slate-900 dark:text-white text-sm">Taariikhda Backup-yada Server-ka</h3>
+                    <p className="text-xs text-slate-500">Auto-backups ee server-ka lagu kaydiyay — toos ayaad ku dejisan kartaa</p>
+                  </div>
+                </div>
+                {backupsLoading ? (
+                  <div className="flex items-center gap-2 text-sm text-slate-400"><Loader2 className="w-4 h-4 animate-spin" /> Waa la raadiyaa...</div>
+                ) : serverBackups.length === 0 ? (
+                  <div className="text-sm text-slate-400 text-center py-6">
+                    <Database className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                    <p>Wali auto-backup lama helin. Marka danbe server-ku 02:00 AM uu gaaro ayuu backup u qaadaa.</p>
+                    <p className="mt-1 text-xs">Hadda "Dejiso Backup Hadda" riix si aad backup manual ah u qaadato.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                    {serverBackups.map((b: any) => (
+                      <div key={b.filename} className="flex items-center justify-between bg-slate-50 dark:bg-slate-800/50 rounded-xl px-4 py-2.5">
+                        <div>
+                          <p className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                            {new Date(b.created_at).toLocaleDateString('so-SO', { year:'numeric', month:'long', day:'numeric', hour:'2-digit', minute:'2-digit' })}
+                          </p>
+                          <p className="text-xs text-slate-400">{b.size_kb} KB</p>
+                        </div>
+                        <button
+                          onClick={() => handleDownloadServerBackup(b.filename)}
+                          className="flex items-center gap-1.5 text-xs font-semibold text-blue-600 hover:text-blue-800 transition-colors"
+                        >
+                          <Download className="w-3.5 h-3.5" /> Dejiso
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </motion.div>
           )}
 
