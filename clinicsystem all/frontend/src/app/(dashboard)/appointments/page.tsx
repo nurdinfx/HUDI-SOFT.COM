@@ -1,8 +1,9 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import React, { useEffect, useState } from 'react'
+import Link from 'next/link'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Plus, Calendar, Clock, User, Stethoscope, CheckCircle2, XCircle, Search } from 'lucide-react'
+import { Plus, Calendar, Clock, Stethoscope, FileText, HeartPulse } from 'lucide-react'
 import api from '@/lib/api'
 import { Appointment, Patient, ClinicUser } from '@/types'
 import { formatDate, getStatusColor } from '@/lib/utils'
@@ -22,31 +23,63 @@ export default function AppointmentsPage() {
   const [appointments, setAppointments] = useState<Appointment[]>([])
   const [patients, setPatients] = useState<Patient[]>([])
   const [doctors, setDoctors] = useState<ClinicUser[]>([])
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0])
+  const getTodayStr = () => new Date().toISOString().split('T')[0]
+  const getYesterdayStr = () => {
+    const d = new Date()
+    d.setDate(d.getDate() - 1)
+    return d.toISOString().split('T')[0]
+  }
+
+  const [selectedDate, setSelectedDate] = useState(getTodayStr())
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [statusFilter, setStatusFilter] = useState('')
   const [form, setForm] = useState({
-    patientId: '', doctorId: '', appointmentDate: new Date().toISOString().split('T')[0],
+    patientId: '', doctorId: '', appointmentDate: getTodayStr(),
     timeSlot: '09:00', type: 'Consultation', chiefComplaint: '', duration: 30,
   })
 
-  const TIME_SLOTS = Array.from({ length: 18 }, (_, i) => {
-    const h = Math.floor(i / 2) + 8
-    const m = i % 2 === 0 ? '00' : '30'
-    return `${String(h).padStart(2, '0')}:${m}`
-  })
+  const [slotInterval, setSlotInterval] = useState<15 | 30>(30)
+
+  // Generate all 24-hour time slots starting from 08:00 AM
+  const generateTimeSlots = (step: number = 30) => {
+    const slots: string[] = []
+    // Daytime and evening (08:00 to 23:45)
+    for (let h = 8; h < 24; h++) {
+      for (let m = 0; m < 60; m += step) {
+        slots.push(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`)
+      }
+    }
+    // Early morning & overnight emergency (00:00 to 07:45)
+    for (let h = 0; h < 8; h++) {
+      for (let m = 0; m < 60; m += step) {
+        slots.push(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`)
+      }
+    }
+    return slots
+  }
+
+  const formatSlotLabel = (t: string) => {
+    const [hStr, mStr] = t.split(':')
+    const h = parseInt(hStr, 10)
+    const ampm = h >= 12 ? 'PM' : 'AM'
+    const h12 = h % 12 === 0 ? 12 : h % 12
+    return `${t} (${String(h12).padStart(2, '0')}:${mStr} ${ampm})`
+  }
+
+  const TIME_SLOTS = generateTimeSlots(slotInterval)
 
   const load = async () => {
     setLoading(true)
     try {
-      const params: any = { date: selectedDate }
+      const params: any = {}
+      if (selectedDate) params.date = selectedDate
       if (statusFilter) params.status = statusFilter
       const [apptRes, summaryRes] = await Promise.all([
         api.get('/appointments', { params }),
         api.get('/appointments/today'),
       ])
-      setAppointments(apptRes.data.appointments)
+      setAppointments(apptRes.data?.appointments || [])
       setSummary(summaryRes.data)
     } catch {} finally { setLoading(false) }
   }
@@ -57,9 +90,9 @@ export default function AppointmentsPage() {
     Promise.all([
       api.get('/patients', { params: { limit: 100 } }),
       api.get('/clinic/staff'),
-    ]).then(([p, s]) => {
-      setPatients(p.data.patients)
-      setDoctors(s.data.filter((u: ClinicUser) => ['doctor', 'clinic_manager', 'super_admin'].includes(u.role)))
+    ]).then(([p, s]: [any, any]) => {
+      setPatients(p.data.patients || [])
+      setDoctors((s.data || []).filter((u: ClinicUser) => ['doctor', 'clinic_manager', 'super_admin'].includes(u.role)))
     }).catch(() => {})
   }, [])
 
@@ -70,7 +103,7 @@ export default function AppointmentsPage() {
     } catch (err: any) { alert(err.response?.data?.message || 'Error') }
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     try {
       await api.post('/appointments', form)
@@ -113,7 +146,7 @@ export default function AppointmentsPage() {
             { label: 'In Progress', value: summary.inProgress, color: 'text-orange-600' },
             { label: 'Completed', value: summary.completed, color: 'text-green-600' },
             { label: 'Cancelled', value: summary.cancelled, color: 'text-red-500' },
-          ].map((s) => (
+          ].map((s: { label: string; value: number; color: string }) => (
             <div key={s.label} className="glass-card p-3 text-center">
               <p className={`text-2xl font-bold ${s.color}`}>{s.value}</p>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{s.label}</p>
@@ -124,22 +157,59 @@ export default function AppointmentsPage() {
 
       {/* Filters */}
       <div className="glass-card p-4 flex flex-wrap items-center gap-3">
+        {/* Quick Date Presets */}
+        <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
+          <button
+            type="button"
+            onClick={() => setSelectedDate(getTodayStr())}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+              selectedDate === getTodayStr()
+                ? 'bg-white dark:bg-slate-700 text-primary shadow-xs'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+            }`}
+          >
+            Today
+          </button>
+          <button
+            type="button"
+            onClick={() => setSelectedDate(getYesterdayStr())}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+              selectedDate === getYesterdayStr()
+                ? 'bg-white dark:bg-slate-700 text-primary shadow-xs'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+            }`}
+          >
+            Yesterday (Shalay)
+          </button>
+          <button
+            type="button"
+            onClick={() => setSelectedDate('')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+              selectedDate === ''
+                ? 'bg-white dark:bg-slate-700 text-primary shadow-xs'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+            }`}
+          >
+            All Dates (Dhammaan)
+          </button>
+        </div>
+
         <div className="flex items-center gap-2">
           <Calendar className="w-4 h-4 text-slate-400" />
           <input
             type="date"
             value={selectedDate}
-            onChange={(e) => setSelectedDate(e.target.value)}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSelectedDate(e.target.value)}
             className="dcs-input w-auto"
           />
         </div>
-        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="dcs-input w-auto">
+        <select value={statusFilter} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setStatusFilter(e.target.value)} className="dcs-input w-auto">
           <option value="">All Statuses</option>
-          {['Scheduled','Confirmed','Checked-In','In Progress','Completed','Cancelled','No Show'].map(s => (
+          {['Scheduled','Confirmed','Checked-In','In Progress','Completed','Cancelled','No Show'].map((s: string) => (
             <option key={s}>{s}</option>
           ))}
         </select>
-        <button onClick={() => { setSelectedDate(new Date().toISOString().split('T')[0]); setStatusFilter('') }} className="btn-ghost text-xs">
+        <button onClick={() => { setSelectedDate(getTodayStr()); setStatusFilter('') }} className="btn-ghost text-xs">
           Reset
         </button>
       </div>
@@ -152,14 +222,40 @@ export default function AppointmentsPage() {
           ))}
         </div>
       ) : appointments.length === 0 ? (
-        <div className="glass-card py-16 text-center text-slate-400">
-          <Calendar className="w-12 h-12 mx-auto mb-3 opacity-30" />
-          <p className="font-medium">No appointments for this date</p>
-          <p className="text-sm mt-1">Click "New Appointment" to schedule one</p>
+        <div className="glass-card py-16 text-center text-slate-400 space-y-3">
+          <Calendar className="w-12 h-12 mx-auto mb-1 opacity-30" />
+          <p className="font-semibold text-slate-700 dark:text-slate-300">
+            {selectedDate ? `No appointments found for ${selectedDate}` : 'No appointments found'}
+          </p>
+          <p className="text-xs text-slate-400">
+            {selectedDate
+              ? 'Check other dates or click "All Dates" to see all recorded appointments.'
+              : 'Click "New Appointment" to schedule one.'}
+          </p>
+          <div className="flex items-center justify-center gap-2 pt-2">
+            {selectedDate !== '' && (
+              <button
+                type="button"
+                onClick={() => setSelectedDate('')}
+                className="btn-secondary text-xs"
+              >
+                View All Appointments (Dhammaan)
+              </button>
+            )}
+            {selectedDate !== getYesterdayStr() && (
+              <button
+                type="button"
+                onClick={() => setSelectedDate(getYesterdayStr())}
+                className="btn-secondary text-xs"
+              >
+                View Yesterday (Shalay)
+              </button>
+            )}
+          </div>
         </div>
       ) : (
         <div className="space-y-3">
-          {appointments.map((appt, i) => (
+          {appointments.map((appt: Appointment, i: number) => (
             <motion.div
               key={appt.id}
               initial={{ opacity: 0, y: 8 }}
@@ -167,11 +263,18 @@ export default function AppointmentsPage() {
               transition={{ delay: i * 0.04 }}
               className={`rounded-2xl border p-4 flex flex-col sm:flex-row items-start sm:items-center gap-4 hover:shadow-glass transition-all ${statusColors[appt.status] || 'bg-white dark:bg-slate-800 border-slate-100 dark:border-slate-700'}`}
             >
-              {/* Time */}
-              <div className="flex items-center gap-2 text-slate-700 dark:text-slate-300 shrink-0">
-                <Clock className="w-4 h-4 text-slate-400" />
-                <span className="font-bold text-base">{appt.timeSlot}</span>
-                <span className="text-xs text-slate-400">({appt.durationMinutes}m)</span>
+              {/* Time & Date */}
+              <div className="flex flex-col items-start gap-1 text-slate-700 dark:text-slate-300 shrink-0 min-w-28">
+                <div className="flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-slate-400" />
+                  <span className="font-bold text-base">{appt.timeSlot}</span>
+                  <span className="text-xs text-slate-400">({appt.durationMinutes}m)</span>
+                </div>
+                {appt.appointmentDate && (
+                  <span className="text-[11px] text-slate-500 font-medium">
+                    {formatDate(appt.appointmentDate)}
+                  </span>
+                )}
               </div>
 
               {/* Patient */}
@@ -181,7 +284,13 @@ export default function AppointmentsPage() {
                     {(appt.patientName || 'P')[0]}
                   </div>
                   <div className="min-w-0">
-                    <p className="font-semibold text-sm text-slate-900 dark:text-white truncate">{appt.patientName}</p>
+                    <Link
+                      href={`/patients/${appt.patientId}`}
+                      className="font-semibold text-sm text-slate-900 dark:text-white truncate hover:text-primary transition-colors inline-block"
+                      title="Open patient profile"
+                    >
+                      {appt.patientName}
+                    </Link>
                     <p className="text-xs text-slate-500">{appt.patientNumber} · {appt.type}</p>
                   </div>
                 </div>
@@ -199,14 +308,34 @@ export default function AppointmentsPage() {
                 </div>
               </div>
 
+              {/* Clinical Quick Links */}
+              <div className="flex items-center gap-1.5 shrink-0">
+                <Link
+                  href="/consultations"
+                  className="text-xs px-2.5 py-1 rounded-lg font-medium bg-teal-50 dark:bg-teal-900/30 text-teal-600 dark:text-teal-400 hover:bg-teal-100 dark:hover:bg-teal-900/50 transition-colors flex items-center gap-1"
+                  title="Start Consultation"
+                >
+                  <FileText className="w-3 h-3" />
+                  Consultation
+                </Link>
+                <Link
+                  href="/dental"
+                  className="text-xs px-2.5 py-1 rounded-lg font-medium bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors flex items-center gap-1"
+                  title="Dental Odontogram"
+                >
+                  <HeartPulse className="w-3 h-3" />
+                  Odontogram
+                </Link>
+              </div>
+
               {/* Status + Actions */}
               <div className="flex items-center gap-2 shrink-0">
                 <span className={getStatusColor(appt.status)}>{appt.status}</span>
-                {STATUS_ACTIONS[appt.status]?.map((action) => (
+                {STATUS_ACTIONS[appt.status]?.map((action: string) => (
                   <button
                     key={action}
                     onClick={() => updateStatus(appt.id, action)}
-                    className={`text-xs px-2.5 py-1 rounded-lg font-medium transition-colors ${
+                    className={`text-xs px-2.5 py-1 rounded-lg font-semibold transition-colors ${
                       action === 'Cancelled' ? 'bg-red-100 text-red-600 hover:bg-red-200' : 'bg-primary/10 text-primary hover:bg-primary/20'
                     }`}
                   >
@@ -231,45 +360,74 @@ export default function AppointmentsPage() {
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="space-y-1">
                   <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Patient *</label>
-                  <select required value={form.patientId} onChange={e => setForm({...form, patientId: e.target.value})} className="dcs-input">
+                  <select required value={form.patientId} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setForm({...form, patientId: e.target.value})} className="dcs-input">
                     <option value="">Select patient…</option>
-                    {patients.map(p => <option key={p.id} value={p.id}>{p.fullName} ({p.patientNumber})</option>)}
+                    {patients.map((p: Patient) => <option key={p.id} value={p.id}>{p.fullName} ({p.patientNumber})</option>)}
                   </select>
                 </div>
                 <div className="space-y-1">
                   <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Doctor *</label>
-                  <select required value={form.doctorId} onChange={e => setForm({...form, doctorId: e.target.value})} className="dcs-input">
+                  <select required value={form.doctorId} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setForm({...form, doctorId: e.target.value})} className="dcs-input">
                     <option value="">Select doctor…</option>
-                    {doctors.map(d => <option key={d.id} value={d.id}>{d.fullName}{d.specialization ? ` — ${d.specialization}` : ''}</option>)}
+                    {doctors.map((d: ClinicUser) => <option key={d.id} value={d.id}>{d.fullName}{d.specialization ? ` — ${d.specialization}` : ''}</option>)}
                   </select>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1">
                     <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Date *</label>
-                    <input type="date" required value={form.appointmentDate} onChange={e => setForm({...form, appointmentDate: e.target.value})} className="dcs-input" />
+                    <input type="date" required value={form.appointmentDate} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setForm({...form, appointmentDate: e.target.value})} className="dcs-input" />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Time Slot *</label>
-                    <select required value={form.timeSlot} onChange={e => setForm({...form, timeSlot: e.target.value})} className="dcs-input">
-                      {TIME_SLOTS.map(t => <option key={t}>{t}</option>)}
+                    <div className="flex items-center justify-between">
+                      <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Time Slot *</label>
+                      <div className="flex items-center gap-1 text-[11px] bg-slate-100 dark:bg-slate-800 p-0.5 rounded-lg">
+                        <button
+                          type="button"
+                          onClick={() => setSlotInterval(30)}
+                          className={`px-2 py-0.5 rounded-md font-semibold transition-all ${slotInterval === 30 ? 'bg-white dark:bg-slate-700 text-primary shadow-xs' : 'text-slate-500 hover:text-slate-900'}`}
+                          title="Show 30-minute intervals"
+                        >
+                          30m
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setSlotInterval(15)}
+                          className={`px-2 py-0.5 rounded-md font-semibold transition-all ${slotInterval === 15 ? 'bg-white dark:bg-slate-700 text-primary shadow-xs' : 'text-slate-500 hover:text-slate-900'}`}
+                          title="Show 15-minute intervals"
+                        >
+                          15m
+                        </button>
+                      </div>
+                    </div>
+                    <select
+                      required
+                      value={form.timeSlot}
+                      onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setForm({...form, timeSlot: e.target.value})}
+                      className="dcs-input"
+                    >
+                      {TIME_SLOTS.map((t: string) => (
+                        <option key={t} value={t}>
+                          {formatSlotLabel(t)}
+                        </option>
+                      ))}
                     </select>
                   </div>
                   <div className="space-y-1">
                     <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Type</label>
-                    <select value={form.type} onChange={e => setForm({...form, type: e.target.value})} className="dcs-input">
-                      {['Consultation','Follow-Up','Check-Up','Procedure','Emergency','Vaccination'].map(t => <option key={t}>{t}</option>)}
+                    <select value={form.type} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setForm({...form, type: e.target.value})} className="dcs-input">
+                      {['Consultation','Follow-Up','Check-Up','Procedure','Emergency','Vaccination'].map((t: string) => <option key={t}>{t}</option>)}
                     </select>
                   </div>
                   <div className="space-y-1">
                     <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Duration (min)</label>
-                    <select value={form.duration} onChange={e => setForm({...form, duration: Number(e.target.value)})} className="dcs-input">
-                      {[15,20,30,45,60,90].map(d => <option key={d} value={d}>{d} min</option>)}
+                    <select value={form.duration} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setForm({...form, duration: Number(e.target.value)})} className="dcs-input">
+                      {[15,20,30,45,60,90].map((d: number) => <option key={d} value={d}>{d} min</option>)}
                     </select>
                   </div>
                 </div>
                 <div className="space-y-1">
                   <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Chief Complaint</label>
-                  <input value={form.chiefComplaint} onChange={e => setForm({...form, chiefComplaint: e.target.value})} className="dcs-input" placeholder="Patient's main concern…" />
+                  <input value={form.chiefComplaint} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setForm({...form, chiefComplaint: e.target.value})} className="dcs-input" placeholder="Patient's main concern…" />
                 </div>
                 <div className="flex justify-end gap-3 pt-2">
                   <button type="button" onClick={() => setShowForm(false)} className="btn-secondary">Cancel</button>
