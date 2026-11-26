@@ -39,36 +39,6 @@ export default function AppointmentsPage() {
     timeSlot: '09:00', type: 'Consultation', chiefComplaint: '', duration: 30,
   })
 
-  const [slotInterval, setSlotInterval] = useState<15 | 30>(30)
-
-  // Generate all 24-hour time slots starting from 08:00 AM
-  const generateTimeSlots = (step: number = 30) => {
-    const slots: string[] = []
-    // Daytime and evening (08:00 to 23:45)
-    for (let h = 8; h < 24; h++) {
-      for (let m = 0; m < 60; m += step) {
-        slots.push(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`)
-      }
-    }
-    // Early morning & overnight emergency (00:00 to 07:45)
-    for (let h = 0; h < 8; h++) {
-      for (let m = 0; m < 60; m += step) {
-        slots.push(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`)
-      }
-    }
-    return slots
-  }
-
-  const formatSlotLabel = (t: string) => {
-    const [hStr, mStr] = t.split(':')
-    const h = parseInt(hStr, 10)
-    const ampm = h >= 12 ? 'PM' : 'AM'
-    const h12 = h % 12 === 0 ? 12 : h % 12
-    return `${t} (${String(h12).padStart(2, '0')}:${mStr} ${ampm})`
-  }
-
-  const TIME_SLOTS = generateTimeSlots(slotInterval)
-
   const load = async () => {
     setLoading(true)
     try {
@@ -377,40 +347,37 @@ export default function AppointmentsPage() {
                     <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Date *</label>
                     <input type="date" required value={form.appointmentDate} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setForm({...form, appointmentDate: e.target.value})} className="dcs-input" />
                   </div>
-                  <div className="space-y-1">
-                    <div className="flex items-center justify-between">
-                      <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Time Slot *</label>
-                      <div className="flex items-center gap-1 text-[11px] bg-slate-100 dark:bg-slate-800 p-0.5 rounded-lg">
-                        <button
-                          type="button"
-                          onClick={() => setSlotInterval(30)}
-                          className={`px-2 py-0.5 rounded-md font-semibold transition-all ${slotInterval === 30 ? 'bg-white dark:bg-slate-700 text-primary shadow-xs' : 'text-slate-500 hover:text-slate-900'}`}
-                          title="Show 30-minute intervals"
-                        >
-                          30m
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setSlotInterval(15)}
-                          className={`px-2 py-0.5 rounded-md font-semibold transition-all ${slotInterval === 15 ? 'bg-white dark:bg-slate-700 text-primary shadow-xs' : 'text-slate-500 hover:text-slate-900'}`}
-                          title="Show 15-minute intervals"
-                        >
-                          15m
-                        </button>
-                      </div>
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                      Time Slot *
+                    </label>
+                    <div className="relative">
+                      <Clock className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                      <input
+                        type="time"
+                        required
+                        value={form.timeSlot}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setForm({...form, timeSlot: e.target.value})}
+                        className="dcs-input pl-9"
+                      />
                     </div>
-                    <select
-                      required
-                      value={form.timeSlot}
-                      onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setForm({...form, timeSlot: e.target.value})}
-                      className="dcs-input"
-                    >
-                      {TIME_SLOTS.map((t: string) => (
-                        <option key={t} value={t}>
-                          {formatSlotLabel(t)}
-                        </option>
+                    {/* Quick popular presets */}
+                    <div className="flex flex-wrap items-center gap-1 pt-0.5">
+                      {['08:00', '09:00', '10:00', '11:00', '12:00', '14:00', '16:00', '18:00', '20:00'].map((preset) => (
+                        <button
+                          key={preset}
+                          type="button"
+                          onClick={() => setForm({...form, timeSlot: preset})}
+                          className={`px-1.5 py-0.5 rounded text-[11px] font-semibold transition-all ${
+                            form.timeSlot === preset
+                              ? 'bg-primary text-white shadow-xs'
+                              : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
+                          }`}
+                        >
+                          {preset}
+                        </button>
                       ))}
-                    </select>
+                    </div>
                   </div>
                   <div className="space-y-1">
                     <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Type</label>
